@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, 다중 EIP 전송 계층, Binance Spot REST 1차 API가 구현되어 있습니다.
+현재 Go 코어, 다중 EIP 전송 계층과 Binance Spot, Bitget v3 UTA, Upbit Spot REST 1차 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -24,7 +24,7 @@
 | 다차원 요청 제한기 | 구현됨 |
 | Binance Spot REST | 공개 시세, 계정, 주문 생성·조회·취소·목록 구현됨 |
 | Bitget v3 UTA | Spot·USDT-M 공개 시세, 자산, 포지션, 주문 구현됨 |
-| Upbit | 다음 구현 대상 |
+| Upbit Spot REST | 공개 시세, 잔고, 주문 생성·조회·취소·목록 구현됨 |
 | 파생상품·WebSocket·통합 API | 예정 |
 
 ## 요청별 EIP 선택
@@ -124,3 +124,15 @@ go run ./cmd/egressdiag \
 - 불명확한 주문 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
 
 세부 계약과 주의사항은 [Bitget v3 UTA 문서](docs/exchanges/BITGET.md)를 참고합니다.
+
+## Upbit Spot 1차 범위
+
+- 전체 마켓, 현재가, 호가, 최근 체결, 분봉
+- 계정 잔고
+- 주문 생성, 단건 조회, 취소, 미체결 목록, 종료 목록
+- HS512 JWT와 SHA-512 `query_hash`, 요청별 고유 nonce
+- IP 단위 공개 API와 계정 pocket 단위 private API 요청 제한
+- `Remaining-Req`, HTTP 429·418 제한 상태 반영
+- 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
+
+세부 계약과 주의사항은 [Upbit Spot 문서](docs/exchanges/UPBIT.md)를 참고합니다.
