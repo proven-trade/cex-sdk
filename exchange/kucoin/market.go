@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 
 	trade "github.com/proven-trade/proven-trade-sdk"
@@ -16,7 +17,7 @@ func (client *Client) Symbols(
 	options ...trade.RequestOption,
 ) ([]Symbol, error) {
 	response, err := client.executePublic(
-		ctx, "/api/v2/symbols", nil, publicLimit(4), options...,
+		ctx, http.MethodGet, "/api/v2/symbols", nil, publicLimit(4), options...,
 	)
 	if err != nil {
 		return nil, err
@@ -45,7 +46,7 @@ func (client *Client) Ticker(
 		return Ticker{}, err
 	}
 	response, err := client.executePublic(
-		ctx, "/api/v1/market/orderbook/level1", url.Values{"symbol": {symbol}},
+		ctx, http.MethodGet, "/api/v1/market/orderbook/level1", url.Values{"symbol": {symbol}},
 		publicLimit(2), options...,
 	)
 	if err != nil {
@@ -71,7 +72,7 @@ func (client *Client) OrderBook(
 	}
 	path := fmt.Sprintf("/api/v1/market/orderbook/level2_%d", request.Size)
 	response, err := client.executePublic(
-		ctx, path, url.Values{"symbol": {request.Symbol}}, publicLimit(2), options...,
+		ctx, http.MethodGet, path, url.Values{"symbol": {request.Symbol}}, publicLimit(2), options...,
 	)
 	if err != nil {
 		return OrderBook{}, err
@@ -95,7 +96,7 @@ func (client *Client) RecentTrades(
 		return nil, err
 	}
 	response, err := client.executePublic(
-		ctx, "/api/v1/market/histories", url.Values{"symbol": {request.Symbol}},
+		ctx, http.MethodGet, "/api/v1/market/histories", url.Values{"symbol": {request.Symbol}},
 		publicLimit(3), options...,
 	)
 	if err != nil {
@@ -125,7 +126,7 @@ func (client *Client) Candles(
 		return nil, err
 	}
 	response, err := client.executePublic(
-		ctx, "/api/v1/market/candles", request.values(), publicLimit(3), options...,
+		ctx, http.MethodGet, "/api/v1/market/candles", request.values(), publicLimit(3), options...,
 	)
 	if err != nil {
 		return nil, err

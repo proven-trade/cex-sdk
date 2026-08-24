@@ -1,6 +1,6 @@
-# KuCoin Classic Spot REST 어댑터
+# KuCoin Classic Spot REST·WebSocket 어댑터
 
-구현 기준은 KuCoin Classic Spot REST API와 기본 주소 `https://api.kucoin.com`입니다. 2026년에 추가된 Unified Trading Account API와 별개인 Classic 계정용 어댑터이며, WebSocket과 공통 Spot API는 후속 단계 범위입니다.
+구현 기준은 KuCoin Classic Spot REST·WebSocket API와 REST 기본 주소 `https://api.kucoin.com`입니다. 2026년에 추가된 Unified Trading Account API와 별개인 Classic 계정용 어댑터이며, 공통 Spot API는 후속 단계 범위입니다.
 
 ## 전제조건
 
@@ -29,6 +29,8 @@ private API를 사용하려면 `credential.Provider`가 반환하는 `credential
 | 주문 생성 | `PlaceOrder` | `POST /api/v1/hf/orders` |
 | 주문 상세·취소 | `OrderInfo`, `CancelOrder` | `GET`, `DELETE /api/v1/hf/orders/{orderId}` |
 | 미체결 주문 | `OpenOrders` | `GET /api/v1/hf/orders/active/page` |
+| public 연결 token | `PublicWebSocketToken` | `POST /api/v1/bullet-public` |
+| private 연결 token | `PrivateWebSocketToken` | `POST /api/v1/bullet-private` |
 
 가격, 수량, 금액, 수수료는 `float64`로 변환하지 않고 문자열로 보존합니다. 객체와 배열 항목의 `Raw`에는 해당 `data` 원본 JSON을 보존합니다. Classic 캔들 배열은 `time, open, close, high, low, volume, turnover` 순서로 해석하고 최대 1,500개를 최신순으로 반환합니다.
 
@@ -62,6 +64,64 @@ VIP 0 기준 기본 로컬 quota는 각 30초 구간의 Public 2,000 weight, Spo
 
 Public 풀은 IP 기준이므로 요청별 EIP가 각각 독립된 bucket을 사용합니다. Spot과 Management private 풀은 UID 기준이므로 EIP를 바꿔도 quota가 늘어나지 않습니다. 다중 EIP는 public 처리량 분산과 API Key IP 허용 목록·장애 격리를 위한 기능이며 private 제한 우회 용도가 아닙니다.
 
+public token 발급은 Public pool에서 10 weight, private token 발급은 Spot pool에서 10 weight를 사용합니다. WebSocket 재연결마다 새 token을 발급하므로 연결 장애가 반복될 때 REST 요청 제한도 함께 소비됩니다.
+
+## WebSocket
+
+`StreamClient`는 연결 전에 REST token을 발급하고 KuCoin이 반환한 `instanceServers` 중 사용 가능한 WebSocket endpoint를 선택합니다. production에서는 `wss`만 허용하며 `AllowInsecureWebSocket`은 로컬 테스트에서만 사용해야 합니다.
+
+| 구분 | `StreamChannel` | KuCoin topic |
+|---|---|---|
+| public 현재가 | `StreamChannelTicker` | `/market/ticker:{symbol}` |
+| public 증분 호가 | `StreamChannelLevel2` | `/market/level2:{symbol}` |
+| public 5단계 호가 | `StreamChannelOrderBook5` | `/spotMarket/level2Depth5:{symbol}` |
+| public 50단계 호가 | `StreamChannelOrderBook50` | `/spotMarket/level2Depth50:{symbol}` |
+| public 캔들 | `StreamChannelCandles` | `/market/candles:{symbol}_{interval}` |
+| public 체결 | `StreamChannelTrade` | `/market/match:{symbol}` |
+| private 주문 | `StreamChannelOrders` | `/spotMarket/tradeOrdersV2` |
+| private 잔고 | `StreamChannelBalance` | `/account/balance` |
+
+public 구독은 거래쌍을 요구하고 캔들만 `CandleInterval`을 함께 지정합니다. private 주문·잔고 구독은 거래쌍이나 캔들 구간을 받지 않습니다. 연결당 구독은 최대 300개로 제한하고 subscribe·unsubscribe 명령을 최소 100ms 간격으로 전송합니다. 실행 중 `Subscribe`와 `Unsubscribe`로 구독을 바꿀 수 있으며, 오류 응답을 받은 변경은 로컬 복구 목록에서 되돌립니다.
+
+```go
+streamClient, err := kucoin.NewStreamClient(kucoin.StreamClientConfig{
+	Connector:            connector,
+	RESTClient:           restClient,
+	DefaultEgressRouteID: "seoul-a",
+})
+if err != nil {
+	return err
+}
+
+public, err := streamClient.PublicStream(
+	kucoin.StreamRequest{Subscriptions: []kucoin.StreamSubscription{
+		{Channel: kucoin.StreamChannelTicker, Symbol: "BTC-USDT"},
+		{Channel: kucoin.StreamChannelCandles, Symbol: "BTC-USDT", Interval: kucoin.Candle1Minute},
+	}},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer public.Close()
+
+return public.Run(ctx, func(_ context.Context, message kucoin.StreamMessage) error {
+	if message.Channel != kucoin.StreamChannelTicker {
+		return nil
+	}
+	var ticker kucoin.StreamTicker
+	return message.Decode(&ticker)
+})
+```
+
+token REST 요청과 WebSocket handshake는 모두 세션에서 선택한 같은 EIP route를 사용합니다. 연결된 세션은 route를 바꾸지 않으며 재연결 시에도 같은 route에서 token과 `connectId`를 새로 만들고 현재 구독을 복구합니다. private 세션은 token 발급 전에 자격증명의 route 허용 목록과 읽기 권한을 검사하므로 허용되지 않은 route에서는 Secret을 조회하지 않습니다.
+
+기본 heartbeat는 15초마다 `{type:"ping"}`을 보내고 9초 안에 `{type:"pong"}`을 기다립니다. 이 값은 token 응답의 `pingInterval`보다 짧고 `pingTimeout`보다 길지 않아야 합니다. 서버가 더 엄격한 값을 반환하면 연결을 시작하지 않고 설정 오류를 반환합니다.
+
+`StreamChannelLevel2`는 `sequenceStart`와 `sequenceEnd`가 포함된 원본 증분 feed입니다. SDK가 로컬 호가장을 자동으로 조립하지는 않습니다. sequence 공백이나 재연결이 발생하면 기존 캐시를 버리고 REST snapshot을 다시 받은 뒤 이어지는 변경만 적용해야 합니다. 20·100단계만 필요하면 `OrderBook` snapshot으로 주기적으로 재조정하고, 전체 호가장이 필요하면 KuCoin의 full order book snapshot 규칙을 별도로 적용해야 합니다.
+
+token과 `WebSocketToken.Raw`에는 짧은 수명의 접속 자격이 포함됩니다. 로그, 메트릭 label, 오류 문자열에 저장하지 않아야 합니다. public feed도 재연결 구간에는 이벤트 유실이 가능하며 private 주문·잔고는 연결 복구 뒤 REST 조회로 최종 상태를 재조정해야 합니다.
+
 ## 주문 안전 계약
 
 - `ClientOrderID`는 모든 주문에서 필수이며 `[0-9A-Za-z_-]{1,40}` 형식으로 검증합니다.
@@ -84,5 +144,11 @@ KuCoin은 HTTP 200에서도 `code`가 `200000`이 아닌 논리 오류를 반환
 - [KuCoin Spot Market Data](https://www.kucoin.com/docs-new/rest/spot-trading/market-data/get-all-symbols)
 - [KuCoin Add Order](https://www.kucoin.com/docs-new/rest/spot-trading/orders/add-order)
 - [KuCoin Open Orders By Page](https://www.kucoin.com/docs-new/rest/spot-trading/orders/get-open-orders-by-page)
+- [KuCoin Public WebSocket Token](https://www.kucoin.com/docs-new/websocket-api/base-info/get-public-token-spot-margin)
+- [KuCoin Private WebSocket Token](https://www.kucoin.com/docs-new/websocket-api/base-info/get-private-token-spot-margin)
+- [KuCoin WebSocket Ticker](https://www.kucoin.com/docs-new/3470063w0)
+- [KuCoin WebSocket Level2](https://www.kucoin.com/docs-new/3470068w0)
+- [KuCoin WebSocket Order V2](https://www.kucoin.com/docs-new/3470073w0)
+- [KuCoin WebSocket Balance](https://www.kucoin.com/docs-new/3470075w0)
 - [KuCoin Spot Error Codes](https://www.kucoin.com/docs-new/error-code/spot)
 - [KuCoin Change Log](https://www.kucoin.com/docs-new/change-log)

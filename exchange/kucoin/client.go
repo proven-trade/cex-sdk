@@ -144,6 +144,7 @@ func New(config Config) (*Client, error) {
 
 func (client *Client) executePublic(
 	ctx context.Context,
+	method string,
 	path string,
 	query url.Values,
 	limit endpointLimit,
@@ -164,7 +165,7 @@ func (client *Client) executePublic(
 		Exchange: model.ExchangeKuCoin, EgressRouteID: resolved.EgressRouteID,
 		Timeout: resolved.Timeout, Charges: charges, Operation: commonexchange.OperationRead,
 		Build: func(context.Context) (*http.Request, error) {
-			return client.newRequest(http.MethodGet, path, query, nil)
+			return client.newRequest(method, path, query, nil)
 		},
 	})
 	if err == nil {

@@ -562,7 +562,7 @@ const (
 ### Phase 5 — P2 확장
 
 - KuCoin Classic Spot REST 구현 완료
-- KuCoin Spot public/private WebSocket 구현
+- KuCoin Spot public/private WebSocket 구현 완료
 - KuCoin Spot 공통 API 구현
 - KuCoin Futures REST·WebSocket 구현
 - Gate.io Spot·Futures 구현
