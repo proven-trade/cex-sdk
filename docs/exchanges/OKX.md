@@ -1,4 +1,4 @@
-# OKX V5 Spot·SWAP REST 어댑터
+# OKX V5 Spot·SWAP 어댑터
 
 ## 범위
 
@@ -105,6 +105,104 @@ OKX는 top-level `code`가 `0`이어도 주문 접수 항목의 `sCode`로 실�
 
 모든 메서드는 `trade.RequestOption`을 받습니다. 옵션이 없으면 클라이언트 기본 route를 사용하고, `trade.WithEgressRoute`를 지정하면 해당 요청만 선택한 private IP 전용 연결 풀로 보냅니다. 자격증명에 허용되지 않은 route는 Secret 조회 전에 거부됩니다.
 
+## WebSocket
+
+OKX V5 WebSocket은 채널 종류별 endpoint가 나뉩니다.
+
+| 환경 | public | private | business |
+|---|---|---|---|
+| 운영 | `wss://ws.okx.com:8443/ws/v5/public` | `wss://ws.okx.com:8443/ws/v5/private` | `wss://ws.okx.com:8443/ws/v5/business` |
+| Demo | `wss://wspap.okx.com:8443/ws/v5/public` | `wss://wspap.okx.com:8443/ws/v5/private` | `wss://wspap.okx.com:8443/ws/v5/business` |
+
+- public: ticker, 체결, 호가
+- business: 캔들
+- private: 계정, 잔고·포지션, 포지션, 주문
+
+지역별 WebSocket 도메인이 필요한 계정은 `PublicStreamURL`, `PrivateStreamURL`, `BusinessStreamURL`을 공식 안내에 맞게 함께 지정해야 합니다.
+
+```go
+streams, err := okx.NewStreamClient(okx.StreamClientConfig{
+	Connector:             connector,
+	Credentials:           descriptor,
+	CredentialProvider:    secretProvider,
+	DefaultEgressRouteID: "seoul-a",
+	DemoTrading:          true,
+})
+if err != nil {
+	return err
+}
+
+ticker, err := okx.PublicStreamArgument("tickers", "BTC-USDT")
+if err != nil {
+	return err
+}
+public, err := streams.PublicStream(
+	okx.PublicStreamRequest{
+		Endpoint:  okx.StreamEndpointPublic,
+		Arguments: []okx.StreamArgument{ticker},
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer public.Close()
+
+err = public.Run(ctx, func(ctx context.Context, message okx.StreamMessage) error {
+	if message.Event != "" || message.Pong {
+		return nil
+	}
+	var tickers []okx.Ticker
+	if err := message.DecodeData(&tickers); err != nil {
+		return err
+	}
+	return handleTickers(tickers)
+})
+```
+
+public typed data는 다음 구조체로 decode할 수 있습니다.
+
+- `tickers`: `[]Ticker`
+- `trades`: `[]StreamTrade`
+- `books`, `books5`, `bbo-tbt`: `[]OrderBook`
+- `candle{bar}`: `[]Candle`
+
+캔들은 `CandleStreamArgument`로 인자를 만들고 `StreamEndpointBusiness` 세션에서 구독해야 합니다. public과 business 인자를 같은 연결에 섞으면 생성 시 거부합니다. 동적 `Subscribe`와 `Unsubscribe`가 성공하면 현재 목록을 갱신하고 재연결 때 같은 endpoint와 EIP route에서 복구합니다.
+
+private stream은 연결마다 Unix 초 timestamp와 `timestamp + "GET" + "/users/self/verify"` 원문으로 새 서명을 만들어 login합니다.
+
+```go
+orders, err := okx.OrderStreamArgument(okx.InstrumentTypeSwap, "BTC-USDT-SWAP")
+if err != nil {
+	return err
+}
+positions, err := okx.PositionStreamArgument("BTC-USDT-SWAP")
+if err != nil {
+	return err
+}
+private, err := streams.PrivateStream(
+	okx.PrivateStreamRequest{
+		Arguments: []okx.StreamArgument{
+			okx.AccountStreamArgument(),
+			okx.BalanceAndPositionStreamArgument(),
+			orders,
+			positions,
+		},
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer private.Close()
+```
+
+private typed data는 `[]Balance`, `[]Position`, `[]Order`, `[]StreamBalanceAndPosition`으로 decode할 수 있습니다. 연결이 끊기면 같은 EIP route에서 최신 Secret과 timestamp로 다시 login한 뒤 현재 channel 목록을 구독합니다. 로그인이 명시적으로 거절되면 같은 키로 무한 재연결하지 않습니다.
+
+OKX는 연결당 login·subscribe·unsubscribe 요청을 합해 시간당 480회로 제한합니다. SDK는 동적 구독 명령을 기본 8초 간격으로 직렬화하고, 한 operation의 인자를 최대 100개씩 분할하며 64KiB를 넘는 요청은 거부합니다. 프로세스 전체의 IP당 연결 시도 제한 `3/초`와 private channel별 sub-account 연결 수는 운영 메트릭에서 별도로 감시해야 합니다.
+
+연결 유지를 위해 기본 20초마다 application 문자열 `ping`을 보내고 10초 안에 `pong`이 없으면 같은 route로 재연결합니다. stream 수명은 `Run`의 context로 제어하므로 생성 시 `trade.WithTimeout`은 허용하지 않습니다.
+
 ## 공식 기준 문서
 
 - [OKX V5 API 안내와 인증](https://www.okx.com/docs-v5/en/#overview-rest-authentication)
@@ -112,3 +210,6 @@ OKX는 top-level `code`가 `0`이어도 주문 접수 항목의 `sCode`로 실�
 - [OKX V5 Market Data](https://www.okx.com/docs-v5/en/#order-book-trading-market-data)
 - [OKX V5 Trading Account](https://www.okx.com/docs-v5/en/#trading-account-rest-api)
 - [OKX V5 Place Order](https://www.okx.com/docs-v5/en/#order-book-trading-trade-post-place-order)
+- [OKX V5 WebSocket](https://www.okx.com/docs-v5/en/#overview-websocket)
+- [OKX V5 Public Channels](https://www.okx.com/docs-v5/en/#order-book-trading-market-data-ws-channel)
+- [OKX V5 Private Channels](https://www.okx.com/docs-v5/en/#order-book-trading-account-websocket)
