@@ -74,7 +74,7 @@
 | KuCoin Classic Futures REST | 계약 규칙, 공개 시세, 계정·포지션, 주문·체결 구현됨 |
 | KuCoin Classic Futures WebSocket | public 시세·호가·캔들·체결, private 주문·잔고·포지션 stream 구현됨 |
 | Gate.io API v4 Spot REST | 거래쌍 규칙, 공개 시세, 계정, 주문 생성·조회·취소·미체결·체결 구현됨 |
-| Gate.io API v4 Spot WebSocket | public 시세·호가·체결, private 주문·체결·잔고 stream 구현됨 |
+| Gate.io API v4 Spot WebSocket | public 시세·호가·체결, private 주문·체결·잔고 stream·V2 로컬 오더북 자동 갭 복구 구현됨 |
 | Gate.io 공통 Spot API | 공통 마켓·시세·잔고·주문 계약과 적합성 테스트 구현됨 |
 | Gate.io API v4 Futures REST | 계약 규칙, 공개 시세, 계정·포지션, 주문·체결 구현됨 |
 | Gate.io API v4 Futures WebSocket | public 시세·호가·캔들·체결, private 주문·체결·잔고·포지션 stream 구현됨 |
@@ -445,6 +445,7 @@ defer session.Close()
 - 실행 중 구독 변경, 실패 응답 반영, 재연결 구독 복구
 - 연결별 EIP 고정과 private 구독마다 새 HMAC-SHA-512 서명
 - WebSocket protocol ping/pong heartbeat와 IP당 연결 수 운영 계약
+- Spot `spot.obu` 50·400단계 snapshot/증분 로컬 오더북과 update ID gap 시 같은 EIP 자동 재연결
 - `unified.SpotClient` 전체 계약과 공통 적합성 테스트
 
 세부 인증·주문·요청 제한·연결 계약은 [Gate.io API v4 Spot 문서](docs/exchanges/GATEIO.md)를 참고합니다.

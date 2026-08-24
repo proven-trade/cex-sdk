@@ -14,6 +14,7 @@ const (
 	StreamChannelCandles         StreamChannel = "candles"
 	StreamChannelBookTicker      StreamChannel = "book_ticker"
 	StreamChannelOrderBookUpdate StreamChannel = "order_book_update"
+	StreamChannelOrderBookV2     StreamChannel = "order_book_v2"
 	StreamChannelOrders          StreamChannel = "orders"
 	StreamChannelUserTrades      StreamChannel = "user_trades"
 	StreamChannelBalances        StreamChannel = "balances"
@@ -27,12 +28,21 @@ const (
 	StreamUpdate100Millis StreamUpdateInterval = "100ms"
 )
 
+// StreamOrderBookDepth는 V2 호가 snapshot과 증분 통지의 단계 수다.
+type StreamOrderBookDepth int
+
+const (
+	StreamOrderBookDepth50  StreamOrderBookDepth = 50
+	StreamOrderBookDepth400 StreamOrderBookDepth = 400
+)
+
 // StreamSubscription은 채널, 거래쌍과 채널별 선택 값을 정의한다.
 type StreamSubscription struct {
 	Channel        StreamChannel
 	CurrencyPair   string
 	CandleInterval CandleInterval
 	UpdateInterval StreamUpdateInterval
+	OrderBookDepth StreamOrderBookDepth
 }
 
 // StreamRequest는 연결 직후 복구할 구독 목록이다.
@@ -138,6 +148,17 @@ type StreamOrderBookUpdate struct {
 	EventType     string      `json:"e"`
 	EventTime     int64       `json:"E"`
 	CurrencyPair  string      `json:"s"`
+	FirstUpdateID int64       `json:"U"`
+	LastUpdateID  int64       `json:"u"`
+	Bids          []BookLevel `json:"b"`
+	Asks          []BookLevel `json:"a"`
+}
+
+// StreamOrderBookV2는 전체 snapshot 또는 연속 update ID의 절대 수량 변경이다.
+type StreamOrderBookV2 struct {
+	Timestamp     int64       `json:"t"`
+	Full          bool        `json:"full"`
+	StreamName    string      `json:"s"`
 	FirstUpdateID int64       `json:"U"`
 	LastUpdateID  int64       `json:"u"`
 	Bids          []BookLevel `json:"b"`

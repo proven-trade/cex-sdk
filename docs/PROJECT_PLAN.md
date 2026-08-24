@@ -585,6 +585,7 @@ const (
 - KuCoin Futures public/private WebSocket 구현 완료
 - Gate.io Spot REST 구현 완료
 - Gate.io Spot public/private WebSocket 구현 완료
+- Gate.io Spot Order Book V2 50·400단계 로컬 오더북과 update ID gap·동일 EIP 재연결 복구 구현 완료
 - Gate.io Spot 공통 API 구현 완료
 - Gate.io Futures REST 구현 완료
 - Gate.io Futures public/private WebSocket 구현 완료

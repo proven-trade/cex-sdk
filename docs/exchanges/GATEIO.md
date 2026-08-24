@@ -1,6 +1,6 @@
 # Gate.io API v4 Spot REST·WebSocket·공통 어댑터
 
-구현 기준은 Gate.io API v4 Spot REST·JSON WebSocket과 기본 주소 `https://api.gateio.ws/api/v4`, `wss://api.gateio.ws/ws/v4/`입니다. `NewUnifiedSpot`은 native REST 클라이언트를 프로젝트 공통 Spot 계약으로 변환합니다. Futures는 후속 단계에서 추가합니다.
+구현 기준은 Gate.io API v4 Spot REST·JSON WebSocket과 기본 주소 `https://api.gateio.ws/api/v4`, `wss://api.gateio.ws/ws/v4/`입니다. `NewUnifiedSpot`은 native REST 클라이언트를 프로젝트 공통 Spot 계약으로 변환하며, Futures는 `exchange/gateio/futures` 패키지로 분리합니다.
 
 ## 전제조건
 
@@ -87,6 +87,7 @@ Provider가 반환한 API Key와 Secret byte slice는 요청 뒤 가능한 범�
 | public 캔들 | `StreamChannelCandles` | `spot.candlesticks` |
 | public 최우선 호가 | `StreamChannelBookTicker` | `spot.book_ticker` |
 | public 증분 호가 | `StreamChannelOrderBookUpdate` | `spot.order_book_update` |
+| public V2 호가 | `StreamChannelOrderBookV2` | `spot.obu` |
 | private 주문 | `StreamChannelOrders` | `spot.orders` |
 | private 내 체결 | `StreamChannelUserTrades` | `spot.usertrades` |
 | private 잔고 | `StreamChannelBalances` | `spot.balances` |
@@ -133,7 +134,49 @@ private 서명 원문은 `channel=<channel>&event=<subscribe 또는 unsubscribe>
 
 연결은 선택한 EIP route에 수명주기 동안 고정됩니다. 재연결하면 같은 route로 새 handshake를 수행하고 현재 구독을 새 시각으로 다시 서명해 복구합니다. 실행 중 `Subscribe`와 `Unsubscribe`를 사용할 수 있으며, 서버가 오류 응답을 보낸 변경은 로컬 복구 목록에서 되돌립니다. 기본 heartbeat는 30초마다 WebSocket protocol ping을 보내고 10초 안에 pong을 기다립니다. Gate.io의 연결 제한은 IP당 300개이며 여러 프로세스·클라이언트의 합산 연결 수는 SDK 밖에서도 관리해야 합니다.
 
-`StreamChannelOrderBookUpdate`의 수량은 증감량이 아니라 해당 가격의 절대 수량이며 0이면 가격 단계를 삭제해야 합니다. 연결 뒤 이벤트를 임시 저장하고 `OrderBook`에서 `with_id=true` snapshot을 받은 다음 `U <= snapshotID+1 <= u`인 첫 이벤트부터 적용합니다. 이후에는 직전 `u+1`이 다음 범위에 포함되는지 확인하고 공백이 생기거나 재연결되면 기존 로컬 호가장을 버리고 다시 snapshot을 받아야 합니다.
+`StreamChannelOrderBookUpdate`는 기존 원본 증분 채널입니다. 수량은 증감량이 아니라 해당 가격의 절대 수량이며 0이면 가격 단계를 삭제해야 합니다. 이 원본 채널을 직접 조립하려면 연결 뒤 이벤트를 임시 저장하고 `OrderBook`의 `with_id=true` snapshot과 결합해야 합니다.
+
+### Spot Order Book V2 로컬 오더북
+
+새 로컬 오더북은 서버가 첫 전체 snapshot을 직접 보내는 `spot.obu`를 사용합니다. 50단계는 20ms, 400단계는 100ms 간격이며 `StreamOrderBookDepth50` 또는 `StreamOrderBookDepth400`으로 선택합니다.
+
+```go
+public, err := streamClient.PublicStream(
+	gateio.StreamRequest{Subscriptions: []gateio.StreamSubscription{{
+		Channel:        gateio.StreamChannelOrderBookV2,
+		CurrencyPair:   "BTC_USDT",
+		OrderBookDepth: gateio.StreamOrderBookDepth50,
+	}}},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer public.Close()
+
+orderBook, err := gateio.NewLocalOrderBook(gateio.LocalOrderBookConfig{
+	CurrencyPair:  "BTC_USDT",
+	Depth:         gateio.StreamOrderBookDepth50,
+	EgressRouteID: "seoul-b",
+	ViewDepth:     20,
+})
+if err != nil {
+	return err
+}
+
+return orderBook.Run(ctx, public, func(
+	_ context.Context,
+	view gateio.LocalOrderBookView,
+) error {
+	return consume(view)
+})
+```
+
+`full=true` snapshot은 기존 장부 전체를 교체하며 서버가 같은 세션에서 snapshot을 여러 번 보내도 모두 새 동기화 지점으로 적용합니다. 증분 이벤트는 `U`가 현재 `UpdateID + 1`과 정확히 같을 때만 적용하고 장부 ID를 `u`로 전진시킵니다. 불연속 ID, 중복·겹침 이벤트, 새 연결에서 snapshot보다 먼저 도착한 증분을 발견하면 장부를 버리고 선택한 같은 EIP route로 재연결해 새 snapshot부터 복구합니다.
+
+`SynchronizationID`는 적용한 전체 snapshot 횟수, `GapCount`는 복구를 유발한 불연속 횟수, `Generation`은 WebSocket 연결 세대입니다. `ViewDepth` 기본값은 20이고 구독 깊이를 넘을 수 없으며 내부 장부도 선택한 50 또는 400단계로 제한합니다. public stream에 같은 거래쌍·깊이의 V2 구독이 없거나 EIP route가 다르면 네트워크 연결 전에 거부합니다.
+
+Gate.io는 2026년 3월부터 테스트넷에서 최초 snapshot을 구독 응답보다 먼저 보낼 수 있다고 공지했습니다. SDK는 구독 성공 응답을 기다리지 않고 유효한 snapshot을 즉시 적용하므로 두 메시지 순서에 의존하지 않습니다.
 
 JSON endpoint만 지원하며 Gate.io SBE binary push는 현재 범위에 포함하지 않습니다. public 이벤트 유실과 private 재연결 구간은 REST 조회로 최종 상태를 재조정해야 합니다. 시스템의 `spot.system` upgrade 알림을 받으면 연결 종료를 기다리지 말고 운영 계층에서 새 세션으로 교체하는 것이 안전합니다.
 
@@ -170,7 +213,7 @@ Gate.io의 비정상 응답은 일반적으로 비-2xx 상태와 `label`, `messa
 
 ## 운영 검증
 
-자동 테스트는 REST 서명 원문·본문·query 일치, 요청별 route 선택, route 허용 목록 사전 검사, Secret 덮어쓰기, 요청 제한 분리, 오류 분류, mutation 불명확 상태를 검증합니다. WebSocket은 public 재연결·재구독, private 명령 서명, typed event decode, 동적 구독 실패 rollback을 검증합니다. 실제 Gate.io 계정과 지정 EIP를 이용한 읽기·주문·장시간 stream smoke는 아직 대기 상태입니다.
+자동 테스트는 REST 서명 원문·본문·query 일치, 요청별 route 선택, route 허용 목록 사전 검사, Secret 덮어쓰기, 요청 제한 분리, 오류 분류, mutation 불명확 상태를 검증합니다. WebSocket은 public 재연결·재구독, private 명령 서명, typed event decode, 동적 구독 실패 rollback과 V2 snapshot 선도착·update ID 공백·동일 EIP 복구를 검증합니다. 실제 Gate.io 계정과 지정 EIP를 이용한 읽기·주문·장시간 stream smoke는 아직 대기 상태입니다.
 
 ## 공식 기준
 

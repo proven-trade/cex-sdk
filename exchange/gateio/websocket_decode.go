@@ -78,6 +78,8 @@ func streamChannelFromName(name string) StreamChannel {
 		return StreamChannelBookTicker
 	case "spot.order_book_update":
 		return StreamChannelOrderBookUpdate
+	case "spot.obu":
+		return StreamChannelOrderBookV2
 	case "spot.orders":
 		return StreamChannelOrders
 	case "spot.usertrades":

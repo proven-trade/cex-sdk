@@ -205,6 +205,13 @@ func (public *PublicStream) Close() error { return public.managed.session.Close(
 // Generation은 성공한 public 연결 세대 번호를 반환한다.
 func (public *PublicStream) Generation() uint64 { return public.managed.session.Generation() }
 
+// EgressRouteID는 public 연결과 재연결에 고정된 송신 경로를 반환한다.
+func (public *PublicStream) EgressRouteID() transport.EgressRouteID {
+	return public.managed.session.EgressRouteID()
+}
+
+func (public *PublicStream) reconnect() error { return public.managed.session.Reconnect() }
+
 // PrivateStream은 Gate.io private 주문·체결·잔고 WebSocket 연결을 관리한다.
 type PrivateStream struct{ managed *managedStream }
 
@@ -560,7 +567,8 @@ func validateStreamSubscription(subscription StreamSubscription, private bool) e
 		default:
 			return validationError("unsupported private WebSocket channel %q", subscription.Channel)
 		}
-		if subscription.CandleInterval != "" || subscription.UpdateInterval != "" {
+		if subscription.CandleInterval != "" || subscription.UpdateInterval != "" ||
+			subscription.OrderBookDepth != 0 {
 			return validationError("private WebSocket subscription does not accept interval")
 		}
 		return nil
@@ -580,6 +588,13 @@ func validateStreamSubscription(subscription StreamSubscription, private bool) e
 				"unsupported WebSocket order book interval %q", subscription.UpdateInterval,
 			)
 		}
+	case StreamChannelOrderBookV2:
+		if subscription.OrderBookDepth != StreamOrderBookDepth50 &&
+			subscription.OrderBookDepth != StreamOrderBookDepth400 {
+			return validationError(
+				"unsupported WebSocket order book V2 depth %d", subscription.OrderBookDepth,
+			)
+		}
 	default:
 		return validationError("unsupported public WebSocket channel %q", subscription.Channel)
 	}
@@ -591,6 +606,9 @@ func validateStreamSubscription(subscription StreamSubscription, private bool) e
 	}
 	if subscription.Channel != StreamChannelOrderBookUpdate && subscription.UpdateInterval != "" {
 		return validationError("WebSocket update interval is only supported for order book updates")
+	}
+	if subscription.Channel != StreamChannelOrderBookV2 && subscription.OrderBookDepth != 0 {
+		return validationError("WebSocket order book depth is only supported for order book V2")
 	}
 	return nil
 }
@@ -617,6 +635,8 @@ func streamChannelName(channel StreamChannel) string {
 		return "spot.book_ticker"
 	case StreamChannelOrderBookUpdate:
 		return "spot.order_book_update"
+	case StreamChannelOrderBookV2:
+		return "spot.obu"
 	case StreamChannelOrders:
 		return "spot.orders"
 	case StreamChannelUserTrades:
@@ -634,6 +654,10 @@ func streamSubscriptionPayload(subscription StreamSubscription) []string {
 		return []string{string(subscription.CandleInterval), subscription.CurrencyPair}
 	case StreamChannelOrderBookUpdate:
 		return []string{subscription.CurrencyPair, string(subscription.UpdateInterval)}
+	case StreamChannelOrderBookV2:
+		return []string{fmt.Sprintf(
+			"ob.%s.%d", subscription.CurrencyPair, subscription.OrderBookDepth,
+		)}
 	case StreamChannelBalances:
 		return nil
 	default:
@@ -643,7 +667,8 @@ func streamSubscriptionPayload(subscription StreamSubscription) []string {
 
 func streamSubscriptionKey(subscription StreamSubscription) string {
 	return string(subscription.Channel) + "\x00" + subscription.CurrencyPair + "\x00" +
-		string(subscription.CandleInterval) + "\x00" + string(subscription.UpdateInterval)
+		string(subscription.CandleInterval) + "\x00" + string(subscription.UpdateInterval) +
+		"\x00" + strconv.Itoa(int(subscription.OrderBookDepth))
 }
 
 func (client *StreamClient) resolveStreamRoute(

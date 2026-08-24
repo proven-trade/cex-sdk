@@ -465,11 +465,13 @@ func TestGateIOStreamValidation(t *testing.T) {
 		{Channel: StreamChannelTicker, CurrencyPair: "btc_usdt"},
 		{Channel: StreamChannelCandles, CurrencyPair: "BTC_USDT", CandleInterval: Candle1Second},
 		{Channel: StreamChannelOrderBookUpdate, CurrencyPair: "BTC_USDT"},
+		{Channel: StreamChannelOrderBookV2, CurrencyPair: "BTC_USDT"},
 		{Channel: StreamChannelBookTicker, CurrencyPair: "BTC_USDT", UpdateInterval: StreamUpdate20Millis},
+		{Channel: StreamChannelTicker, CurrencyPair: "BTC_USDT", OrderBookDepth: StreamOrderBookDepth50},
 		{Channel: StreamChannelOrders},
 		{Channel: StreamChannelBalances, CurrencyPair: "BTC_USDT"},
 	}
-	privateValues := []bool{false, false, false, false, true, true}
+	privateValues := []bool{false, false, false, false, false, false, true, true}
 	for index, subscription := range tests {
 		if err := validateStreamSubscription(subscription, privateValues[index]); !errors.Is(err, trade.ErrValidation) {
 			t.Fatalf("subscription %d error = %v, want validation", index, err)
