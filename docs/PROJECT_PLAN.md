@@ -532,6 +532,7 @@ const (
 - Binance USDⓈ-M Futures 분리 public/market 및 listenKey private stream 구현 완료
 - Bitget v3 UTA public/private stream 구현 완료
 - Upbit Spot public/private stream 구현 완료
+- 공통 Spot read smoke와 지정 EIP JSON 증적 계약 구현 완료
 - 거래소별 sequence gap recovery와 장시간 soak test
 - 거래소별 인증, heartbeat, sequence gap recovery
 - dashboard/alert/runbook

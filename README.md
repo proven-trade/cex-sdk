@@ -8,6 +8,7 @@
 
 - [프로젝트 기획서](docs/PROJECT_PLAN.md)
 - [거래소 지원 매트릭스](docs/SUPPORT_MATRIX.md)
+- [Live smoke 운영 검증](docs/LIVE_SMOKE.md)
 - [공통 WebSocket 연결 계층](docs/STREAMS.md)
 - [Binance Spot WebSocket](docs/exchanges/BINANCE_WEBSOCKET.md)
 - [Binance USDⓈ-M Futures REST·WebSocket](docs/exchanges/BINANCE_USDM.md)
