@@ -563,6 +563,7 @@ const (
 - Kraken Futures WebSocket v1 book_snapshot/book 로컬 오더북과 sequence gap·동일 EIP 재연결 복구 구현 완료
 - Bithumb Spot REST 구현 완료
 - Bithumb public v1/private v2 WebSocket 구현 완료
+- Bithumb Spot 최대 15단계 완전 snapshot 로컬 오더북과 동일 EIP 재연결 복구 구현 완료
 - Coinone Spot REST 구현 완료
 - Coinone public/private WebSocket 구현 완료
 - Korbit Spot REST 구현 완료

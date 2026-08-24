@@ -184,6 +184,25 @@ func (public *PublicStream) Close() error { return public.managed.session.Close(
 // Generation은 성공한 public 연결 세대 번호를 반환한다.
 func (public *PublicStream) Generation() uint64 { return public.managed.session.Generation() }
 
+// EgressRouteID는 public stream 연결과 재연결에 고정된 송신 경로를 반환한다.
+func (public *PublicStream) EgressRouteID() transport.EgressRouteID {
+	return public.managed.session.EgressRouteID()
+}
+
+func (public *PublicStream) hasOrderBookSubscription(market string) bool {
+	for _, dataType := range public.managed.request.Types {
+		if dataType.Type != "orderbook" {
+			continue
+		}
+		for _, code := range dataType.Codes {
+			if strings.EqualFold(code, market) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // PrivateStream은 빗썸 private v2 내 주문·자산 WebSocket 연결을 관리한다.
 type PrivateStream struct{ managed *managedStream }
 

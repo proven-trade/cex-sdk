@@ -120,6 +120,50 @@ private 연결은 REST와 같은 HS256 JWT를 `Authorization` handshake 헤더�
 
 서버의 `permessage-deflate`는 선택 기능입니다. 현재 공통 connector는 압축을 요청하지 않으며 서버는 같은 JSON을 비압축으로 전송합니다. Private v1은 2026년 9월 30일 종료 예정이므로 SDK는 deprecated endpoint를 제공하지 않습니다.
 
+### Spot 로컬 오더북 snapshot
+
+빗썸 public v1 `orderbook`은 `SNAPSHOT`과 `REALTIME` 모두 최대 15개의 현재 매도·매수 호가 쌍을 제공합니다. 공식 응답에는 sequence가 없으므로 REST snapshot이나 임의의 연속 번호를 결합하지 않습니다. `LocalOrderBook`은 각 메시지의 마켓·microsecond timestamp·모아보기 `level`·정렬·가격·수량을 독립적으로 검증하고 최신 snapshot view로 전달합니다.
+
+```go
+public, err := streams.PublicStream(
+	bithumb.StreamRequest{
+		Types: []bithumb.StreamDataType{{
+			Type:  "orderbook",
+			Codes: []string{"KRW-BTC"},
+			Level: "1000",
+		}},
+		Format: bithumb.StreamFormatDefault,
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer public.Close()
+
+book, err := bithumb.NewLocalOrderBook(bithumb.LocalOrderBookConfig{
+	Market:        "KRW-BTC",
+	EgressRouteID: "seoul-b",
+	ViewDepth:     15,
+})
+if err != nil {
+	return err
+}
+
+err = book.Run(ctx, public, func(ctx context.Context, view bithumb.LocalOrderBookView) error {
+	return consumeBook(view)
+})
+```
+
+운영 계약은 다음과 같습니다.
+
+- 로컬 오더북과 WebSocket의 `EgressRouteID`가 다르면 연결 전에 거부합니다.
+- typed 구조체가 전체 필드명을 사용하므로 `DEFAULT` 응답 형식만 허용합니다.
+- 각 이벤트를 완전한 snapshot으로 취급해 이전 가격 단계를 병합하지 않고 통째로 교체합니다.
+- 모아보기 `level` 기본값은 1이며 수신한 실제 값을 `LocalOrderBookView.Level`에 보존합니다.
+- 네트워크 재연결 시 같은 EIP와 새 ticket으로 다시 구독하며 다음 snapshot부터 `Generation`이 증가한 view를 제공합니다.
+- sequence가 없으므로 탐지할 수 없는 gap count를 만들지 않습니다. `SnapshotID`, `Generation`, `Timestamp`, `StreamType`으로 수신과 재연결을 관측합니다.
+
 ## 공통 Spot API
 
 `NewUnifiedSpot`은 native 클라이언트를 `unified.SpotClient`로 변환합니다. 공통 `BTC/KRW` 마켓은 Bithumb의 `KRW-BTC`로 변환하며, 시장가 매수의 `QuoteAmount`는 `order_type=price`의 `price`, 시장가 매도의 `Quantity`는 `order_type=market`의 `volume`으로 전송합니다.
@@ -141,6 +185,7 @@ private 연결은 REST와 같은 HS256 JWT를 `Authorization` handshake 헤더�
 - [대기 주문 목록 조회](https://apidocs.bithumb.com/reference/대기-주문-목록-조회)
 - [종료 주문 목록 조회](https://apidocs.bithumb.com/reference/종료-주문-목록-조회)
 - [WebSocket 기본 정보](https://apidocs.bithumb.com/reference/기본-정보)
+- [WebSocket 호가](https://apidocs.bithumb.com/reference/호가-orderbook)
 - [WebSocket 연결 관리](https://apidocs.bithumb.com/reference/연결-관리)
 - [Private v2 MyOrder](https://apidocs.bithumb.com/reference/내-주문-및-체결-myorder)
 - [Private v2 MyAsset](https://apidocs.bithumb.com/reference/내-자산-myasset)

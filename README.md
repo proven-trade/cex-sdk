@@ -64,7 +64,7 @@
 | Kraken Futures REST | 공개 시세·캔들, 지갑, 포지션, 주문·체결 구현됨 |
 | Kraken Futures WebSocket v1 | public 시세·호가·체결, private 지갑·주문·체결·포지션 stream·로컬 오더북 자동 갭 복구 구현됨 |
 | Bithumb Spot REST | 공개 시세, 잔고, v1 상세·v2 주문 생성·취소·목록 구현됨 |
-| Bithumb WebSocket | public v1 시세·private v2 주문·자산 stream 구현됨 |
+| Bithumb WebSocket | public v1 시세·private v2 주문·자산 stream·완전 snapshot 로컬 오더북 구현됨 |
 | Coinone Spot REST | public v2 시세, v2.1 잔고·주문·체결 구현됨 |
 | Coinone WebSocket | public 시세·private 주문·자산 stream 구현됨 |
 | Korbit Spot REST | 공개 시세·상품 규칙, 잔고, 주문·체결 구현됨 |
@@ -346,6 +346,7 @@ defer session.Close()
 - public v1 ticker·체결·호가 WebSocket
 - private v2 내 주문·체결·자산 WebSocket
 - 연결별 EIP 고정, 새 HS256 JWT와 ticket을 이용한 재인증·재구독
+- 최대 15호가의 완전 snapshot 기반 로컬 오더북과 동일 EIP 재연결 복구
 
 세부 계약과 REST·WebSocket v1/v2 endpoint 구분은 [Bithumb Spot 문서](docs/exchanges/BITHUMB.md)를 참고합니다.
 
