@@ -21,6 +21,15 @@ const (
 	OrderTypeLimit  OrderType = "limit"
 )
 
+// TimeInForce는 Kraken 주문의 체결 및 만료 정책이다.
+type TimeInForce string
+
+const (
+	TimeInForceGTC TimeInForce = "GTC"
+	TimeInForceIOC TimeInForce = "IOC"
+	TimeInForceFOK TimeInForce = "FOK"
+)
+
 // CandleInterval은 Kraken OHLC 분 단위 구간이다.
 type CandleInterval int
 
@@ -149,6 +158,55 @@ type Candles struct {
 // Balance는 자산별 총 잔고다.
 type Balance struct {
 	Amounts map[string]string
+	Raw     json.RawMessage
+}
+
+// ExtendedBalanceDetail은 자산의 총액, 신용, 사용 신용과 주문 보류액이다.
+type ExtendedBalanceDetail struct {
+	Balance    string
+	Credit     string
+	CreditUsed string
+	HoldTrade  string
+	Raw        json.RawMessage
+}
+
+// UnmarshalJSON은 숫자 또는 문자열인 Kraken 잔고 필드를 decimal 문자열로 보존한다.
+func (detail *ExtendedBalanceDetail) UnmarshalJSON(data []byte) error {
+	var fields struct {
+		Balance    json.RawMessage `json:"balance"`
+		Credit     json.RawMessage `json:"credit"`
+		CreditUsed json.RawMessage `json:"credit_used"`
+		HoldTrade  json.RawMessage `json:"hold_trade"`
+	}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	values := []struct {
+		raw    json.RawMessage
+		target *string
+	}{
+		{fields.Balance, &detail.Balance},
+		{fields.Credit, &detail.Credit},
+		{fields.CreditUsed, &detail.CreditUsed},
+		{fields.HoldTrade, &detail.HoldTrade},
+	}
+	for _, value := range values {
+		if len(value.raw) == 0 || string(value.raw) == "null" {
+			continue
+		}
+		parsed, err := scalarString(value.raw)
+		if err != nil {
+			return err
+		}
+		*value.target = parsed
+	}
+	detail.Raw = cloneBytes(data)
+	return nil
+}
+
+// ExtendedBalance는 자산별 확장 잔고다.
+type ExtendedBalance struct {
+	Details map[string]ExtendedBalanceDetail
 	Raw     json.RawMessage
 }
 

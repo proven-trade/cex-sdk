@@ -5,8 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"math/big"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -464,148 +462,11 @@ func (adapter *UnifiedSpot) threeMinuteCandles(
 }
 
 func aggregateCoinbaseThreeMinuteCandles(native []Candle, limit int) ([]unified.Candle, error) {
-	byStart := make(map[int64]Candle, len(native))
-	starts := make([]int64, 0, len(native))
-	for _, item := range native {
-		start, err := strconv.ParseInt(item.Start, 10, 64)
-		if err != nil || start < 0 {
-			if err == nil {
-				err = fmt.Errorf("timestamp must not be negative")
-			}
-			return nil, fmt.Errorf("decode Coinbase candle timestamp: %w", err)
-		}
-		if _, exists := byStart[start]; exists {
-			continue
-		}
-		byStart[start] = item
-		starts = append(starts, start)
-	}
-	sort.Slice(starts, func(left, right int) bool { return starts[left] < starts[right] })
-	type bucketCandle struct {
-		candle unified.Candle
-		volume scaledCoinbaseDecimal
-	}
-	buckets := make(map[int64]bucketCandle)
-	for _, start := range starts {
-		item := byStart[start]
-		bucketStart := start - start%180
-		volume, err := parseScaledCoinbaseDecimal(item.Volume)
-		if err != nil {
-			return nil, fmt.Errorf("decode Coinbase candle volume: %w", err)
-		}
-		current, exists := buckets[bucketStart]
-		if !exists {
-			if _, err := compareCoinbaseDecimals(item.High, item.Low); err != nil {
-				return nil, fmt.Errorf("decode Coinbase candle price: %w", err)
-			}
-			current = bucketCandle{
-				candle: unified.Candle{
-					StartTime: bucketStart * 1000, Open: item.Open, High: item.High,
-					Low: item.Low, Close: item.Close,
-				},
-				volume: volume,
-			}
-		} else {
-			comparison, compareErr := compareCoinbaseDecimals(item.High, current.candle.High)
-			if compareErr != nil {
-				return nil, fmt.Errorf("decode Coinbase candle high: %w", compareErr)
-			}
-			if comparison > 0 {
-				current.candle.High = item.High
-			}
-			comparison, compareErr = compareCoinbaseDecimals(item.Low, current.candle.Low)
-			if compareErr != nil {
-				return nil, fmt.Errorf("decode Coinbase candle low: %w", compareErr)
-			}
-			if comparison < 0 {
-				current.candle.Low = item.Low
-			}
-			current.candle.Close = item.Close
-			current.volume = addScaledCoinbaseDecimals(current.volume, volume)
-		}
-		buckets[bucketStart] = current
-	}
-	bucketStarts := make([]int64, 0, len(buckets))
-	for start := range buckets {
-		bucketStarts = append(bucketStarts, start)
-	}
-	sort.Slice(bucketStarts, func(left, right int) bool { return bucketStarts[left] > bucketStarts[right] })
-	if len(bucketStarts) > limit {
-		bucketStarts = bucketStarts[:limit]
-	}
-	result := make([]unified.Candle, len(bucketStarts))
-	for index, start := range bucketStarts {
-		bucket := buckets[start]
-		bucket.candle.Volume = bucket.volume.String()
-		result[index] = bucket.candle
-	}
-	return result, nil
-}
-
-type scaledCoinbaseDecimal struct {
-	integer *big.Int
-	scale   int
-}
-
-func parseScaledCoinbaseDecimal(value string) (scaledCoinbaseDecimal, error) {
-	if !positiveDecimalPattern.MatchString(value) {
-		return scaledCoinbaseDecimal{}, fmt.Errorf("invalid decimal %q", value)
-	}
-	whole, fraction, _ := strings.Cut(value, ".")
-	integer, ok := new(big.Int).SetString(whole+fraction, 10)
-	if !ok {
-		return scaledCoinbaseDecimal{}, fmt.Errorf("invalid decimal %q", value)
-	}
-	return scaledCoinbaseDecimal{integer: integer, scale: len(fraction)}, nil
-}
-
-func compareCoinbaseDecimals(left, right string) (int, error) {
-	leftValue, err := parseScaledCoinbaseDecimal(left)
+	source, err := fromCoinbaseCandles(native)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	rightValue, err := parseScaledCoinbaseDecimal(right)
-	if err != nil {
-		return 0, err
-	}
-	scale := leftValue.scale
-	if rightValue.scale > scale {
-		scale = rightValue.scale
-	}
-	return scaleCoinbaseInteger(leftValue, scale).Cmp(scaleCoinbaseInteger(rightValue, scale)), nil
-}
-
-func addScaledCoinbaseDecimals(left, right scaledCoinbaseDecimal) scaledCoinbaseDecimal {
-	scale := left.scale
-	if right.scale > scale {
-		scale = right.scale
-	}
-	return scaledCoinbaseDecimal{
-		integer: new(big.Int).Add(
-			scaleCoinbaseInteger(left, scale), scaleCoinbaseInteger(right, scale),
-		),
-		scale: scale,
-	}
-}
-
-func scaleCoinbaseInteger(value scaledCoinbaseDecimal, scale int) *big.Int {
-	result := new(big.Int).Set(value.integer)
-	if difference := scale - value.scale; difference > 0 {
-		result.Mul(result, new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(difference)), nil))
-	}
-	return result
-}
-
-func (value scaledCoinbaseDecimal) String() string {
-	digits := value.integer.String()
-	if value.scale == 0 {
-		return digits
-	}
-	if len(digits) <= value.scale {
-		digits = strings.Repeat("0", value.scale-len(digits)+1) + digits
-	}
-	position := len(digits) - value.scale
-	return digits[:position] + "." + digits[position:]
+	return unified.AggregateCandles(source, 3*time.Minute, limit)
 }
 
 func coinbaseProductID(market unified.Market) string {

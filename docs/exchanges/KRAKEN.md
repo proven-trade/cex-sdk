@@ -8,8 +8,8 @@
 - Spot 상품 정보와 주문 단위
 - 전체 또는 선택 상품 ticker
 - L2 호가, 최근 공개 체결, OHLCV
-- 계정의 자산별 총 잔고
-- 시장가·지정가 주문 생성
+- 계정의 자산별 총 잔고와 주문 보류액을 포함한 확장 잔고
+- 시장가·지정가 GTC·IOC·FOK 주문 생성
 - 최대 50건 주문 조회와 단건 취소
 - 미체결·종료 주문 목록과 계정 체결 이력
 - WebSocket ticker, L2 호가, 체결, OHLC, 상품 규칙
@@ -99,6 +99,10 @@ reference, err := client.PlaceOrder(
 ```
 
 첫 범위의 `PlaceOrder`는 Spot 시장가와 지정가만 지원한다. `ClientOrderID`는 Kraken 계약에 맞춰 최대 18자의 안전한 문자열 또는 UUID를 허용한다. `ValidateOnly`는 검증만 수행하며 이때 빈 transaction ID 목록도 정상 결과다.
+
+시장가 매수에서 `VolumeInQuote`를 사용하면 Kraken `viqc` 플래그로 결제 자산 금액을 전달한다. 지정가 주문의 `TimeInForce`는 `GTC`, `IOC`, `FOK`를 지원하며 post-only는 GTC 지정가와만 함께 사용할 수 있다.
+
+`ExtendedBalance`는 `BalanceEx`의 총액, 신용, 사용 신용, Spot 주문 보류액을 decimal 문자열로 보존한다. 공통 Spot 잔고는 공식 식인 `balance + credit - credit_used - hold_trade`를 주문 가능액으로 사용하고 `hold_trade`를 잠금액으로 사용한다.
 
 `CancelOrder`는 취소 제한을 계정+상품 단위로 안전하게 적용하기 위해 `Pair`를 요구한다. `TransactionID`와 `ClientOrderID` 중 정확히 하나를 지정하며 각각 Kraken의 `txid`와 `cl_ord_id`로 전송한다. 취소 접수 뒤 최종 상태는 `OrderInfo`, `OpenOrders`, `ClosedOrders`에서 확인한다.
 

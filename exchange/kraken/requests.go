@@ -55,10 +55,12 @@ type PlaceOrderRequest struct {
 	Pair          string
 	Side          Side
 	OrderType     OrderType
+	TimeInForce   TimeInForce
 	Volume        string
 	Price         string
 	ClientOrderID string
 	PostOnly      bool
+	VolumeInQuote bool
 	ValidateOnly  bool
 }
 
@@ -218,6 +220,16 @@ func (request PlaceOrderRequest) validate() error {
 	if request.PostOnly && request.OrderType != OrderTypeLimit {
 		return validationError("post-only is available for limit orders only")
 	}
+	if request.TimeInForce != "" && request.TimeInForce != TimeInForceGTC &&
+		request.TimeInForce != TimeInForceIOC && request.TimeInForce != TimeInForceFOK {
+		return validationError("unsupported time in force %q", request.TimeInForce)
+	}
+	if request.PostOnly && request.TimeInForce != "" && request.TimeInForce != TimeInForceGTC {
+		return validationError("post-only order time in force must be GTC")
+	}
+	if request.VolumeInQuote && (request.OrderType != OrderTypeMarket || request.Side != SideBuy) {
+		return validationError("quote currency volume is available only for market buy orders")
+	}
 	return validateClientOrderID(request.ClientOrderID)
 }
 
@@ -230,8 +242,16 @@ func (request PlaceOrderRequest) values() url.Values {
 	}
 	setIfNotEmpty(values, "price", request.Price)
 	setIfNotEmpty(values, "cl_ord_id", request.ClientOrderID)
+	setIfNotEmpty(values, "timeinforce", string(request.TimeInForce))
+	flags := make([]string, 0, 2)
 	if request.PostOnly {
-		values.Set("oflags", "post")
+		flags = append(flags, "post")
+	}
+	if request.VolumeInQuote {
+		flags = append(flags, "viqc")
+	}
+	if len(flags) > 0 {
+		values.Set("oflags", strings.Join(flags, ","))
 	}
 	if request.ValidateOnly {
 		values.Set("validate", "true")
