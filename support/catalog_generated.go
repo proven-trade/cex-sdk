@@ -127,10 +127,10 @@ var catalogData = []ProductSupport{
 	{
 		Exchange: model.ExchangeID("kucoin"), DisplayName: "KuCoin", Tier: "P2",
 		Product: ProductID("spot"), ProductName: "Spot",
-		REST: Status("planned"), WebSocketPublic: Status("planned"), WebSocketPrivate: Status("planned"),
-		Unified: Status("planned"), AutomatedTests: Status("planned"),
-		LiveReadSmoke: Status("planned"), LiveTradeSmoke: Status("planned"),
-		Docs: []string{},
+		REST: Status("implemented"), WebSocketPublic: Status("planned"), WebSocketPrivate: Status("planned"),
+		Unified: Status("planned"), AutomatedTests: Status("implemented"),
+		LiveReadSmoke: Status("pending"), LiveTradeSmoke: Status("pending"),
+		Docs: []string{"docs/exchanges/KUCOIN.md"},
 	},
 	{
 		Exchange: model.ExchangeID("kucoin"), DisplayName: "KuCoin", Tier: "P2",

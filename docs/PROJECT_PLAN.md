@@ -559,6 +559,14 @@ const (
 - 어댑터 생성 템플릿 및 문서 자동 생성
 - deprecated API 감지 및 변경 알림 프로세스
 
+### Phase 5 — P2 확장
+
+- KuCoin Classic Spot REST 구현 완료
+- KuCoin Spot public/private WebSocket 구현
+- KuCoin Spot 공통 API 구현
+- KuCoin Futures REST·WebSocket 구현
+- Gate.io Spot·Futures 구현
+
 ## 20. 확정 사항과 배포 전 결정 사항
 
 다음 항목은 구현 기준으로 확정했다.
