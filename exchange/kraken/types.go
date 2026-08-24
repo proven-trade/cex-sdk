@@ -1,6 +1,9 @@
 package kraken
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Side는 주문과 체결 방향이다.
 type Side string
@@ -218,6 +221,12 @@ type TradePage struct {
 	Trades []TradeFill
 	Count  int
 	Raw    json.RawMessage
+}
+
+// WebSocketToken은 Spot private WebSocket 구독에 사용할 임시 인증 token이다.
+type WebSocketToken struct {
+	Value   string
+	Expires time.Duration
 }
 
 // OrderReference는 신규 주문 접수 결과다.
