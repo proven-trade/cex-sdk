@@ -1,6 +1,6 @@
-# Gate.io API v4 Spot REST·WebSocket 어댑터
+# Gate.io API v4 Spot REST·WebSocket·공통 어댑터
 
-구현 기준은 Gate.io API v4 Spot REST·JSON WebSocket과 기본 주소 `https://api.gateio.ws/api/v4`, `wss://api.gateio.ws/ws/v4/`입니다. 공통 Spot API와 Futures는 후속 단계에서 추가합니다.
+구현 기준은 Gate.io API v4 Spot REST·JSON WebSocket과 기본 주소 `https://api.gateio.ws/api/v4`, `wss://api.gateio.ws/ws/v4/`입니다. `NewUnifiedSpot`은 native REST 클라이언트를 프로젝트 공통 Spot 계약으로 변환합니다. Futures는 후속 단계에서 추가합니다.
 
 ## 전제조건
 
@@ -53,6 +53,14 @@ ticker, err := client.Ticker(ctx, "BTC_USDT", trade.WithEgressRoute("seoul-b"))
 | 내 체결 | `MyTrades` | `GET /spot/my_trades` |
 
 가격, 수량, 금액, 수수료는 `float64`로 변환하지 않고 문자열로 보존합니다. 객체와 배열 항목의 `Raw`에는 해당 원본 JSON을 보존합니다. 캔들은 `timestamp, quote volume, close, high, low, open, base volume, closed` 순서로 해석하며, 구형 7개 필드 응답은 `BaseVolume`을 빈 문자열로 둡니다.
+
+## 공통 Spot API
+
+`NewUnifiedSpot`으로 생성한 어댑터는 `unified.SpotClient`의 마켓, 현재가, 호가, 최근 체결, 캔들, 잔고, 주문 생성·조회·취소·미체결 목록을 구현합니다. 공통 `BTC/USDT`는 Gate.io의 `BTC_USDT`로 변환하며 모든 메서드의 요청별 EIP 옵션을 native API까지 전달합니다.
+
+시장가 매수의 `QuoteAmount`는 Gate.io `amount`의 견적 통화 금액으로, 시장가 매도의 `Quantity`는 기준 통화 수량으로 전달합니다. `ClientOrderID`를 생략하면 Gate.io 규칙에 맞는 `t-proven-` 접두사의 암호학적 난수 ID를 생성합니다. 지정가의 공통 PostOnly는 Gate.io POC로 변환하고, 시간 정책을 생략하면 GTC를 적용합니다. 주문 조회와 취소는 거래소 주문 ID뿐 아니라 `t-` 사용자 주문 ID도 지원합니다.
+
+공통 캔들은 Gate.io가 직접 제공하는 1분·5분·15분·30분·1시간·4시간 구간을 지원하며, native 구간이 없는 3분 캔들은 1분 데이터 3개를 epoch 경계로 합성합니다. 공통 `Volume`에는 기준 통화 거래량을 사용하므로 구형 7개 필드 캔들처럼 `BaseVolume`이 없는 응답은 의미가 다른 quote volume으로 대체하지 않고 오류로 반환합니다. 전체 미체결 조회는 거래쌍별 `total`을 기준으로 모든 페이지를 끝까지 읽으며, 단일 마켓 요청은 결과를 해당 거래쌍으로 제한합니다.
 
 ## 인증과 서명
 

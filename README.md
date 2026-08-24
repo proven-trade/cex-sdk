@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Classic Spot·Futures REST·WebSocket, Gate.io Spot REST·WebSocket 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Classic Spot·Futures REST·WebSocket, Gate.io Spot REST·WebSocket·공통 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -42,7 +42,7 @@
 | Binance USDⓈ-M Futures REST | 공개 시세, 계정 V3, 포지션 V3, 주문 구현됨 |
 | Bitget v3 UTA | Spot·USDT-M 공개 시세, 자산, 포지션, 주문 구현됨 |
 | Upbit Spot REST | 공개 시세, 잔고, 주문 생성·조회·취소·목록 구현됨 |
-| 공통 Spot API·적합성 테스트 | Binance·Bitget·Upbit·Bybit·OKX·Coinbase·Kraken·Bithumb·Coinone·Korbit·KuCoin 구현됨 |
+| 공통 Spot API·적합성 테스트 | Binance·Bitget·Upbit·Bybit·OKX·Coinbase·Kraken·Bithumb·Coinone·Korbit·KuCoin·Gate.io 구현됨 |
 | 공통 WebSocket 연결 계층 | route 고정, 재연결, 재구독 훅, heartbeat 구현됨 |
 | Binance Spot WebSocket | public market·private user data stream 구현됨 |
 | Bitget v3 UTA WebSocket | Spot·USDT Futures public, UTA private stream 구현됨 |
@@ -69,6 +69,7 @@
 | KuCoin Classic Futures WebSocket | public 시세·호가·캔들·체결, private 주문·잔고·포지션 stream 구현됨 |
 | Gate.io API v4 Spot REST | 거래쌍 규칙, 공개 시세, 계정, 주문 생성·조회·취소·미체결·체결 구현됨 |
 | Gate.io API v4 Spot WebSocket | public 시세·호가·체결, private 주문·체결·잔고 stream 구현됨 |
+| Gate.io 공통 Spot API | 공통 마켓·시세·잔고·주문 계약과 적합성 테스트 구현됨 |
 
 ## 요청별 EIP 선택
 
@@ -403,7 +404,7 @@ defer session.Close()
 
 세부 인증·주문·요청 제한 계약은 [KuCoin Classic Futures 문서](docs/exchanges/KUCOIN_FUTURES.md)를 참고합니다.
 
-## Gate.io API v4 Spot REST·WebSocket 1차 범위
+## Gate.io API v4 Spot REST·WebSocket·공통 API 범위
 
 - 전체 거래쌍 규칙, 현재가, 호가, 최근 체결, 캔들
 - 통화별 Spot 잔고
@@ -419,12 +420,13 @@ defer session.Close()
 - 실행 중 구독 변경, 실패 응답 반영, 재연결 구독 복구
 - 연결별 EIP 고정과 private 구독마다 새 HMAC-SHA-512 서명
 - WebSocket protocol ping/pong heartbeat와 IP당 연결 수 운영 계약
+- `unified.SpotClient` 전체 계약과 공통 적합성 테스트
 
 세부 인증·주문·요청 제한·연결 계약은 [Gate.io API v4 Spot 문서](docs/exchanges/GATEIO.md)를 참고합니다.
 
 ## 공통 Spot API
 
-`unified.SpotClient`는 Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit, KuCoin에 같은 메서드 계약을 제공합니다. 마켓은 거래소 문자열 대신 `Base`와 `Quote`로 지정하며, 요청별 EIP 옵션은 native API와 동일하게 전달합니다.
+`unified.SpotClient`는 Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io에 같은 메서드 계약을 제공합니다. 마켓은 거래소 문자열 대신 `Base`와 `Quote`로 지정하며, 요청별 EIP 옵션은 native API와 동일하게 전달합니다.
 
 ```go
 spot, err := upbit.NewUnifiedSpot(client)
