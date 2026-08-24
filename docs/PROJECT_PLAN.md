@@ -566,6 +566,7 @@ const (
 - Bithumb Spot 최대 15단계 완전 snapshot 로컬 오더북과 동일 EIP 재연결 복구 구현 완료
 - Coinone Spot REST 구현 완료
 - Coinone public/private WebSocket 구현 완료
+- Coinone Spot 완전 snapshot·source ID 최신성 로컬 오더북과 동일 EIP 재연결 복구 구현 완료
 - Korbit Spot REST 구현 완료
 - Korbit public/private WebSocket 구현 완료
 - 지원 매트릭스와 Go capability catalog 자동 생성 완료

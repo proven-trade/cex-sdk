@@ -99,6 +99,52 @@ private handshake는 매 연결 세대마다 Secret Provider를 다시 조회하
 
 구독 변경과 heartbeat write는 연결별로 직렬화합니다. 한 세션의 handler도 수신 순서대로 호출되므로 느린 처리는 사용자 애플리케이션에서 별도 bounded queue로 분리해야 합니다.
 
+### Spot 로컬 오더북 snapshot
+
+코인원 `ORDERBOOK`은 최초 구독 시 마지막 전체 오더북을 한 번 보내고, 이후 변경 때마다 갱신된 전체 asks·bids를 제공합니다. `id`는 숫자 문자열이며 값이 클수록 최신 장부입니다. 연속성을 뜻하는 sequence는 아니므로 임의로 `id+1`을 요구하지 않고, 같은 연결 세대에서 이전 값보다 크지 않은 중복·역행 snapshot만 무시합니다.
+
+```go
+public, err := streams.PublicStream(
+	coinone.StreamRequest{Subscriptions: []coinone.StreamSubscription{{
+		Channel: coinone.StreamChannelOrderBook,
+		Topics: []coinone.StreamTopic{{
+			QuoteCurrency:  "KRW",
+			TargetCurrency: "BTC",
+		}},
+		Format: coinone.StreamFormatShort,
+	}}},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer public.Close()
+
+book, err := coinone.NewLocalOrderBook(coinone.LocalOrderBookConfig{
+	QuoteCurrency:  "KRW",
+	TargetCurrency: "BTC",
+	EgressRouteID:  "seoul-b",
+	ViewDepth:      16,
+})
+if err != nil {
+	return err
+}
+
+err = book.Run(ctx, public, func(ctx context.Context, view coinone.LocalOrderBookView) error {
+	return consumeBook(view)
+})
+```
+
+운영 계약은 다음과 같습니다.
+
+- `DEFAULT`와 `SHORT`를 모두 같은 typed snapshot으로 처리합니다.
+- 공식 응답의 asks와 bids는 높은 가격부터 내려옵니다. view는 공통 사용성을 위해 bids는 높은 가격부터, asks는 낮은 가격부터인 best-first 순서로 제공합니다.
+- 각 방향 최대 16단계를 검증하고 `ViewDepth` 기본값도 16으로 둡니다.
+- 로컬 오더북과 WebSocket의 통화쌍·`EgressRouteID`가 다르면 연결 전에 거부합니다.
+- `LocalOrderBook.Run`이 대상 구독의 수명주기를 소유하므로 실행 중 해당 `ORDERBOOK` 구독을 제거하지 않아야 합니다.
+- 네트워크 재연결 시 같은 EIP로 현재 구독을 복구하고 새 세대의 첫 전체 snapshot을 받아들입니다. `SnapshotID`, `Generation`, millisecond `Timestamp`, `SourceID`로 상태를 관측합니다.
+- source `id`는 최신성 비교값일 뿐 연속 sequence가 아니므로 gap count를 만들거나 REST snapshot과 섞지 않습니다.
+
 ## 공통 Spot API
 
 `NewUnifiedSpot`은 native 클라이언트를 `unified.SpotClient`로 변환합니다. Coinone API가 기준 통화와 대상 통화를 별도 필드로 사용하므로 공통 `BTC/KRW`의 `NativeMarket`은 SDK 표기인 `KRW-BTC`로 합성합니다. 인자 없는 공통 `Markets`는 현재 원화 마켓을 조회합니다.
@@ -114,4 +160,5 @@ Coinone 주문 상세의 현재 `order` 객체 응답과 이전 평면 응답을
 - [요청 횟수 제한 안내](https://docs.coinone.co.kr/docs/ratelimit-%EC%95%88%EB%82%B4)
 - [오류 코드](https://docs.coinone.co.kr/docs/error-code)
 - [Public WebSocket](https://docs.coinone.co.kr/reference/public-websocket-1)
+- [WebSocket 오더북](https://docs.coinone.co.kr/reference/public-websocket-orderbook)
 - [Private WebSocket](https://docs.coinone.co.kr/reference/private-websocket-1)

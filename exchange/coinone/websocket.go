@@ -203,6 +203,26 @@ func (public *PublicStream) Close() error { return public.managed.session.Close(
 // Generation은 성공한 public 연결 세대 번호를 반환한다.
 func (public *PublicStream) Generation() uint64 { return public.managed.session.Generation() }
 
+// EgressRouteID는 public stream 연결과 재연결에 고정된 송신 경로를 반환한다.
+func (public *PublicStream) EgressRouteID() transport.EgressRouteID {
+	return public.managed.session.EgressRouteID()
+}
+
+func (public *PublicStream) hasOrderBookSubscription(quoteCurrency, targetCurrency string) bool {
+	public.managed.mu.Lock()
+	defer public.managed.mu.Unlock()
+	for _, subscription := range public.managed.subscriptions {
+		if subscription.Channel != StreamChannelOrderBook || len(subscription.Topics) != 1 {
+			continue
+		}
+		topic := subscription.Topics[0]
+		if topic.QuoteCurrency == quoteCurrency && topic.TargetCurrency == targetCurrency {
+			return true
+		}
+	}
+	return false
+}
+
 // PrivateStream은 코인원 private 내 주문·자산 WebSocket 연결을 관리한다.
 type PrivateStream struct{ managed *managedStream }
 

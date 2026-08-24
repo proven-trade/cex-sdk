@@ -66,7 +66,7 @@
 | Bithumb Spot REST | 공개 시세, 잔고, v1 상세·v2 주문 생성·취소·목록 구현됨 |
 | Bithumb WebSocket | public v1 시세·private v2 주문·자산 stream·완전 snapshot 로컬 오더북 구현됨 |
 | Coinone Spot REST | public v2 시세, v2.1 잔고·주문·체결 구현됨 |
-| Coinone WebSocket | public 시세·private 주문·자산 stream 구현됨 |
+| Coinone WebSocket | public 시세·private 주문·자산 stream·source ID 검증 로컬 오더북 구현됨 |
 | Korbit Spot REST | 공개 시세·상품 규칙, 잔고, 주문·체결 구현됨 |
 | Korbit WebSocket | public 시세·private 주문·체결·자산 stream 구현됨 |
 | KuCoin Classic Spot REST | 상품 규칙, 공개 시세, 계정, HF 주문 생성·조회·취소·미체결 목록 구현됨 |
@@ -365,6 +365,7 @@ defer session.Close()
 - DEFAULT·SHORT typed event, 실행 중 구독 변경, 재연결 구독 복구
 - 연결별 EIP 고정, 재연결마다 private handshake 재서명
 - JSON PING/PONG 기반 30분 세션 만료 갱신
+- 최대 16호가의 완전 snapshot과 source ID 기반 최신성 검증 로컬 오더북
 
 세부 인증·주문·요청 제한·연결 계약은 [Coinone Spot 문서](docs/exchanges/COINONE.md)를 참고합니다.
 
