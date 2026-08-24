@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST 1차 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -16,10 +16,11 @@
 - [Kraken Futures REST·WebSocket v1](docs/exchanges/KRAKEN_FUTURES.md)
 - [Bithumb Spot REST·WebSocket](docs/exchanges/BITHUMB.md)
 - [Coinone Spot REST·WebSocket](docs/exchanges/COINONE.md)
+- [Korbit Spot REST](docs/exchanges/KORBIT.md)
 
 ## 현재 기준
 
-- 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone
+- 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit
 - 구현 언어: Go
 - 네트워크: 단일 ENI의 여러 secondary private IPv4와 EIP 1:1 연결
 - IP 선택: 클라이언트 기본값과 요청별 `egressRouteId` 재정의
@@ -54,7 +55,8 @@
 | Bithumb WebSocket | public v1 시세·private v2 주문·자산 stream 구현됨 |
 | Coinone Spot REST | public v2 시세, v2.1 잔고·주문·체결 구현됨 |
 | Coinone WebSocket | public 시세·private 주문·자산 stream 구현됨 |
-| Korbit | 예정 |
+| Korbit Spot REST | 공개 시세·상품 규칙, 잔고, 주문·체결 구현됨 |
+| Korbit WebSocket | 예정 |
 
 ## 요청별 EIP 선택
 
@@ -329,6 +331,21 @@ defer session.Close()
 - JSON PING/PONG 기반 30분 세션 만료 갱신
 
 세부 인증·주문·요청 제한·연결 계약은 [Coinone Spot 문서](docs/exchanges/COINONE.md)를 참고합니다.
+
+## Korbit Spot REST 1차 범위
+
+- 서버 시각, 전체 거래쌍과 주문 금액·호가 단위 정책
+- 현재가, 호가, 최근 체결, 캔들
+- 하위 계정별 잔고
+- 지정가·시장가·최유리호가 주문 생성, 상세, 취소, 미체결·최근 주문·체결 목록
+- HMAC-SHA256 hex 및 PKCS#8 ED25519 Base64 서명
+- URL 인코딩 파라미터 원문과 동일한 query·form 본문 전송
+- 공개 route 50회/초, private 계정 50회/초, 주문 생성·취소 각 30회/초 제한 분리
+- `Ratelimit` 응답 헤더를 이용한 로컬 요청 제한 상태 보정
+- 요청별 EIP 선택과 자격증명 route 허용 검사
+- 고유한 `ClientOrderID` 강제와 주문 mutation의 불명확한 결과 분류
+
+세부 인증·주문·요청 제한 계약은 [Korbit Spot 문서](docs/exchanges/KORBIT.md)를 참고합니다.
 
 ## 공통 Spot API
 

@@ -552,7 +552,8 @@ const (
 - Bithumb public v1/private v2 WebSocket 구현 완료
 - Coinone Spot REST 구현 완료
 - Coinone public/private WebSocket 구현 완료
-- Korbit Spot REST/WebSocket 구현 예정
+- Korbit Spot REST 구현 완료
+- Korbit public/private WebSocket 구현 예정
 - 지원 매트릭스와 운영 수요 순으로 거래소 추가
 - 어댑터 생성 템플릿 및 문서 자동 생성
 - deprecated API 감지 및 변경 알림 프로세스
@@ -601,6 +602,7 @@ const (
 - [Kraken API Center](https://docs.kraken.com/api/)
 - [Bithumb Developer Docs](https://apidocs.bithumb.com/)
 - [Coinone API Docs](https://docs.coinone.co.kr/)
+- [Korbit Open API Docs](https://docs.korbit.co.kr/)
 
 ## 23. 첫 번째 구현 산출물
 
