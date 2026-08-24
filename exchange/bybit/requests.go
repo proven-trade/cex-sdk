@@ -206,10 +206,7 @@ func (request OrderBookRequest) validate() error {
 	if err := validateRequiredText("symbol", request.Symbol); err != nil {
 		return err
 	}
-	maximum := 200
-	if request.Category == CategoryLinear {
-		maximum = 500
-	}
+	maximum := 1000
 	if request.Limit < 0 || request.Limit > maximum {
 		return validationError("order book limit must be between 1 and %d or zero for default", maximum)
 	}

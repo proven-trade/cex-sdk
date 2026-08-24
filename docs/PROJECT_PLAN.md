@@ -536,6 +536,7 @@ const (
 - Bitget Spot books snapshot·pseq/seq 로컬 오더북과 동일 EIP 재연결 기반 gap 복구 구현 완료
 - Upbit Spot public/private stream 구현 완료
 - Upbit Spot 완전 snapshot 로컬 오더북과 동일 EIP 재연결·SIMPLE_LIST·level/unit 계약 구현 완료
+- Bybit V5 Spot·Linear snapshot/delta 로컬 오더북과 update ID gap·동일 EIP 재연결 복구 구현 완료
 - 공통 Spot read smoke와 지정 EIP JSON 증적 계약 구현 완료
 - 12개 공통 Spot 어댑터 선택형 `livesmoke` CLI와 환경 Secret 주입 구현 완료
 - 실제 주문 동의·금액 상한·post-only·호가 비관통·독립 취소 context를 강제하는 Spot trade smoke 구현 완료

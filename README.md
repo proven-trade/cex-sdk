@@ -54,7 +54,7 @@
 | Bitget v3 UTA WebSocket | Spot·USDT Futures public, UTA private stream·Spot 로컬 오더북 자동 갭 복구 구현됨 |
 | Upbit Spot WebSocket | public 시세·private 내 주문·자산 stream·완전 snapshot 로컬 오더북 구현됨 |
 | Bybit V5 REST | Spot·Linear 공개 시세, 통합 잔고, 포지션, 주문 구현됨 |
-| Bybit V5 WebSocket | Spot·Linear public, Unified private stream 구현됨 |
+| Bybit V5 WebSocket | Spot·Linear public, Unified private stream·snapshot/delta 로컬 오더북 자동 복구 구현됨 |
 | OKX V5 REST | Spot·SWAP 공개 시세, 거래 계정, 포지션, 주문 구현됨 |
 | OKX V5 WebSocket | public 시세·business 캔들·private 계정 stream 구현됨 |
 | Coinbase Advanced Trade REST | Spot 공개 시세, 계정, 주문·체결 구현됨 |
@@ -262,6 +262,7 @@ defer session.Close()
 - Spot·Linear ticker, 호가, 공개 체결, 캔들 WebSocket
 - Unified 주문, 체결, Linear 포지션, 지갑 private WebSocket
 - 연결별 EIP 고정, application heartbeat, 재인증·재구독
+- Spot·Linear snapshot/delta 로컬 오더북과 update ID gap 시 같은 EIP 자동 재연결
 
 세부 계약과 주의사항은 [Bybit V5 문서](docs/exchanges/BYBIT.md)를 참고합니다.
 

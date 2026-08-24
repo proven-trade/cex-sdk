@@ -96,6 +96,8 @@ book, err := client.OrderBook(
 )
 ```
 
+Spot과 Linear의 일반 호가 조회 `Limit`은 현재 공식 범위에 맞춰 1부터 1,000까지 허용합니다. 0이면 Bybit category별 기본값을 사용합니다.
+
 ## WebSocket
 
 public endpoint는 category별로 분리됩니다.
@@ -161,6 +163,47 @@ public typed data는 다음 구조체로 decode할 수 있습니다.
 - `kline.{interval}.{symbol}`: `[]StreamKline`
 
 호가는 현재 Bybit가 Spot·Linear에 제공하는 depth `1`, `50`, `200`, `1000`을 지원합니다. Spot은 구독 명령 한 건당 topic을 최대 10개까지 허용하므로 SDK가 더 큰 목록을 자동 분할합니다. 한 public 연결의 전체 topic 문자열은 공식 제한인 21,000자를 넘을 수 없습니다.
+
+## Spot·Linear 로컬 오더북
+
+`LocalOrderBook`은 Bybit가 구독 직후 보내는 WebSocket snapshot으로 장부를 만들고 이후 delta를 적용합니다. 새 snapshot이 오면 기존 가격 단계를 모두 버리고 교체하며, delta 수량이 0이면 삭제하고 그 외에는 삽입 또는 갱신합니다. depth 1은 공식 계약대로 snapshot만 처리합니다.
+
+```go
+topic, err := bybit.OrderBookStreamTopic(bybit.CategorySpot, "BTCUSDT", 50)
+if err != nil {
+	return err
+}
+public, err := streams.PublicStream(
+	bybit.PublicStreamRequest{
+		Category: bybit.CategorySpot,
+		Topics:   []string{topic},
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer public.Close()
+
+book, err := bybit.NewLocalOrderBook(bybit.LocalOrderBookConfig{
+	Category:      bybit.CategorySpot,
+	Symbol:        "BTCUSDT",
+	Depth:         50,
+	ViewDepth:     20,
+	EgressRouteID: "seoul-b",
+})
+if err != nil {
+	return err
+}
+
+err = book.Run(ctx, public, func(ctx context.Context, view bybit.LocalOrderBookView) error {
+	return handleBook(view)
+})
+```
+
+SDK는 같은 topic의 `u`가 직전 update ID의 다음 값이고 `seq`가 증가하는지 검사합니다. 초기 snapshot 없이 delta가 오거나 update ID·cross sequence 이상이 감지되면 현재 장부를 폐기하고 WebSocket을 같은 EIP route로 다시 연결해 새 snapshot을 받습니다. 서버가 `u=1`인 새 snapshot을 보내는 서비스 재시작도 전체 교체로 처리합니다.
+
+`SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 재연결을 유발한 sequence 이상 횟수, `Generation`은 WebSocket 연결 세대를 나타냅니다. `ViewDepth`는 구독 `Depth`를 넘을 수 없으며 기본값은 `min(20, Depth)`입니다. 설정한 category·topic·EIP가 public stream과 일치하지 않으면 연결 전에 거부합니다.
 
 private stream은 연결할 때마다 `GET/realtime + expires`를 HMAC SHA-256으로 서명해 인증한 뒤 topic을 구독합니다.
 

@@ -92,7 +92,7 @@ func TestClientSpotAndLinearLifecycle(t *testing.T) {
 		case "/v5/market/tickers":
 			_, _ = io.WriteString(writer, `{"retCode":0,"retMsg":"OK","result":{"category":"linear","list":[{"symbol":"BTCUSDT","lastPrice":"64000","markPrice":"64001","fundingRate":"0.0001"}]},"time":1700000000000}`)
 		case "/v5/market/orderbook":
-			_, _ = io.WriteString(writer, `{"retCode":0,"retMsg":"OK","result":{"s":"BTCUSDT","b":[["64000","1.5"]],"a":[["64001","2.5"]],"ts":1700000000000,"u":12,"seq":13},"time":1700000000000}`)
+			_, _ = io.WriteString(writer, `{"retCode":0,"retMsg":"OK","result":{"s":"BTCUSDT","b":[["64000","1.5"]],"a":[["64001","2.5"]],"ts":1700000000000,"u":12,"seq":13,"cts":1699999999999},"time":1700000000000}`)
 		case "/v5/market/recent-trade":
 			_, _ = io.WriteString(writer, `{"retCode":0,"retMsg":"OK","result":{"category":"spot","list":[{"execId":"9","symbol":"BTCUSDT","price":"64000","size":"0.01","side":"Buy","time":"1700000000000"}]},"time":1700000000000}`)
 		case "/v5/market/kline":
@@ -152,7 +152,8 @@ func TestClientSpotAndLinearLifecycle(t *testing.T) {
 	book, err := client.OrderBook(
 		context.Background(), OrderBookRequest{Category: CategorySpot, Symbol: "BTCUSDT", Limit: 50},
 	)
-	if err != nil || book.Bids[0][1] != "1.5" || book.Asks[0][0] != "64001" || len(book.Raw) == 0 {
+	if err != nil || book.Bids[0][1] != "1.5" || book.Asks[0][0] != "64001" ||
+		book.MatchingTime != 1699999999999 || len(book.Raw) == 0 {
 		t.Fatalf("OrderBook() = %+v, error = %v", book, err)
 	}
 	trades, err := client.RecentTrades(
@@ -290,13 +291,18 @@ func TestClientClassifiesRateLimitAndUnknownMutationState(t *testing.T) {
 
 func TestRequestValidation(t *testing.T) {
 	t.Parallel()
+	if err := (OrderBookRequest{
+		Category: CategorySpot, Symbol: "BTCUSDT", Limit: 1000,
+	}).validate(); err != nil {
+		t.Fatalf("1,000-level Spot order book validation error = %v", err)
+	}
 
 	tests := []struct {
 		name string
 		err  error
 	}{
 		{name: "category", err: (TickersRequest{}).validate()},
-		{name: "book limit", err: (OrderBookRequest{Category: CategorySpot, Symbol: "BTCUSDT", Limit: 201}).validate()},
+		{name: "book limit", err: (OrderBookRequest{Category: CategorySpot, Symbol: "BTCUSDT", Limit: 1001}).validate()},
 		{name: "position scope", err: (PositionsRequest{Category: CategoryLinear}).validate()},
 		{name: "duplicate coin", err: (WalletBalanceRequest{Coins: []string{"USDT", "USDT"}}).validate()},
 		{name: "missing identity", err: (CancelOrderRequest{Category: CategorySpot, Symbol: "BTCUSDT"}).validate()},

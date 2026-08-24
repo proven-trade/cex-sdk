@@ -117,13 +117,14 @@ type Ticker struct {
 
 // OrderBook은 호가 snapshot이다.
 type OrderBook struct {
-	Symbol    string          `json:"s"`
-	Bids      [][]string      `json:"b"`
-	Asks      [][]string      `json:"a"`
-	Timestamp int64           `json:"ts"`
-	UpdateID  int64           `json:"u"`
-	Sequence  int64           `json:"seq"`
-	Raw       json.RawMessage `json:"-"`
+	Symbol       string          `json:"s"`
+	Bids         [][]string      `json:"b"`
+	Asks         [][]string      `json:"a"`
+	Timestamp    int64           `json:"ts"`
+	UpdateID     int64           `json:"u"`
+	Sequence     int64           `json:"seq"`
+	MatchingTime int64           `json:"cts"`
+	Raw          json.RawMessage `json:"-"`
 }
 
 // PublicTrade는 공개 체결 한 건이다.
