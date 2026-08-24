@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST 1차 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -14,10 +14,11 @@
 - [Coinbase Advanced Trade Spot](docs/exchanges/COINBASE.md)
 - [Kraken Spot REST·WebSocket v2](docs/exchanges/KRAKEN.md)
 - [Kraken Futures REST·WebSocket v1](docs/exchanges/KRAKEN_FUTURES.md)
+- [Bithumb Spot REST](docs/exchanges/BITHUMB.md)
 
 ## 현재 기준
 
-- 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken
+- 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb
 - 구현 언어: Go
 - 네트워크: 단일 ENI의 여러 secondary private IPv4와 EIP 1:1 연결
 - IP 선택: 클라이언트 기본값과 요청별 `egressRouteId` 재정의
@@ -48,7 +49,8 @@
 | Kraken Spot WebSocket v2 | public 시세·상품 규칙, private 주문·체결·잔고 stream 구현됨 |
 | Kraken Futures REST | 공개 시세·캔들, 지갑, 포지션, 주문·체결 구현됨 |
 | Kraken Futures WebSocket v1 | public 시세·호가·체결, private 지갑·주문·체결·포지션 stream 구현됨 |
-| 나머지 P1 거래소 | 예정 |
+| Bithumb Spot REST | 공개 시세, 잔고, v1 상세·v2 주문 생성·취소·목록 구현됨 |
+| Bithumb WebSocket, Coinone, Korbit | 예정 |
 
 ## 요청별 EIP 선택
 
@@ -289,6 +291,19 @@ defer session.Close()
 - 연결별 EIP 고정, challenge 재발급·재서명, 재연결·재구독
 
 세부 계약과 제한·연결 정책은 [Kraken Futures 문서](docs/exchanges/KRAKEN_FUTURES.md)를 참고합니다.
+
+## Bithumb Spot REST 1차 범위
+
+- 전체 마켓, 현재가, 호가, 최근 체결, 분봉
+- 코인별 잔고
+- v2 주문 생성·취소·미체결·이력과 v1 주문 상세 조회
+- HS256 JWT, millisecond timestamp, SHA-512 원문 쿼리 해시
+- 공개 route 150회/초, private 계정 140회/초, 주문 계정 10회/초 제한 분리
+- 지정가, 매수·매도 시장가, KRW 최유리 주문 검증
+- 요청별 EIP 선택과 자격증명 route 허용 검사
+- 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
+
+세부 계약과 v1/v2 endpoint 구분은 [Bithumb Spot REST 문서](docs/exchanges/BITHUMB.md)를 참고합니다.
 
 ## 공통 Spot API
 

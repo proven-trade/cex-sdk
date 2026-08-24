@@ -548,6 +548,10 @@ const (
 - Kraken Futures REST 구현 완료
 - Kraken Spot WebSocket v2 public/private 구현 완료
 - Kraken Futures WebSocket v1 public/private 구현 완료
+- Bithumb Spot REST 구현 완료
+- Bithumb public/private WebSocket 구현 예정
+- Coinone Spot REST/WebSocket 구현 예정
+- Korbit Spot REST/WebSocket 구현 예정
 - 지원 매트릭스와 운영 수요 순으로 거래소 추가
 - 어댑터 생성 템플릿 및 문서 자동 생성
 - deprecated API 감지 및 변경 알림 프로세스
@@ -594,6 +598,7 @@ const (
 - [OKX V5 API](https://www.okx.com/docs-v5/en/)
 - [Coinbase Advanced Trade API](https://docs.cdp.coinbase.com/api-reference/advanced-trade-api/rest-api/introduction)
 - [Kraken API Center](https://docs.kraken.com/api/)
+- [Bithumb Developer Docs](https://apidocs.bithumb.com/)
 
 ## 23. 첫 번째 구현 산출물
 
