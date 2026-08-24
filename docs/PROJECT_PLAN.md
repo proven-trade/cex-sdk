@@ -589,6 +589,7 @@ const (
 - Gate.io Spot 공통 API 구현 완료
 - Gate.io Futures REST 구현 완료
 - Gate.io Futures public/private WebSocket 구현 완료
+- Gate.io Futures Order Book V2 50·400단계 로컬 오더북과 update ID gap·동일 EIP 재연결 복구 구현 완료
 
 ## 20. 확정 사항과 배포 전 결정 사항
 

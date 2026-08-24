@@ -14,6 +14,7 @@ const (
 	StreamChannelCandles         StreamChannel = "candles"
 	StreamChannelBookTicker      StreamChannel = "book_ticker"
 	StreamChannelOrderBookUpdate StreamChannel = "order_book_update"
+	StreamChannelOrderBookV2     StreamChannel = "order_book_v2"
 	StreamChannelOrders          StreamChannel = "orders"
 	StreamChannelUserTrades      StreamChannel = "user_trades"
 	StreamChannelBalances        StreamChannel = "balances"
@@ -28,10 +29,42 @@ const (
 	StreamUpdate100Millis StreamUpdateInterval = "100ms"
 )
 
+// StreamOrderBookDepth는 V2 호가 snapshot과 증분 통지의 단계 수다.
+type StreamOrderBookDepth int
+
+const (
+	StreamOrderBookDepth50  StreamOrderBookDepth = 50
+	StreamOrderBookDepth400 StreamOrderBookDepth = 400
+)
+
 // StreamBookLevel은 WebSocket 호가 한 단계의 가격과 정밀도 보존 계약 수량이다.
 type StreamBookLevel struct {
 	Price string  `json:"p"`
 	Size  Decimal `json:"s"`
+}
+
+// StreamOrderBookV2Level은 배열 기반 V2 호가의 가격과 정밀도 보존 계약 수량이다.
+type StreamOrderBookV2Level struct {
+	Price string
+	Size  Decimal
+}
+
+// UnmarshalJSON은 배열 기반 V2 호가를 가격과 수량으로 변환한다.
+func (level *StreamOrderBookV2Level) UnmarshalJSON(data []byte) error {
+	var fields []json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return fmt.Errorf("decode Gate.io Futures order book V2 level: %w", err)
+	}
+	if len(fields) != 2 {
+		return fmt.Errorf("Gate.io Futures order book V2 level has %d fields, want 2", len(fields))
+	}
+	if err := json.Unmarshal(fields[0], &level.Price); err != nil || level.Price == "" {
+		return fmt.Errorf("decode Gate.io Futures order book V2 price")
+	}
+	if err := json.Unmarshal(fields[1], &level.Size); err != nil {
+		return fmt.Errorf("decode Gate.io Futures order book V2 size: %w", err)
+	}
+	return nil
 }
 
 // StreamSubscription은 채널, 계약과 채널별 선택 값을 정의한다.
@@ -41,6 +74,7 @@ type StreamSubscription struct {
 	CandleInterval CandleInterval
 	UpdateInterval StreamUpdateInterval
 	OrderBookLevel int
+	OrderBookDepth StreamOrderBookDepth
 }
 
 // StreamRequest는 정산 통화와 연결 직후 복구할 구독 목록이다.
@@ -143,6 +177,17 @@ type StreamOrderBookUpdate struct {
 	LastUpdateID  int64             `json:"u"`
 	Bids          []StreamBookLevel `json:"b"`
 	Asks          []StreamBookLevel `json:"a"`
+}
+
+// StreamOrderBookV2는 전체 snapshot 또는 연속 update ID의 절대 수량 변경이다.
+type StreamOrderBookV2 struct {
+	Timestamp     int64                    `json:"t"`
+	Full          bool                     `json:"full"`
+	StreamName    string                   `json:"s"`
+	FirstUpdateID int64                    `json:"U"`
+	LastUpdateID  int64                    `json:"u"`
+	Bids          []StreamOrderBookV2Level `json:"b"`
+	Asks          []StreamOrderBookV2Level `json:"a"`
 }
 
 // StreamOrder는 private 무기한 Futures 주문 생성·변경·체결·종료 이벤트다.

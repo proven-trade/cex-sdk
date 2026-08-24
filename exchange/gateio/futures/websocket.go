@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
@@ -149,7 +150,10 @@ type managedStream struct {
 }
 
 // PublicStream은 Gate.io 무기한 Futures public 시세 WebSocket 연결을 관리한다.
-type PublicStream struct{ managed *managedStream }
+type PublicStream struct {
+	managed    *managedStream
+	settlement Settlement
+}
 
 // PublicStream은 정산 통화와 EIP route에 고정된 public 시세 세션을 생성한다.
 func (client *StreamClient) PublicStream(
@@ -173,7 +177,7 @@ func (client *StreamClient) PublicStream(
 		return nil, err
 	}
 	managed.session = session
-	return &PublicStream{managed: managed}, nil
+	return &PublicStream{managed: managed, settlement: request.Settlement}, nil
 }
 
 // Run은 public 메시지를 순서대로 해석해 처리기에 전달한다.
@@ -213,6 +217,16 @@ func (public *PublicStream) Close() error { return public.managed.session.Close(
 
 // Generation은 성공한 public 연결 세대 번호를 반환한다.
 func (public *PublicStream) Generation() uint64 { return public.managed.session.Generation() }
+
+// EgressRouteID는 public 연결과 재연결에 고정된 송신 경로를 반환한다.
+func (public *PublicStream) EgressRouteID() transport.EgressRouteID {
+	return public.managed.session.EgressRouteID()
+}
+
+// Settlement는 public 연결에 고정된 정산 통화를 반환한다.
+func (public *PublicStream) Settlement() Settlement { return public.settlement }
+
+func (public *PublicStream) reconnect() error { return public.managed.session.Reconnect() }
 
 // PrivateStream은 Gate.io 무기한 Futures private 주문·체결·잔고·포지션 연결을 관리한다.
 type PrivateStream struct{ managed *managedStream }
@@ -305,6 +319,7 @@ func (client *StreamClient) newStreamSession(
 		Connector: client.connector, EgressRouteID: routeID,
 		Request: corestream.DialRequest{
 			Endpoint: strings.TrimSuffix(client.webSocketURL, "/") + "/" + string(settlement),
+			Header:   http.Header{"X-Gate-Size-Decimal": []string{"1"}},
 		},
 		OnConnect: onConnect, Observer: client.observer,
 		ReconnectPolicy: client.streamReconnectPolicy, Backoff: client.backoff,
@@ -583,7 +598,7 @@ func validateStreamSubscription(subscription StreamSubscription, private bool) e
 			return validationError("unsupported private WebSocket channel %q", subscription.Channel)
 		}
 		if subscription.CandleInterval != "" || subscription.UpdateInterval != "" ||
-			subscription.OrderBookLevel != 0 {
+			subscription.OrderBookLevel != 0 || subscription.OrderBookDepth != 0 {
 			return validationError("private WebSocket subscription does not accept order book or candle options")
 		}
 		return nil
@@ -611,6 +626,13 @@ func validateStreamSubscription(subscription StreamSubscription, private bool) e
 		if subscription.UpdateInterval == StreamUpdate20Millis && subscription.OrderBookLevel != 20 {
 			return validationError("20ms WebSocket order book interval requires level 20")
 		}
+	case StreamChannelOrderBookV2:
+		if subscription.OrderBookDepth != StreamOrderBookDepth50 &&
+			subscription.OrderBookDepth != StreamOrderBookDepth400 {
+			return validationError(
+				"unsupported WebSocket order book V2 depth %d", subscription.OrderBookDepth,
+			)
+		}
 	default:
 		return validationError("unsupported public WebSocket channel %q", subscription.Channel)
 	}
@@ -623,6 +645,9 @@ func validateStreamSubscription(subscription StreamSubscription, private bool) e
 	if subscription.Channel != StreamChannelOrderBookUpdate &&
 		(subscription.UpdateInterval != "" || subscription.OrderBookLevel != 0) {
 		return validationError("WebSocket order book options are only supported for order book updates")
+	}
+	if subscription.Channel != StreamChannelOrderBookV2 && subscription.OrderBookDepth != 0 {
+		return validationError("WebSocket order book depth is only supported for order book V2")
 	}
 	return nil
 }
@@ -658,6 +683,8 @@ func streamChannelName(channel StreamChannel) string {
 		return "futures.book_ticker"
 	case StreamChannelOrderBookUpdate:
 		return "futures.order_book_update"
+	case StreamChannelOrderBookV2:
+		return "futures.obu"
 	case StreamChannelOrders:
 		return "futures.orders"
 	case StreamChannelUserTrades:
@@ -681,6 +708,10 @@ func (client *StreamClient) streamSubscriptionPayload(subscription StreamSubscri
 			payload = append(payload, strconv.Itoa(subscription.OrderBookLevel))
 		}
 		return payload
+	case StreamChannelOrderBookV2:
+		return []string{fmt.Sprintf(
+			"ob.%s.%d", subscription.Contract, subscription.OrderBookDepth,
+		)}
 	case StreamChannelBalances:
 		return []string{client.userID}
 	case StreamChannelOrders, StreamChannelUserTrades, StreamChannelPositions:
@@ -693,7 +724,8 @@ func (client *StreamClient) streamSubscriptionPayload(subscription StreamSubscri
 func streamSubscriptionKey(subscription StreamSubscription) string {
 	return string(subscription.Channel) + "\x00" + subscription.Contract + "\x00" +
 		string(subscription.CandleInterval) + "\x00" + string(subscription.UpdateInterval) + "\x00" +
-		strconv.Itoa(subscription.OrderBookLevel)
+		strconv.Itoa(subscription.OrderBookLevel) + "\x00" +
+		strconv.Itoa(int(subscription.OrderBookDepth))
 }
 
 func (client *StreamClient) resolveStreamRoute(

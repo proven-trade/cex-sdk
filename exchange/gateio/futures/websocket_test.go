@@ -197,7 +197,8 @@ func TestGateIOFuturesPublicStreamRestoresSubscriptionOnSelectedRoute(t *testing
 		t.Fatalf("routes = %v, requests = %d", routes, len(requests))
 	}
 	for _, request := range requests {
-		if request.Endpoint != "ws://stream.example.test/v4/ws/usd1" || len(request.Header) != 0 {
+		if request.Endpoint != "ws://stream.example.test/v4/ws/usd1" ||
+			request.Header.Get("X-Gate-Size-Decimal") != "1" || len(request.Header) != 1 {
 			t.Fatalf("dial request = %+v", request)
 		}
 	}
@@ -505,8 +506,15 @@ func TestGateIOFuturesStreamValidation(t *testing.T) {
 			UpdateInterval: StreamUpdate20Millis, OrderBookLevel: 100,
 		}},
 		{subscription: StreamSubscription{
+			Channel: StreamChannelOrderBookV2, Contract: "BTC_USDT",
+		}},
+		{subscription: StreamSubscription{
 			Channel: StreamChannelBookTicker, Contract: "BTC_USDT",
 			UpdateInterval: StreamUpdate100Millis,
+		}},
+		{subscription: StreamSubscription{
+			Channel: StreamChannelTicker, Contract: "BTC_USDT",
+			OrderBookDepth: StreamOrderBookDepth50,
 		}},
 		{subscription: StreamSubscription{Channel: StreamChannelOrders}, private: true},
 		{subscription: StreamSubscription{
@@ -521,9 +529,10 @@ func TestGateIOFuturesStreamValidation(t *testing.T) {
 	valid := []StreamSubscription{
 		{Channel: StreamChannelCandles, Contract: "mark_BTC_USDT", CandleInterval: Candle1Minute},
 		{Channel: StreamChannelOrderBookUpdate, Contract: "BTC_USDT", UpdateInterval: StreamUpdate20Millis, OrderBookLevel: 20},
+		{Channel: StreamChannelOrderBookV2, Contract: "BTC_USDT", OrderBookDepth: StreamOrderBookDepth400},
 		{Channel: StreamChannelPositions, Contract: "!all"},
 	}
-	privateValues := []bool{false, false, true}
+	privateValues := []bool{false, false, false, true}
 	for index, subscription := range valid {
 		if err := validateStreamSubscription(subscription, privateValues[index]); err != nil {
 			t.Fatalf("valid subscription %d error = %v", index, err)

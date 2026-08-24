@@ -95,6 +95,7 @@ defer private.Close()
 | public 캔들 | `futures.candlesticks` | `StreamChannelCandles` |
 | public 최우선 호가 | `futures.book_ticker` | `StreamChannelBookTicker` |
 | public 증분 호가 | `futures.order_book_update` | `StreamChannelOrderBookUpdate` |
+| public V2 호가 | `futures.obu` | `StreamChannelOrderBookV2` |
 | private 주문 | `futures.orders` | `StreamChannelOrders` |
 | private 계정 체결 | `futures.usertrades` | `StreamChannelUserTrades` |
 | private 잔고 | `futures.balances` | `StreamChannelBalances` |
@@ -106,7 +107,51 @@ defer private.Close()
 - 주문·계정 체결·포지션은 계약명 대신 `!all`을 지정할 수 있습니다. 잔고 구독은 사용자 ID만 payload로 전송합니다.
 - public·private 실행 중 구독 추가·해제를 지원합니다. 서버가 동적 명령을 거절하면 재연결 복구 목록도 이전 상태로 되돌립니다.
 - private 구독은 최초 연결, 재연결, 실행 중 변경마다 Secret을 다시 읽고 `channel`, `event`, Unix second를 HMAC-SHA-512로 서명합니다. 자격증명의 route·읽기 권한은 Secret 조회 전에 검사합니다.
-- 숫자 또는 문자열로 오는 수량·가격·시각은 `Decimal`로 정밀도 손실 없이 보존합니다. JSON text frame만 해석하며 연결 생존 확인은 WebSocket protocol ping/pong을 사용합니다.
+- 숫자 또는 문자열로 오는 수량·가격·시각은 `Decimal`로 정밀도 손실 없이 보존합니다. 모든 handshake에 `X-Gate-Size-Decimal: 1`을 넣어 소수 계약 수량을 문자열로 받으며, 이 헤더가 없을 때 발생할 수 있는 정수 내림을 방지합니다. JSON text frame만 해석하며 연결 생존 확인은 WebSocket protocol ping/pong을 사용합니다.
+
+### Futures Order Book V2 로컬 오더북
+
+새 로컬 오더북은 서버가 첫 전체 snapshot을 직접 보내는 `futures.obu`를 사용합니다. 50단계는 20ms, 400단계는 100ms 간격이며 정산 통화별 endpoint와 선택한 EIP route를 재연결에서도 유지합니다.
+
+```go
+public, err := streamClient.PublicStream(
+	futures.StreamRequest{
+		Settlement: futures.SettlementUSDT,
+		Subscriptions: []futures.StreamSubscription{{
+			Channel:        futures.StreamChannelOrderBookV2,
+			Contract:       "BTC_USDT",
+			OrderBookDepth: futures.StreamOrderBookDepth50,
+		}},
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer public.Close()
+
+orderBook, err := futures.NewLocalOrderBook(futures.LocalOrderBookConfig{
+	Settlement:    futures.SettlementUSDT,
+	Contract:      "BTC_USDT",
+	Depth:         futures.StreamOrderBookDepth50,
+	EgressRouteID: "seoul-b",
+	ViewDepth:     20,
+})
+if err != nil {
+	return err
+}
+
+return orderBook.Run(ctx, public, func(
+	_ context.Context,
+	view futures.LocalOrderBookView,
+) error {
+	return consume(view)
+})
+```
+
+`full=true` snapshot은 기존 장부 전체를 교체하며 같은 세션에서 여러 번 와도 모두 새 동기화 지점으로 적용합니다. 증분 이벤트는 `U == 현재 UpdateID + 1`일 때만 적용하고 ID를 `u`로 전진시킵니다. 빈 `b`·`a` 증분도 ID와 시각을 갱신합니다. 불연속·중복·겹침 이벤트나 새 연결에서 snapshot보다 먼저 온 증분은 기존 장부를 버리고 같은 정산 통화·EIP로 재연결해 새 snapshot부터 복구합니다.
+
+`SynchronizationID`는 적용한 전체 snapshot 횟수, `GapCount`는 복구를 유발한 불연속 횟수, `Generation`은 WebSocket 연결 세대입니다. `ViewDepth` 기본값은 20이고 구독 깊이를 넘을 수 없으며 내부 장부도 50 또는 400단계로 제한합니다. 로컬 오더북과 public stream의 정산 통화·계약·깊이·EIP가 하나라도 다르면 네트워크 연결 전에 거부합니다.
 
 ## 주문 계약
 
@@ -135,7 +180,7 @@ private 요청 서명은 Spot과 같은 Gate.io API v4 규칙을 사용합니다
 
 ## 운영 검증
 
-자동 테스트는 REST 공개·private 전체 수명주기와 WebSocket public·private 구독, 서명 원문과 JSON 본문 일치, 요청별 route, 같은 route 재연결, route 허용 목록 사전 차단, Secret 덮어쓰기, 요청 제한 분리, 정확한 ID·timestamp·decimal 해석, 동적 구독 실패 rollback, 주문 검증과 불명확한 mutation 상태를 검증합니다. 실제 Gate.io Futures 계정과 지정 EIP를 이용한 읽기·주문 smoke는 아직 대기 상태입니다.
+자동 테스트는 REST 공개·private 전체 수명주기와 WebSocket public·private 구독, 서명 원문과 JSON 본문 일치, 요청별 route, 같은 route 재연결, route 허용 목록 사전 차단, Secret 덮어쓰기, 요청 제한 분리, 정확한 ID·timestamp·decimal 해석, 소수 수량 handshake 헤더, V2 snapshot 선도착·update ID 공백 복구, 동적 구독 실패 rollback, 주문 검증과 불명확한 mutation 상태를 검증합니다. 실제 Gate.io Futures 계정과 지정 EIP를 이용한 읽기·주문 smoke는 아직 대기 상태입니다.
 
 ## 공식 기준
 

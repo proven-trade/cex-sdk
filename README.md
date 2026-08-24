@@ -77,7 +77,7 @@
 | Gate.io API v4 Spot WebSocket | public 시세·호가·체결, private 주문·체결·잔고 stream·V2 로컬 오더북 자동 갭 복구 구현됨 |
 | Gate.io 공통 Spot API | 공통 마켓·시세·잔고·주문 계약과 적합성 테스트 구현됨 |
 | Gate.io API v4 Futures REST | 계약 규칙, 공개 시세, 계정·포지션, 주문·체결 구현됨 |
-| Gate.io API v4 Futures WebSocket | public 시세·호가·캔들·체결, private 주문·체결·잔고·포지션 stream 구현됨 |
+| Gate.io API v4 Futures WebSocket | public 시세·호가·캔들·체결, private 주문·체결·잔고·포지션 stream·V2 로컬 오더북 자동 갭 복구 구현됨 |
 
 ## 요청별 EIP 선택
 
@@ -465,6 +465,7 @@ defer session.Close()
 - private 주문·계정 체결·잔고·포지션 WebSocket과 계약별 또는 `!all` 구독
 - 20ms·100ms 증분 호가, 소수 수량, 실행 중 구독 변경과 실패 응답 rollback
 - 연결별 EIP 고정, 재연결 구독 복구와 private 구독마다 새 HMAC-SHA-512 서명
+- `X-Gate-Size-Decimal: 1` handshake와 `futures.obu` 50·400단계 로컬 오더북·동일 EIP 갭 복구
 
 세부 계약은 [Gate.io API v4 Futures 문서](docs/exchanges/GATEIO_FUTURES.md)를 참고합니다.
 
