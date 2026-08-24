@@ -291,6 +291,18 @@ func TestSpotReadRunnerRequiresExpectedPublicIP(t *testing.T) {
 		report.Checks[0].Failure.Reason != "expected_public_ip_missing" {
 		t.Fatalf("report = %+v, error = %v", report, err)
 	}
+	client := runner.client.(*fakeSpotReadClient)
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if len(client.calls) != 0 {
+		t.Fatalf("exchange calls after egress failure = %v", client.calls)
+	}
+	for _, check := range report.Checks[1:] {
+		if check.Status != CheckSkipped || check.Failure == nil ||
+			check.Failure.Reason != "egress_verification_failed" {
+			t.Fatalf("skipped check = %+v", check)
+		}
+	}
 }
 
 func TestNewSpotReadRunnerValidatesConfiguration(t *testing.T) {

@@ -40,8 +40,9 @@ type EgressVerifier interface {
 type CheckStatus string
 
 const (
-	CheckPassed CheckStatus = "passed"
-	CheckFailed CheckStatus = "failed"
+	CheckPassed  CheckStatus = "passed"
+	CheckFailed  CheckStatus = "failed"
+	CheckSkipped CheckStatus = "skipped"
 )
 
 // CheckFailure는 민감한 원본 오류 문자열을 제외한 실패 분류다.
@@ -166,13 +167,28 @@ func (runner *SpotReadRunner) Run(ctx context.Context) (ReadReport, error) {
 		PrivateRead: runner.includeBalances, StartedAt: startedAt,
 	}
 	runner.appendCheck(ctx, &report, "egress_ip", runner.checkEgress)
-	runner.appendCheck(ctx, &report, "markets", runner.checkMarkets)
-	runner.appendCheck(ctx, &report, "ticker", runner.checkTicker)
-	runner.appendCheck(ctx, &report, "order_book", runner.checkOrderBook)
-	runner.appendCheck(ctx, &report, "recent_trades", runner.checkRecentTrades)
-	runner.appendCheck(ctx, &report, "candles", runner.checkCandles)
+	type namedCheck struct {
+		name  string
+		check checkFunc
+	}
+	checks := []namedCheck{
+		{name: "markets", check: runner.checkMarkets},
+		{name: "ticker", check: runner.checkTicker},
+		{name: "order_book", check: runner.checkOrderBook},
+		{name: "recent_trades", check: runner.checkRecentTrades},
+		{name: "candles", check: runner.checkCandles},
+	}
 	if runner.includeBalances {
-		runner.appendCheck(ctx, &report, "balances", runner.checkBalances)
+		checks = append(checks, namedCheck{name: "balances", check: runner.checkBalances})
+	}
+	if report.Checks[0].Status != CheckPassed {
+		for _, item := range checks {
+			runner.appendSkipped(&report, item.name, "egress_verification_failed")
+		}
+	} else {
+		for _, item := range checks {
+			runner.appendCheck(ctx, &report, item.name, item.check)
+		}
 	}
 	report.CompletedAt = time.Now().UTC()
 	report.Passed = true
@@ -184,9 +200,21 @@ func (runner *SpotReadRunner) Run(ctx context.Context) (ReadReport, error) {
 		}
 	}
 	if failed > 0 {
-		return report, fmt.Errorf("%w: %d checks failed", ErrReadSmokeFailed, failed)
+		return report, fmt.Errorf("%w: %d checks did not pass", ErrReadSmokeFailed, failed)
 	}
 	return report, nil
+}
+
+func (runner *SpotReadRunner) appendSkipped(
+	report *ReadReport,
+	name string,
+	reason string,
+) {
+	now := time.Now().UTC()
+	report.Checks = append(report.Checks, CheckResult{
+		Name: name, Status: CheckSkipped, StartedAt: now, CompletedAt: now,
+		Failure: &CheckFailure{Kind: "prerequisite", Reason: reason},
+	})
 }
 
 type checkFunc func(context.Context) (CheckEvidence, error)

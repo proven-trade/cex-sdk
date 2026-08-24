@@ -22,6 +22,26 @@ EIP 검사를 통과하려면 route에 `ExpectedPublicIP`가 반드시 설정돼
 
 ## 사용 예시
 
+CLI는 Binance, Bitget, Upbit, Bybit, OKX, Coinbase Advanced, Kraken, Bithumb, Coinone, Korbit, KuCoin과 Gate.io의 공통 Spot 어댑터를 선택할 수 있습니다. 먼저 [public 예제 설정](../examples/live-smoke/public.example.json)을 복사해 실제 EC2 private IP와 연결된 EIP로 바꿉니다.
+
+```bash
+go run ./cmd/livesmoke -config ./live-smoke.json
+```
+
+설정 파일에는 평문 자격증명을 넣을 수 없습니다. `includeBalances`가 `false`이면 `credentials` 항목도 거부하므로 공개 검사 과정에서 환경 Secret을 읽지 않는 것이 보장됩니다.
+
+private 잔고까지 검사할 때는 [private read 예제 설정](../examples/live-smoke/private-read.example.json)처럼 환경변수 이름만 지정한 뒤 값을 프로세스 환경으로 전달합니다.
+
+```bash
+export PROVEN_BINANCE_API_KEY='운영 Secret 저장소에서 주입'
+export PROVEN_BINANCE_SECRET_KEY='운영 Secret 저장소에서 주입'
+go run ./cmd/livesmoke -config ./private-read.json > ./evidence.json
+```
+
+Bitget, OKX와 KuCoin은 `passphraseEnv`도 필요합니다. CLI 인자, JSON 설정과 결과 파일에는 실제 Secret을 넣지 않습니다.
+
+라이브러리에서 직접 실행하려면 다음과 같이 구성합니다.
+
 ```go
 runner, err := smoke.NewSpotReadRunner(smoke.SpotReadConfig{
 	Client:           unifiedSpotClient,
@@ -46,6 +66,8 @@ return runErr
 
 `Client`에는 각 거래소의 `NewUnifiedSpot`으로 만든 공통 Spot 어댑터를 전달합니다. `IncludeBalances`가 `true`이면 read 권한과 선택 route가 허용된 자격증명이 클라이언트에 설정돼 있어야 합니다.
 
+CLI 설정의 `routes`에는 여러 private-IP/EIP 쌍을 등록할 수 있고 `egressRouteId`로 이번 실행에 사용할 하나를 선택합니다. 모든 local private IP는 실행 인스턴스의 네트워크 인터페이스에 실제로 할당돼 있어야 합니다.
+
 ## 증적 보안
 
 JSON 증적에는 다음 정보만 기록합니다.
@@ -56,7 +78,7 @@ JSON 증적에는 다음 정보만 기록합니다.
 - local private IP, 기대 EIP와 관측 EIP
 - 공통 오류 분류, 거래소 오류 코드와 HTTP 상태
 
-원본 응답, 잔고 수량, 체결 가격, API Key, Secret, Passphrase와 거래소 오류 메시지는 기록하지 않습니다. 실패가 발생해도 가능한 나머지 검사를 계속 실행하므로 한 결과에서 전체 상태를 확인할 수 있습니다.
+원본 응답, 잔고 수량, 체결 가격, API Key, Secret, Passphrase와 거래소 오류 메시지는 기록하지 않습니다. 거래소 API 검사 하나가 실패해도 가능한 나머지 검사를 계속 실행하므로 한 결과에서 전체 상태를 확인할 수 있습니다. 단, EIP 검사가 실패하면 의도하지 않은 공인 IP로 요청을 보내지 않도록 모든 거래소 검사를 `skipped` 처리합니다.
 
 ## 상태 갱신 기준
 

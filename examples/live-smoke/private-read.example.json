@@ -1,0 +1,28 @@
+{
+  "exchange": "binance",
+  "routes": [
+    {
+      "id": "seoul-a",
+      "localPrivateIp": "10.0.10.21",
+      "expectedPublicIp": "203.0.113.10"
+    },
+    {
+      "id": "seoul-b",
+      "localPrivateIp": "10.0.10.22",
+      "expectedPublicIp": "203.0.113.11"
+    }
+  ],
+  "egressRouteId": "seoul-b",
+  "market": {
+    "base": "BTC",
+    "quote": "USDT"
+  },
+  "publicIpEndpoint": "https://checkip.amazonaws.com",
+  "checkTimeout": "10s",
+  "includeBalances": true,
+  "credentials": {
+    "accountId": "operations-read",
+    "apiKeyEnv": "PROVEN_BINANCE_API_KEY",
+    "secretKeyEnv": "PROVEN_BINANCE_SECRET_KEY"
+  }
+}
