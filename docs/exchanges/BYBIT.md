@@ -1,4 +1,4 @@
-# Bybit V5 Spot·Linear REST 어댑터
+# Bybit V5 Spot·Linear 어댑터
 
 ## 범위
 
@@ -96,6 +96,93 @@ book, err := client.OrderBook(
 )
 ```
 
+## WebSocket
+
+public endpoint는 category별로 분리됩니다.
+
+| 환경 | Spot public | Linear public | private |
+|---|---|---|---|
+| 운영 | `wss://stream.bybit.com/v5/public/spot` | `wss://stream.bybit.com/v5/public/linear` | `wss://stream.bybit.com/v5/private` |
+| Testnet | `wss://stream-testnet.bybit.com/v5/public/spot` | `wss://stream-testnet.bybit.com/v5/public/linear` | `wss://stream-testnet.bybit.com/v5/private` |
+
+public stream은 생성 시 category와 EIP route를 고정합니다. 동적 구독·해제가 성공하면 현재 topic 목록을 갱신하고, 연결이 끊기면 같은 endpoint와 route에서 전체 목록을 다시 구독합니다.
+
+```go
+streams, err := bybit.NewStreamClient(bybit.StreamClientConfig{
+	Connector:             connector,
+	Credentials:           descriptor,
+	CredentialProvider:    secretProvider,
+	DefaultEgressRouteID: "seoul-a",
+})
+if err != nil {
+	return err
+}
+
+ticker, err := bybit.TickerStreamTopic(bybit.CategorySpot, "BTCUSDT")
+if err != nil {
+	return err
+}
+book, err := bybit.OrderBookStreamTopic(bybit.CategorySpot, "BTCUSDT", 50)
+if err != nil {
+	return err
+}
+public, err := streams.PublicStream(
+	bybit.PublicStreamRequest{
+		Category: bybit.CategorySpot,
+		Topics:   []string{ticker, book},
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer public.Close()
+
+err = public.Run(ctx, func(ctx context.Context, message bybit.StreamMessage) error {
+	if message.Operation != "" || message.Pong {
+		return nil
+	}
+	if message.Topic != ticker {
+		return nil
+	}
+	var ticker bybit.StreamTicker
+	if err := message.DecodeData(&ticker); err != nil {
+		return err
+	}
+	return handleTicker(ticker)
+})
+```
+
+public typed data는 다음 구조체로 decode할 수 있습니다.
+
+- `tickers.{symbol}`: `StreamTicker`
+- `orderbook.{depth}.{symbol}`: `StreamOrderBook`
+- `publicTrade.{symbol}`: `[]StreamPublicTrade`
+- `kline.{interval}.{symbol}`: `[]StreamKline`
+
+호가는 현재 Bybit가 Spot·Linear에 제공하는 depth `1`, `50`, `200`, `1000`을 지원합니다. Spot은 구독 명령 한 건당 topic을 최대 10개까지 허용하므로 SDK가 더 큰 목록을 자동 분할합니다. 한 public 연결의 전체 topic 문자열은 공식 제한인 21,000자를 넘을 수 없습니다.
+
+private stream은 연결할 때마다 `GET/realtime + expires`를 HMAC SHA-256으로 서명해 인증한 뒤 topic을 구독합니다.
+
+```go
+private, err := streams.PrivateStream(
+	bybit.PrivateStreamRequest{
+		Topics: []string{"order.spot", "order.linear", "execution", "position.linear", "wallet"},
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer private.Close()
+```
+
+private typed data는 `[]StreamOrder`, `[]StreamExecution`, `[]StreamPosition`, `[]StreamWallet`로 decode할 수 있습니다. `order`와 `order.linear`처럼 같은 종류의 all-in-one topic과 category topic은 Bybit 규칙에 따라 한 구독에서 함께 사용할 수 없습니다.
+
+연결이 끊기면 같은 EIP route에서 새 만료 시각과 Secret으로 재인증하고 현재 topic을 다시 구독합니다. 인증이 명시적으로 거절된 경우 잘못된 키로 무한 재연결하지 않습니다. heartbeat는 Bybit 권장 주기인 20초마다 `{"op":"ping"}`을 보내고 10초 안에 pong이 없으면 재연결합니다. stream 수명은 `Run`의 context로 제어하므로 생성 시 `trade.WithTimeout`은 허용하지 않습니다.
+
+WebSocket 연결은 도메인별 IP당 5분에 500회보다 자주 만들면 안 됩니다. 재연결 횟수와 장시간 연결 상태는 운영 메트릭에서 함께 감시해야 합니다.
+
 ## 공식 기준 문서
 
 - [Bybit V5 Integration Guidance](https://bybit-exchange.github.io/docs/v5/guide)
@@ -103,3 +190,6 @@ book, err := client.OrderBook(
 - [Bybit V5 Market](https://bybit-exchange.github.io/docs/v5/market/instrument)
 - [Bybit V5 Place Order](https://bybit-exchange.github.io/docs/v5/order/create-order)
 - [Bybit V5 Wallet Balance](https://bybit-exchange.github.io/docs/v5/account/wallet-balance)
+- [Bybit V5 WebSocket Connect](https://bybit-exchange.github.io/docs/v5/ws/connect)
+- [Bybit V5 Public Orderbook](https://bybit-exchange.github.io/docs/v5/websocket/public/orderbook)
+- [Bybit V5 Private Order](https://bybit-exchange.github.io/docs/v5/websocket/private/order)

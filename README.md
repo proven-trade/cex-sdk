@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket 1차 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -35,7 +35,7 @@
 | Bitget v3 UTA WebSocket | Spot·USDT Futures public, UTA private stream 구현됨 |
 | Upbit Spot WebSocket | public 시세·private 내 주문·자산 stream 구현됨 |
 | Bybit V5 REST | Spot·Linear 공개 시세, 통합 잔고, 포지션, 주문 구현됨 |
-| Bybit V5 WebSocket | 예정 |
+| Bybit V5 WebSocket | Spot·Linear public, Unified private stream 구현됨 |
 | 나머지 P1 거래소 | 예정 |
 
 ## 요청별 EIP 선택
@@ -200,7 +200,7 @@ defer session.Close()
 
 세부 계약과 주의사항은 [Upbit Spot 문서](docs/exchanges/UPBIT.md)를 참고합니다.
 
-## Bybit V5 Spot·Linear REST 1차 범위
+## Bybit V5 Spot·Linear 1차 범위
 
 - 서버 시간 보정과 Spot·Linear 상품 정보
 - 현재가, 호가, 최근 체결, 캔들
@@ -209,6 +209,9 @@ defer session.Close()
 - HMAC SHA-256 서명과 `X-BAPI-*` 인증 헤더
 - route 단위 IP 제한과 계정 단위 private endpoint 제한
 - 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
+- Spot·Linear ticker, 호가, 공개 체결, 캔들 WebSocket
+- Unified 주문, 체결, Linear 포지션, 지갑 private WebSocket
+- 연결별 EIP 고정, application heartbeat, 재인증·재구독
 
 세부 계약과 주의사항은 [Bybit V5 문서](docs/exchanges/BYBIT.md)를 참고합니다.
 

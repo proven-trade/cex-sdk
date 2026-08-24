@@ -538,7 +538,7 @@ const (
 ### Phase 4 — P1 확장
 
 - Bybit V5 Spot·Linear REST 구현 완료
-- Bybit V5 Spot·Linear public/private WebSocket 구현
+- Bybit V5 Spot·Linear public/private WebSocket 구현 완료
 - 지원 매트릭스와 운영 수요 순으로 거래소 추가
 - 어댑터 생성 템플릿 및 문서 자동 생성
 - deprecated API 감지 및 변경 알림 프로세스
