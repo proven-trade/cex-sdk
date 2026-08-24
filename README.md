@@ -51,7 +51,7 @@
 | Spot 주문 smoke 안전 계약 | post-only·금액 상한·EIP/호가 선검사·취소 정리 구현됨 |
 | 공통 WebSocket 연결 계층 | route 고정, 재연결, 재구독 훅, heartbeat 구현됨 |
 | Binance Spot WebSocket | public market·private user data stream·로컬 오더북 자동 갭 복구 구현됨 |
-| Bitget v3 UTA WebSocket | Spot·USDT Futures public, UTA private stream 구현됨 |
+| Bitget v3 UTA WebSocket | Spot·USDT Futures public, UTA private stream·Spot 로컬 오더북 자동 갭 복구 구현됨 |
 | Upbit Spot WebSocket | public 시세·private 내 주문·자산 stream 구현됨 |
 | Bybit V5 REST | Spot·Linear 공개 시세, 통합 잔고, 포지션, 주문 구현됨 |
 | Bybit V5 WebSocket | Spot·Linear public, Unified private stream 구현됨 |
@@ -232,6 +232,7 @@ defer session.Close()
 - 전체 `6000/IP/분` 및 endpoint별 `IP 또는 UID/초` 요청 제한
 - Demo Trading의 `paptrading: 1` 헤더 옵션
 - 불명확한 주문 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
+- Spot `books` snapshot과 `pseq`·`seq` 기반 로컬 오더북·같은 EIP 자동 갭 복구
 
 세부 계약과 주의사항은 [Bitget v3 UTA 문서](docs/exchanges/BITGET.md)를 참고합니다.
 

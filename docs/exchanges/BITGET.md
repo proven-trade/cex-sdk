@@ -102,11 +102,56 @@ err = public.Run(ctx, func(ctx context.Context, message bitget.StreamMessage) er
 public channel의 1차 typed 범위는 다음과 같습니다.
 
 - `ticker`: `[]StreamTicker`
-- `books`, `books1`, `books5`, `books15`: `[]StreamOrderBook`
+- `books`, `books1`, `books5`, `books50`: `[]StreamOrderBook`
 - `publicTrade`: `[]StreamPublicTrade`
 - `kline`: `[]Candle`
 
 `PublicStreamArgument`와 `KlineStreamArgument`가 Spot·USDT Futures 인자를 만듭니다. 동적 `Subscribe`와 `Unsubscribe`에 성공하면 현재 구독 목록을 갱신하고, 연결이 끊어졌을 때 같은 route에서 전체 목록을 다시 구독합니다.
+
+### Spot 로컬 오더북과 자동 갭 복구
+
+Bitget v3 UTA의 `books` 채널은 최초 full snapshot과 이후 incremental update를 같은 WebSocket에서 제공합니다. REST order book에는 WebSocket과 연결할 sequence가 없으므로 로컬 장부는 REST snapshot을 섞지 않고, 선택한 EIP의 `books` snapshot과 `pseq`·`seq`만 사용합니다.
+
+```go
+books, err := bitget.PublicStreamArgument(bitget.CategorySpot, "books", "BTCUSDT")
+if err != nil {
+	return err
+}
+public, err := streams.PublicStream(
+	bitget.StreamRequest{Arguments: []bitget.StreamArgument{books}},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer public.Close()
+
+book, err := bitget.NewLocalOrderBook(bitget.LocalOrderBookConfig{
+	Symbol:        "BTCUSDT",
+	EgressRouteID: "seoul-b",
+	ViewDepth:     20,
+})
+if err != nil {
+	return err
+}
+
+err = book.Run(ctx, public, func(ctx context.Context, view bitget.LocalOrderBookView) error {
+	return consumeBook(view)
+})
+```
+
+운영 계약은 다음과 같습니다.
+
+- 로컬 오더북과 WebSocket의 `EgressRouteID`가 다르면 연결 전에 거부합니다.
+- incremental update를 제공하는 Spot `books`만 허용하며, 매번 snapshot인 `books1`·`books5`·`books50`은 로컬 오더북 입력으로 받지 않습니다.
+- snapshot은 즉시 게시하고, 첫 update에서 `snapshot seq ∈ [pseq, seq]`인지 확인합니다.
+- 이후에는 `update.pseq == 이전 update.seq`이고 `seq`가 증가하는 데이터만 적용합니다.
+- sequence 누락·역행 또는 동기화 완료 뒤 `pseq=0` reset을 발견하면 현재 장부를 폐기하고 같은 EIP로 재연결해 새 snapshot부터 복구합니다.
+- 일반 네트워크 재연결도 이전 세대 장부를 폐기하지만 `GapCount`는 늘리지 않습니다.
+- `SynchronizationID`, `Generation`, `GapCount`, `Sequence`, `MaxDepth`로 재동기화와 데이터 연속성을 관측할 수 있습니다.
+- `Run` 중에는 대상 `books` 구독을 해제하지 않아야 합니다.
+
+Bitget은 2026년 5월 19일부터 v3 depth의 `checksum`을 제거하고 `seq`·`pseq`를 정합성 기준으로 지정했습니다. `StreamOrderBook.Checksum`은 이전 payload decode 호환에만 남아 있으며 로컬 오더북 검증에는 사용하지 않습니다. v3의 고정 snapshot 채널도 기존 `books15`가 아니라 `books50`입니다.
 
 private stream은 API Key, HMAC Secret, Passphrase를 사용합니다.
 
@@ -158,6 +203,8 @@ SDK의 동적 구독 명령은 기본 15초 간격으로 직렬화해 시간당 
 
 - [Bitget v3 UTA Quick Start](https://www.bitget.com/api-doc/uta/guide)
 - [Bitget v3 UTA Ticker WebSocket](https://www.bitget.com/api-doc/uta/websocket/public/Tickers-Channel)
+- [Bitget v3 UTA Depth WebSocket](https://www.bitget.com/api-doc/uta/websocket/public/Order-Book-Channel)
+- [Bitget v3 UTA Change Log](https://www.bitget.com/api-doc/uta/changelog)
 - [Bitget v3 UTA Account WebSocket](https://www.bitget.com/api-doc/uta/websocket/private/Account-Channel)
 - [Bitget v3 UTA Place Order](https://www.bitget.com/api-doc/uta/trade/Place-Order)
 - [Bitget v3 UTA Error Code](https://www.bitget.com/api-doc/uta/error-code/restapi)

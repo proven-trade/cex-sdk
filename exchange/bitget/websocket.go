@@ -242,6 +242,23 @@ func (public *PublicStream) Close() error { return public.managed.session.Close(
 // Generation은 성공한 public stream 연결 세대 번호를 반환한다.
 func (public *PublicStream) Generation() uint64 { return public.managed.session.Generation() }
 
+// EgressRouteID는 public stream 연결과 재연결에 고정된 송신 경로를 반환한다.
+func (public *PublicStream) EgressRouteID() transport.EgressRouteID {
+	return public.managed.session.EgressRouteID()
+}
+
+func (public *PublicStream) hasSpotBooksArgument(symbol string) bool {
+	public.managed.mu.Lock()
+	defer public.managed.mu.Unlock()
+	for _, argument := range public.managed.arguments {
+		if argument.InstrumentType == "spot" && argument.Topic == "books" &&
+			strings.EqualFold(argument.Symbol, symbol) {
+			return true
+		}
+	}
+	return false
+}
+
 // PrivateStream은 Bitget private UTA channel 연결을 관리한다.
 type PrivateStream struct {
 	managed *managedStream
@@ -522,7 +539,7 @@ func PublicStreamArgument(category Category, topic, symbol string) (StreamArgume
 	if err != nil {
 		return StreamArgument{}, err
 	}
-	argument := StreamArgument{InstrumentType: instrumentType, Topic: topic, Symbol: symbol}
+	argument := StreamArgument{InstrumentType: instrumentType, Topic: topic, Symbol: strings.ToUpper(symbol)}
 	validated, err := validateStreamArguments([]StreamArgument{argument}, false)
 	if err != nil {
 		return StreamArgument{}, err
@@ -578,7 +595,7 @@ func validateStreamArguments(arguments []StreamArgument, private bool) ([]Stream
 				return nil, validationError("invalid public WebSocket instrument or symbol")
 			}
 			switch argument.Topic {
-			case "ticker", "books", "books1", "books5", "books15", "publicTrade":
+			case "ticker", "books", "books1", "books5", "books50", "publicTrade":
 				if argument.Interval != "" {
 					return nil, validationError("only kline channel accepts interval")
 				}
