@@ -534,6 +534,7 @@ const (
 - Upbit Spot public/private stream 구현 완료
 - 공통 Spot read smoke와 지정 EIP JSON 증적 계약 구현 완료
 - 12개 공통 Spot 어댑터 선택형 `livesmoke` CLI와 환경 Secret 주입 구현 완료
+- 실제 주문 동의·금액 상한·post-only·호가 비관통·독립 취소 context를 강제하는 Spot trade smoke 구현 완료
 - 거래소별 sequence gap recovery와 장시간 soak test
 - 거래소별 인증, heartbeat, sequence gap recovery
 - dashboard/alert/runbook

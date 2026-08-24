@@ -80,6 +80,43 @@ JSON 증적에는 다음 정보만 기록합니다.
 
 원본 응답, 잔고 수량, 체결 가격, API Key, Secret, Passphrase와 거래소 오류 메시지는 기록하지 않습니다. 거래소 API 검사 하나가 실패해도 가능한 나머지 검사를 계속 실행하므로 한 결과에서 전체 상태를 확인할 수 있습니다. 단, EIP 검사가 실패하면 의도하지 않은 공인 IP로 요청을 보내지 않도록 모든 거래소 검사를 `skipped` 처리합니다.
 
+## 실제 주문 smoke 안전 계약
+
+`smoke.SpotTradeRunner`는 실제 계정의 생성-조회-취소 lifecycle을 검증합니다. 다음 조건을 전부 만족하지 않으면 주문 API를 호출하지 않습니다.
+
+- `Confirmation`이 `smoke.RealOrderConfirmation`과 정확히 일치
+- `Price × Quantity`가 `MaxNotional` 이하
+- 시장가가 아닌 post-only 지정가 주문
+- 주문 직전에 선택 EIP가 기대 공인 IP와 일치
+- 매수가는 현재 최우선 매도호가보다 낮고 매도가는 현재 최우선 매수호가보다 높음
+- 비어 있지 않은 고유 `ClientOrderID` 사용
+
+```go
+runner, err := smoke.NewSpotTradeRunner(smoke.SpotTradeConfig{
+	Client:           unifiedSpotClient,
+	EgressVerifier:   registry,
+	Market:           unified.Market{Base: "BTC", Quote: "USDT"},
+	EgressRouteID:    "seoul-b",
+	CheckTimeout:     10 * time.Second,
+	Side:             unified.SideBuy,
+	Price:            "50000",
+	Quantity:         "0.0001",
+	MaxNotional:      "10",
+	ClientOrderID:    "proven-smoke-20260825-001",
+	Confirmation:     smoke.RealOrderConfirmation,
+})
+if err != nil {
+	return err
+}
+report, err := runner.Run(ctx)
+```
+
+SDK는 주문 생성 mutation을 자동 재시도하지 않습니다. 생성 결과가 `UNKNOWN_EXECUTION_STATE`이면 같은 `ClientOrderID`로 조회한 뒤 취소를 시도합니다. 생성 이후 조회가 실패하거나 실행 context가 취소돼도, 정리 단계는 원래 context의 값만 상속하고 취소 신호와 분리된 제한 시간 context로 주문 취소와 최종 상태 조회를 시도합니다.
+
+post-only는 주문이 접수되는 순간 taker 체결을 막지만, 호가에 올라간 뒤 시장이 이동하면 maker 체결 가능성이 있습니다. 따라서 충분히 비관통하는 가격, 거래소 최소 주문금액에 가까운 수량, 전용 하위 계정과 제한된 자산을 사용해야 합니다. 이 기능을 호출하는 것 자체가 실제 거래 승인에 해당하며 자동화된 기본 CLI에는 연결하지 않습니다.
+
+주문 ID, 사용자 주문 ID, 가격, 수량과 계정 값은 결과 JSON에 기록하지 않습니다. 최종 조회가 `canceled`이고 체결 수량이 정확히 0일 때만 `cancellationConfirmed`가 `true`가 됩니다.
+
 ## 상태 갱신 기준
 
 지원 매트릭스의 `live_read_smoke`는 실행기가 존재한다는 이유만으로 완료 처리하지 않습니다. 실제 배포 대상 인스턴스에서 해당 거래소·상품·EIP 조합의 JSON 결과가 `passed: true`이고, 실행 시각과 설정 변경 이력을 함께 보관했을 때만 `implemented`로 변경합니다.

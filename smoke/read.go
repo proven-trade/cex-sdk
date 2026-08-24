@@ -59,6 +59,7 @@ type CheckFailure struct {
 type CheckEvidence struct {
 	Count            int    `json:"count,omitempty"`
 	NativeMarket     string `json:"nativeMarket,omitempty"`
+	OrderStatus      string `json:"orderStatus,omitempty"`
 	LocalPrivateIP   string `json:"localPrivateIp,omitempty"`
 	ExpectedPublicIP string `json:"expectedPublicIp,omitempty"`
 	ObservedPublicIP string `json:"observedPublicIp,omitempty"`
@@ -210,11 +211,7 @@ func (runner *SpotReadRunner) appendSkipped(
 	name string,
 	reason string,
 ) {
-	now := time.Now().UTC()
-	report.Checks = append(report.Checks, CheckResult{
-		Name: name, Status: CheckSkipped, StartedAt: now, CompletedAt: now,
-		Failure: &CheckFailure{Kind: "prerequisite", Reason: reason},
-	})
+	report.Checks = append(report.Checks, skippedCheck(name, reason))
 }
 
 type checkFunc func(context.Context) (CheckEvidence, error)
@@ -225,8 +222,17 @@ func (runner *SpotReadRunner) appendCheck(
 	name string,
 	check checkFunc,
 ) {
+	report.Checks = append(report.Checks, executeCheck(ctx, runner.checkTimeout, name, check))
+}
+
+func executeCheck(
+	ctx context.Context,
+	timeout time.Duration,
+	name string,
+	check checkFunc,
+) CheckResult {
 	startedAt := time.Now().UTC()
-	checkContext, cancel := context.WithTimeout(ctx, runner.checkTimeout)
+	checkContext, cancel := context.WithTimeout(ctx, timeout)
 	evidence, err := check(checkContext)
 	cancel()
 	completedAt := time.Now().UTC()
@@ -239,7 +245,15 @@ func (runner *SpotReadRunner) appendCheck(
 		result.Status = CheckFailed
 		result.Failure = &failure
 	}
-	report.Checks = append(report.Checks, result)
+	return result
+}
+
+func skippedCheck(name string, reason string) CheckResult {
+	now := time.Now().UTC()
+	return CheckResult{
+		Name: name, Status: CheckSkipped, StartedAt: now, CompletedAt: now,
+		Failure: &CheckFailure{Kind: "prerequisite", Reason: reason},
+	}
 }
 
 func (runner *SpotReadRunner) requestOptions() []trade.RequestOption {
@@ -250,9 +264,18 @@ func (runner *SpotReadRunner) requestOptions() []trade.RequestOption {
 }
 
 func (runner *SpotReadRunner) checkEgress(ctx context.Context) (CheckEvidence, error) {
-	check, err := runner.egressVerifier.VerifyPublicIP(
-		ctx, runner.routeID, runner.publicIPEndpoint,
+	return verifyEgress(
+		ctx, runner.egressVerifier, runner.routeID, runner.publicIPEndpoint,
 	)
+}
+
+func verifyEgress(
+	ctx context.Context,
+	verifier EgressVerifier,
+	routeID transport.EgressRouteID,
+	endpoint string,
+) (CheckEvidence, error) {
+	check, err := verifier.VerifyPublicIP(ctx, routeID, endpoint)
 	evidence := CheckEvidence{
 		LocalPrivateIP:   ipString(check.LocalPrivateIP),
 		ExpectedPublicIP: ipString(check.ExpectedPublicIP),
@@ -261,7 +284,7 @@ func (runner *SpotReadRunner) checkEgress(ctx context.Context) (CheckEvidence, e
 	if err != nil {
 		return evidence, err
 	}
-	if check.RouteID != runner.routeID {
+	if check.RouteID != routeID {
 		return evidence, invalidEvidence("unexpected_route")
 	}
 	if check.ExpectedPublicIP == nil {
@@ -495,6 +518,7 @@ func categoryForError(err error) trade.ErrorCategory {
 		{trade.ErrRateLimited, trade.ErrorRateLimited},
 		{trade.ErrNetwork, trade.ErrorNetwork},
 		{trade.ErrTimeout, trade.ErrorTimeout},
+		{trade.ErrUnknownExecutionState, trade.ErrorUnknownExecutionState},
 		{trade.ErrExchangeUnavailable, trade.ErrorExchangeUnavailable},
 		{trade.ErrUnsupportedCapability, trade.ErrorUnsupportedCapability},
 		{trade.ErrInternal, trade.ErrorInternal},

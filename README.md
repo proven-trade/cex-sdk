@@ -48,6 +48,7 @@
 | Upbit Spot REST | 공개 시세, 잔고, 주문 생성·조회·취소·목록 구현됨 |
 | 공통 Spot API·적합성 테스트 | Binance·Bitget·Upbit·Bybit·OKX·Coinbase·Kraken·Bithumb·Coinone·Korbit·KuCoin·Gate.io 구현됨 |
 | Spot live smoke CLI | 12개 Spot 어댑터의 지정 EIP·공개 조회·선택적 잔고 JSON 증적 구현됨 |
+| Spot 주문 smoke 안전 계약 | post-only·금액 상한·EIP/호가 선검사·취소 정리 구현됨 |
 | 공통 WebSocket 연결 계층 | route 고정, 재연결, 재구독 훅, heartbeat 구현됨 |
 | Binance Spot WebSocket | public market·private user data stream 구현됨 |
 | Bitget v3 UTA WebSocket | Spot·USDT Futures public, UTA private stream 구현됨 |
