@@ -25,7 +25,8 @@
 | Binance Spot REST | 공개 시세, 계정, 주문 생성·조회·취소·목록 구현됨 |
 | Bitget v3 UTA | Spot·USDT-M 공개 시세, 자산, 포지션, 주문 구현됨 |
 | Upbit Spot REST | 공개 시세, 잔고, 주문 생성·조회·취소·목록 구현됨 |
-| 파생상품·WebSocket·통합 API | 예정 |
+| 공통 Spot API·적합성 테스트 | Binance·Bitget·Upbit 구현됨 |
+| Binance USDⓈ-M·WebSocket·P1 거래소 | 예정 |
 
 ## 요청별 EIP 선택
 
@@ -136,3 +137,24 @@ go run ./cmd/egressdiag \
 - 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
 
 세부 계약과 주의사항은 [Upbit Spot 문서](docs/exchanges/UPBIT.md)를 참고합니다.
+
+## 공통 Spot API
+
+`unified.SpotClient`는 Binance, Bitget, Upbit에 같은 메서드 계약을 제공합니다. 마켓은 거래소 문자열 대신 `Base`와 `Quote`로 지정하며, 요청별 EIP 옵션은 native API와 동일하게 전달합니다.
+
+```go
+spot, err := upbit.NewUnifiedSpot(client)
+if err != nil {
+	return err
+}
+
+ticker, err := spot.Ticker(
+	ctx,
+	unified.TickerRequest{
+		Market: unified.Market{Base: "BTC", Quote: "KRW"},
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+```
+
+지원 계약과 시장가 주문의 수량 의미는 [공통 Spot API 문서](docs/UNIFIED_SPOT.md)를 참고합니다.
