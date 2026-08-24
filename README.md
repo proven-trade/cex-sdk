@@ -2,11 +2,12 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, 다중 EIP 전송 계층과 Binance Spot·USDⓈ-M Futures, Bitget v3 UTA, Upbit Spot REST 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층과 Binance Spot·USDⓈ-M Futures, Bitget v3 UTA, Upbit Spot REST 1차 API가 구현되어 있습니다.
 
 ## 문서
 
 - [프로젝트 기획서](docs/PROJECT_PLAN.md)
+- [공통 WebSocket 연결 계층](docs/STREAMS.md)
 
 ## 현재 기준
 
@@ -27,7 +28,8 @@
 | Bitget v3 UTA | Spot·USDT-M 공개 시세, 자산, 포지션, 주문 구현됨 |
 | Upbit Spot REST | 공개 시세, 잔고, 주문 생성·조회·취소·목록 구현됨 |
 | 공통 Spot API·적합성 테스트 | Binance·Bitget·Upbit 구현됨 |
-| WebSocket·P1 거래소 | 예정 |
+| 공통 WebSocket 연결 계층 | route 고정, 재연결, 재구독 훅, heartbeat 구현됨 |
+| 거래소별 WebSocket·P1 거래소 | 예정 |
 
 ## 요청별 EIP 선택
 
@@ -101,6 +103,33 @@ go run ./cmd/egressdiag \
 ```
 
 자세한 내용은 [다중 EIP 진단 예제](examples/multi-eip/README.md)를 참고합니다.
+
+## WebSocket 연결별 EIP 선택
+
+`stream.Session`은 WebSocket 최초 연결과 모든 재연결을 하나의 `egressRouteId`에 고정합니다. 임시 인증 endpoint 갱신, 연결 직후 재구독, 지수 backoff, `Retry-After`, ping과 상태 관측을 지원합니다.
+
+```go
+connector, err := stream.NewWebSocketConnector(stream.ConnectorConfig{
+	HTTPClients: registry,
+})
+if err != nil {
+	return err
+}
+
+session, err := stream.NewSession(stream.SessionConfig{
+	Connector:     connector,
+	EgressRouteID: "seoul-b",
+	Request: stream.DialRequest{
+		Endpoint: "wss://stream.example.com/ws",
+	},
+})
+if err != nil {
+	return err
+}
+defer session.Close()
+```
+
+이미 연결된 WebSocket의 route는 변경할 수 없습니다. 자세한 수명주기와 private stream 인증 규칙은 [공통 WebSocket 연결 계층 문서](docs/STREAMS.md)를 참고합니다.
 
 ## Binance Spot 1차 범위
 

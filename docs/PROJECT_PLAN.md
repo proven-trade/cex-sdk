@@ -163,6 +163,7 @@ proven-trade-sdk/
 │   └── upbit/                # Spot 어댑터
 ├── model/                    # 공통 타입, capability, decimal 규칙
 ├── transport/                # net.Dialer, http.Transport, timeout, retry
+├── stream/                   # route 고정 WebSocket 연결과 재연결
 ├── credential/               # SecretProvider와 route 허용 정책
 ├── ratelimit/                # 다차원 rate limiter
 ├── telemetry/                # 로그, metric, trace 계약
@@ -524,8 +525,9 @@ const (
 
 ### Phase 3 — WebSocket과 운영 강화
 
+- 공통 route 고정 연결, reconnect, 재구독 수명주기 구현 완료
 - public/private stream
-- route별 연결 관리, reconnect, gap recovery
+- 거래소별 인증, heartbeat, sequence gap recovery
 - dashboard/alert/runbook
 - 장애 주입 및 장시간 soak test
 

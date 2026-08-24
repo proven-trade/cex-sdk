@@ -75,6 +75,11 @@ type Registry struct {
 	closed bool
 }
 
+type boundRoundTripper struct {
+	registry *Registry
+	routeID  EgressRouteID
+}
+
 // NewRegistry는 모든 송신 경로를 검증한 뒤 연결 풀을 생성한다.
 func NewRegistry(routes []EgressRoute, options ...RegistryOption) (*Registry, error) {
 	if len(routes) == 0 {
@@ -178,6 +183,32 @@ func (registry *Registry) Do(
 		return nil, fmt.Errorf("send request through route %q: %w", routeID, err)
 	}
 	return response, nil
+}
+
+// HTTPClient는 모든 연결을 지정한 route의 private IP로 보내는 HTTP 클라이언트를 반환한다.
+// WebSocket upgrade처럼 호출자가 http.Client를 요구하는 프로토콜에 사용한다.
+// 자격증명 헤더가 다른 origin으로 전달되지 않도록 redirect는 허용하지 않는다.
+func (registry *Registry) HTTPClient(routeID EgressRouteID) (*http.Client, error) {
+	if _, err := registry.lookup(routeID); err != nil {
+		return nil, err
+	}
+	return &http.Client{
+		Transport: &boundRoundTripper{registry: registry, routeID: routeID},
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}, nil
+}
+
+func (roundTripper *boundRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	if request == nil {
+		return nil, fmt.Errorf("HTTP request cannot be nil")
+	}
+	entry, err := roundTripper.registry.lookup(roundTripper.routeID)
+	if err != nil {
+		return nil, err
+	}
+	return entry.transport.RoundTrip(request.Clone(request.Context()))
 }
 
 // Route는 등록된 송신 경로의 방어적 복사본을 반환한다.

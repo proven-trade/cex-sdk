@@ -204,3 +204,61 @@ func TestRegistryRejectsRequestsAfterClose(t *testing.T) {
 		t.Fatalf("Do() error = %v, want ErrRegistryClosed", err)
 	}
 }
+
+func TestRegistryHTTPClientUsesBoundRouteAndRejectsRedirect(t *testing.T) {
+	t.Parallel()
+
+	var (
+		observedMu        sync.Mutex
+		destinationCalled bool
+		sourceIP          string
+	)
+	destination := &http.Server{Handler: http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		observedMu.Lock()
+		destinationCalled = true
+		observedMu.Unlock()
+		writer.WriteHeader(http.StatusNoContent)
+	})}
+	destinationListener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("destination listener error = %v", err)
+	}
+	go func() { _ = destination.Serve(destinationListener) }()
+	t.Cleanup(func() { _ = destination.Close() })
+
+	redirect := &http.Server{Handler: http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		observedMu.Lock()
+		sourceIP, _, _ = net.SplitHostPort(request.RemoteAddr)
+		observedMu.Unlock()
+		http.Redirect(writer, request, "http://"+destinationListener.Addr().String(), http.StatusFound)
+	})}
+	redirectListener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("redirect listener error = %v", err)
+	}
+	go func() { _ = redirect.Serve(redirectListener) }()
+	t.Cleanup(func() { _ = redirect.Close() })
+
+	registry, err := NewRegistry([]EgressRoute{{ID: "route-a", LocalPrivateIP: net.ParseIP("127.0.0.1")}})
+	if err != nil {
+		t.Fatalf("NewRegistry() error = %v", err)
+	}
+	t.Cleanup(func() { _ = registry.Close() })
+	client, err := registry.HTTPClient("route-a")
+	if err != nil {
+		t.Fatalf("HTTPClient() error = %v", err)
+	}
+	response, err := client.Get("http://" + redirectListener.Addr().String())
+	if err != nil {
+		t.Fatalf("client.Get() error = %v", err)
+	}
+	_ = response.Body.Close()
+	observedMu.Lock()
+	defer observedMu.Unlock()
+	if response.StatusCode != http.StatusFound || destinationCalled || sourceIP != "127.0.0.1" {
+		t.Fatalf("status = %d, destination called = %v, source IP = %q", response.StatusCode, destinationCalled, sourceIP)
+	}
+	if _, err := registry.HTTPClient("missing"); !errors.Is(err, ErrUnknownEgressRoute) {
+		t.Fatalf("HTTPClient(missing) error = %v", err)
+	}
+}
