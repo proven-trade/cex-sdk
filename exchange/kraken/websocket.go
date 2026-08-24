@@ -209,6 +209,33 @@ func (public *SpotPublicStream) Close() error { return public.managed.session.Cl
 // Generation은 성공한 public stream 연결 세대 번호를 반환한다.
 func (public *SpotPublicStream) Generation() uint64 { return public.managed.session.Generation() }
 
+// EgressRouteID는 public 연결과 모든 재연결에 고정된 송신 경로를 반환한다.
+func (public *SpotPublicStream) EgressRouteID() transport.EgressRouteID {
+	return public.managed.session.EgressRouteID()
+}
+
+func (public *SpotPublicStream) hasBookSubscription(symbol string, depth int) bool {
+	public.managed.mu.Lock()
+	defer public.managed.mu.Unlock()
+	for _, subscription := range public.managed.publicSubscriptions {
+		if subscription.Channel != SpotChannelBook ||
+			effectiveSpotBookDepth(subscription.Depth) != depth ||
+			(subscription.Snapshot != nil && !*subscription.Snapshot) {
+			continue
+		}
+		for _, subscribedSymbol := range subscription.Symbols {
+			if subscribedSymbol == symbol {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (public *SpotPublicStream) reconnect() error {
+	return public.managed.session.Reconnect()
+}
+
 // SpotPrivateStream은 Spot private account channel 연결을 관리한다.
 type SpotPrivateStream struct {
 	managed *managedSpotStream
@@ -609,6 +636,13 @@ func validateSpotPublicSubscription(
 		)
 	}
 	return subscription, nil
+}
+
+func effectiveSpotBookDepth(depth int) int {
+	if depth == 0 {
+		return 10
+	}
+	return depth
 }
 
 func validateSpotPrivateSubscriptions(

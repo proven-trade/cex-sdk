@@ -159,6 +159,11 @@ public, err := streamClient.PublicStream(
 			Symbols:      []string{"BTC/USD"},
 			EventTrigger: kraken.SpotTickerOnBBO,
 		},
+		{
+			Channel: kraken.SpotChannelBook,
+			Symbols: []string{"BTC/USD"},
+			Depth:   100,
+		},
 	}},
 	trade.WithEgressRoute("seoul-b"),
 )
@@ -190,7 +195,27 @@ private, err := streamClient.PrivateStream(
 )
 ```
 
-Kraken의 `book` update는 가격 레벨을 직접 병합하고 checksum을 검증해야 한다. SDK는 순서대로 수신한 snapshot·update와 checksum 값을 손실 없이 전달하지만 이번 범위에서 로컬 오더북을 대신 구성하지 않는다.
+`book`을 로컬 장부로 소비할 때는 위 `public.Run` 대신 `SpotLocalOrderBook.Run`이 해당 public stream을 소유하도록 한다.
+
+```go
+book, err := kraken.NewSpotLocalOrderBook(kraken.SpotLocalOrderBookConfig{
+	Symbol:        "BTC/USD",
+	Depth:         100,
+	ViewDepth:     20,
+	EgressRouteID: "seoul-b",
+})
+if err != nil {
+	return err
+}
+
+err = book.Run(ctx, public, func(ctx context.Context, view kraken.SpotLocalOrderBookView) error {
+	return handleBook(view)
+})
+```
+
+SDK는 한 메시지의 모든 가격 변경을 배열 순서대로 반영하고 구독 depth로 장부를 자른 뒤 CRC32 checksum을 검증한다. checksum은 구독 depth와 관계없이 ask 상위 10단계를 가격 오름차순, bid 상위 10단계를 가격 내림차순으로 이어 계산한다. 계산 중 가격·수량의 소수점만 제거하고 선행 0을 잘라내므로 `SpotStreamDecimal`의 원문 정밀도를 유지한다.
+
+checksum이 다르거나 새 연결에서 snapshot보다 update가 먼저 오면 현재 장부를 폐기하고 같은 EIP route로 재연결해 새 snapshot을 받는다. `SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 재연결을 유발한 checksum·snapshot 이상 횟수, `Generation`은 WebSocket 연결 세대를 나타낸다. `ViewDepth` 기본값은 `min(20, Depth)`이며 handler 출력만 제한하고 내부 장부는 구독 depth까지 유지한다. symbol·depth·snapshot·EIP 계약이 public stream과 다르면 네트워크 연결 전에 거부한다.
 
 ## 공식 문서
 
@@ -199,6 +224,7 @@ Kraken의 `book` update는 가격 레벨을 직접 병합하고 checksum을 검�
 - [WebSocket token 발급](https://docs.kraken.com/api/docs/rest-api/get-websockets-token/)
 - [WebSocket v2 ticker](https://docs.kraken.com/api/docs/websocket-v2/ticker/)
 - [WebSocket v2 book](https://docs.kraken.com/api/docs/websocket-v2/book/)
+- [WebSocket v2 book checksum](https://docs.kraken.com/exchange/guides/websockets/book-checksum-v2)
 - [WebSocket v2 executions](https://docs.kraken.com/api/docs/websocket-v2/executions/)
 - [WebSocket v2 balances](https://docs.kraken.com/api/docs/websocket-v2/balances/)
 - [서버 시간](https://docs.kraken.com/api-reference/market-data/get-server-time)

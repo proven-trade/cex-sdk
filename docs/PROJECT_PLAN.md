@@ -558,6 +558,7 @@ const (
 - Kraken Spot REST 구현 완료
 - Kraken Futures REST 구현 완료
 - Kraken Spot WebSocket v2 public/private 구현 완료
+- Kraken Spot WebSocket v2 book CRC32 로컬 오더북과 동일 EIP 재연결 복구 구현 완료
 - Kraken Futures WebSocket v1 public/private 구현 완료
 - Bithumb Spot REST 구현 완료
 - Bithumb public v1/private v2 WebSocket 구현 완료
