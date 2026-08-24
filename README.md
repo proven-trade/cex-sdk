@@ -62,7 +62,7 @@
 | Kraken Spot REST | 공개 시세, 계정, 주문·체결 구현됨 |
 | Kraken Spot WebSocket v2 | public 시세·상품 규칙, private 주문·체결·잔고 stream·CRC32 로컬 오더북 자동 복구 구현됨 |
 | Kraken Futures REST | 공개 시세·캔들, 지갑, 포지션, 주문·체결 구현됨 |
-| Kraken Futures WebSocket v1 | public 시세·호가·체결, private 지갑·주문·체결·포지션 stream 구현됨 |
+| Kraken Futures WebSocket v1 | public 시세·호가·체결, private 지갑·주문·체결·포지션 stream·로컬 오더북 자동 갭 복구 구현됨 |
 | Bithumb Spot REST | 공개 시세, 잔고, v1 상세·v2 주문 생성·취소·목록 구현됨 |
 | Bithumb WebSocket | public v1 시세·private v2 주문·자산 stream 구현됨 |
 | Coinone Spot REST | public v2 시세, v2.1 잔고·주문·체결 구현됨 |
@@ -329,6 +329,7 @@ defer session.Close()
 - public ticker·ticker lite·L2 호가·체결 WebSocket
 - private 잔고·체결·미체결 주문·포지션·계정 원장·운영 알림 WebSocket
 - 연결별 EIP 고정, challenge 재발급·재서명, 재연결·재구독
+- book_snapshot·단일 레벨 update 로컬 오더북과 sequence gap 시 같은 EIP 자동 재연결
 
 세부 계약과 제한·연결 정책은 [Kraken Futures 문서](docs/exchanges/KRAKEN_FUTURES.md)를 참고합니다.
 

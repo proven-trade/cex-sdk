@@ -161,7 +161,28 @@ err = public.Run(ctx, func(_ context.Context, message krakenfutures.StreamMessag
 })
 ```
 
-public stream은 `Subscribe`와 `Unsubscribe`로 구독을 변경할 수 있다. 연결이 끊기면 선택한 route를 유지하면서 현재 구독 목록을 정렬된 순서로 복구한다. `book`과 `trade`의 `seq`가 이어지지 않으면 로컬 상태를 버리고 재연결해 새 snapshot부터 다시 구성해야 한다.
+public stream은 `Subscribe`와 `Unsubscribe`로 구독을 변경할 수 있다. 연결이 끊기면 선택한 route를 유지하면서 현재 구독 목록을 정렬된 순서로 복구한다.
+
+`book`을 로컬 장부로 소비할 때는 위 `public.Run` 대신 `LocalOrderBook.Run`이 해당 public stream을 소유하도록 한다.
+
+```go
+book, err := krakenfutures.NewLocalOrderBook(krakenfutures.LocalOrderBookConfig{
+	ProductID:     "PI_XBTUSD",
+	ViewDepth:     20,
+	EgressRouteID: "seoul-b",
+})
+if err != nil {
+	return err
+}
+
+err = book.Run(ctx, public, func(ctx context.Context, view krakenfutures.LocalOrderBookView) error {
+	return handleBook(view)
+})
+```
+
+SDK는 `book_snapshot`의 전체 장부를 시작점으로 삼고, 이후 `book`의 `seq`가 직전 값보다 정확히 1 증가하는지 검사한다. `side=buy`는 bid, `side=sell`은 ask를 뜻하며 `qty=0`이면 해당 가격 레벨을 제거한다. 중복·과거 update는 무시하고 sequence gap이나 새 연결에서 snapshot보다 먼저 온 update는 장부를 폐기한 뒤 같은 EIP route로 재연결해 새 snapshot을 받는다.
+
+`SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 재연결을 유발한 sequence 이상 횟수, `Generation`은 WebSocket 연결 세대를 나타낸다. `ViewDepth` 기본값은 20이며 handler 출력만 제한하고 내부 장부는 snapshot의 전체 가격 레벨과 이후 update를 유지한다. 상품·EIP 계약이 public stream과 다르면 네트워크 연결 전에 거부한다.
 
 private stream은 다음 feed를 지원한다.
 

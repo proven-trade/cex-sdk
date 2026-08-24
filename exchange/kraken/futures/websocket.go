@@ -205,6 +205,31 @@ func (public *PublicStream) Close() error { return public.managed.session.Close(
 // Generation은 성공한 public stream 연결 세대 번호를 반환한다.
 func (public *PublicStream) Generation() uint64 { return public.managed.session.Generation() }
 
+// EgressRouteID는 public 연결과 모든 재연결에 고정된 송신 경로를 반환한다.
+func (public *PublicStream) EgressRouteID() transport.EgressRouteID {
+	return public.managed.session.EgressRouteID()
+}
+
+func (public *PublicStream) hasBookSubscription(productID string) bool {
+	public.managed.mu.Lock()
+	defer public.managed.mu.Unlock()
+	for _, subscription := range public.managed.publicSubscriptions {
+		if subscription.Feed != PublicFeedBook {
+			continue
+		}
+		for _, subscribedProductID := range subscription.ProductIDs {
+			if subscribedProductID == productID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (public *PublicStream) reconnect() error {
+	return public.managed.session.Reconnect()
+}
+
 // PrivateStream은 Futures private account feed 연결을 관리한다.
 type PrivateStream struct {
 	managed *managedStream
