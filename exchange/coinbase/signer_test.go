@@ -59,6 +59,23 @@ func TestSignRESTJWTAcceptsPKCS8AndEscapedNewlines(t *testing.T) {
 	verifyTestJWT(t, token, &key.PublicKey)
 }
 
+func TestSignWebSocketJWTOmitsRESTURI(t *testing.T) {
+	t.Parallel()
+
+	key, secret := newTestECKey(t, elliptic.P256())
+	now := time.Unix(1_700_000_000, 0)
+	token, err := SignWebSocketJWT(
+		"organizations/org/apiKeys/key", secret, now, rand.Reader,
+	)
+	if err != nil {
+		t.Fatalf("SignWebSocketJWT() error = %v", err)
+	}
+	header, claims := verifyTestJWT(t, token, &key.PublicKey)
+	if header.KeyID != claims.Subject || claims.URI != "" || claims.ExpiresAt-claims.NotBefore != 120 {
+		t.Fatalf("WebSocket JWT header = %+v, claims = %+v", header, claims)
+	}
+}
+
 func TestSignRESTJWTRejectsNonP256Key(t *testing.T) {
 	t.Parallel()
 

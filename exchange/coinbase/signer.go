@@ -27,9 +27,6 @@ func SignRESTJWT(
 	now time.Time,
 	random io.Reader,
 ) (string, error) {
-	if strings.TrimSpace(keyName) == "" {
-		return "", fmt.Errorf("Coinbase API key name is required")
-	}
 	method = strings.ToUpper(strings.TrimSpace(method))
 	if method == "" || strings.ContainsAny(method, " \t\r\n") {
 		return "", fmt.Errorf("Coinbase JWT request method is invalid")
@@ -40,6 +37,29 @@ func SignRESTJWT(
 	}
 	if !strings.HasPrefix(path, "/") || strings.ContainsAny(path, "?#\r\n") {
 		return "", fmt.Errorf("Coinbase JWT request path is invalid")
+	}
+	return signJWT(keyName, privateKeyPEM, now, random, method+" "+host+path)
+}
+
+// SignWebSocketJWT는 Coinbase WebSocket 메시지용 ES256 JWT를 생성한다.
+func SignWebSocketJWT(
+	keyName string,
+	privateKeyPEM []byte,
+	now time.Time,
+	random io.Reader,
+) (string, error) {
+	return signJWT(keyName, privateKeyPEM, now, random, "")
+}
+
+func signJWT(
+	keyName string,
+	privateKeyPEM []byte,
+	now time.Time,
+	random io.Reader,
+	uri string,
+) (string, error) {
+	if strings.TrimSpace(keyName) == "" {
+		return "", fmt.Errorf("Coinbase API key name is required")
 	}
 	key, err := parseECPrivateKey(privateKeyPEM)
 	if err != nil {
@@ -70,10 +90,10 @@ func SignRESTJWT(
 		Issuer    string `json:"iss"`
 		NotBefore int64  `json:"nbf"`
 		ExpiresAt int64  `json:"exp"`
-		URI       string `json:"uri"`
+		URI       string `json:"uri,omitempty"`
 	}{
 		Subject: keyName, Issuer: "cdp", NotBefore: issuedAt,
-		ExpiresAt: now.Add(jwtLifetime).Unix(), URI: method + " " + host + path,
+		ExpiresAt: now.Add(jwtLifetime).Unix(), URI: uri,
 	})
 	if err != nil {
 		return "", fmt.Errorf("encode Coinbase JWT claims: %w", err)

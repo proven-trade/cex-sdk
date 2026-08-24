@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket 1차 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -11,7 +11,7 @@
 - [Binance Spot WebSocket](docs/exchanges/BINANCE_WEBSOCKET.md)
 - [Bybit V5 Spot·Linear REST](docs/exchanges/BYBIT.md)
 - [OKX V5 Spot·SWAP REST](docs/exchanges/OKX.md)
-- [Coinbase Advanced Trade Spot REST](docs/exchanges/COINBASE.md)
+- [Coinbase Advanced Trade Spot](docs/exchanges/COINBASE.md)
 
 ## 현재 기준
 
@@ -41,7 +41,7 @@
 | OKX V5 REST | Spot·SWAP 공개 시세, 거래 계정, 포지션, 주문 구현됨 |
 | OKX V5 WebSocket | public 시세·business 캔들·private 계정 stream 구현됨 |
 | Coinbase Advanced Trade REST | Spot 공개 시세, 계정, 주문·체결 구현됨 |
-| Coinbase Advanced Trade WebSocket | 예정 |
+| Coinbase Advanced Trade WebSocket | public 시세·private user 주문 stream 구현됨 |
 | 나머지 P1 거래소 | 예정 |
 
 ## 요청별 EIP 선택
@@ -237,7 +237,7 @@ defer session.Close()
 
 세부 계약과 주의사항은 [OKX V5 문서](docs/exchanges/OKX.md)를 참고합니다.
 
-## Coinbase Advanced Trade Spot REST 1차 범위
+## Coinbase Advanced Trade Spot 1차 범위
 
 - 공개 서버 시간, Spot 상품, 현재가, 호가, 최근 체결, 캔들
 - cursor 기반 계정 잔고, 주문 목록, 체결 목록
@@ -246,6 +246,9 @@ defer session.Close()
 - 공개 REST의 1초 cache를 우회하는 `Cache-Control: no-cache`
 - route·계정 단위의 보수적 로컬 요청 제한과 설정별 재정의
 - 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
+- public ticker·ticker batch·체결·호가·캔들·상품 상태 WebSocket
+- private user 주문 WebSocket과 자동 heartbeat
+- 연결별 EIP 고정, 새 JWT 재인증, 재구독
 
 세부 계약과 자격증명 저장 형식은 [Coinbase Advanced Trade 문서](docs/exchanges/COINBASE.md)를 참고합니다.
 
