@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket 1차 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -16,7 +16,7 @@
 - [Kraken Futures REST·WebSocket v1](docs/exchanges/KRAKEN_FUTURES.md)
 - [Bithumb Spot REST·WebSocket](docs/exchanges/BITHUMB.md)
 - [Coinone Spot REST·WebSocket](docs/exchanges/COINONE.md)
-- [Korbit Spot REST](docs/exchanges/KORBIT.md)
+- [Korbit Spot REST·WebSocket](docs/exchanges/KORBIT.md)
 
 ## 현재 기준
 
@@ -56,7 +56,7 @@
 | Coinone Spot REST | public v2 시세, v2.1 잔고·주문·체결 구현됨 |
 | Coinone WebSocket | public 시세·private 주문·자산 stream 구현됨 |
 | Korbit Spot REST | 공개 시세·상품 규칙, 잔고, 주문·체결 구현됨 |
-| Korbit WebSocket | 예정 |
+| Korbit WebSocket | public 시세·private 주문·체결·자산 stream 구현됨 |
 
 ## 요청별 EIP 선택
 
@@ -332,7 +332,7 @@ defer session.Close()
 
 세부 인증·주문·요청 제한·연결 계약은 [Coinone Spot 문서](docs/exchanges/COINONE.md)를 참고합니다.
 
-## Korbit Spot REST 1차 범위
+## Korbit Spot REST·WebSocket 1차 범위
 
 - 서버 시각, 전체 거래쌍과 주문 금액·호가 단위 정책
 - 현재가, 호가, 최근 체결, 캔들
@@ -344,8 +344,13 @@ defer session.Close()
 - `Ratelimit` 응답 헤더를 이용한 로컬 요청 제한 상태 보정
 - 요청별 EIP 선택과 자격증명 route 허용 검사
 - 고유한 `ClientOrderID` 강제와 주문 mutation의 불명확한 결과 분류
+- public ticker·호가·체결 WebSocket
+- private 주문·체결·자산 WebSocket
+- 실행 중 구독 변경, 실패 ack 반영, 재연결 구독 복구
+- 연결별 EIP 고정, 재연결마다 private handshake 재서명
+- public 유실과 private 재연결 구간을 위한 REST 재조정 계약
 
-세부 인증·주문·요청 제한 계약은 [Korbit Spot 문서](docs/exchanges/KORBIT.md)를 참고합니다.
+세부 인증·주문·요청 제한·연결 계약은 [Korbit Spot 문서](docs/exchanges/KORBIT.md)를 참고합니다.
 
 ## 공통 Spot API
 

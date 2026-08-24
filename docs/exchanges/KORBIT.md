@@ -1,6 +1,6 @@
-# Korbit Spot REST 어댑터
+# Korbit Spot REST·WebSocket 어댑터
 
-구현 기준은 코빗 Open API v2와 REST 기본 주소 `https://api.korbit.co.kr`입니다.
+구현 기준은 코빗 Open API v2, REST 기본 주소 `https://api.korbit.co.kr`, public/private WebSocket v2입니다.
 
 ## 전제조건
 
@@ -26,6 +26,8 @@ API Key의 서명 방식과 `Config.SigningMode`가 일치해야 합니다. 기�
 | 주문 생성 | `PlaceOrder` | `POST /v2/orders` |
 | 주문 상세·취소 | `OrderInfo`, `CancelOrder` | `GET`, `DELETE /v2/orders` |
 | 주문·체결 목록 | `OpenOrders`, `OrderHistory`, `MyTrades` | private v2 |
+| 공개 stream | `ticker`, `orderbook`, `trade` | public WebSocket v2 |
+| 개인 stream | `myOrder`, `myTrade`, `myAsset` | private WebSocket v2 |
 
 가격, 수량, 금액, 수수료는 `float64`로 변환하지 않고 문자열로 보존합니다. 각 조회 항목의 `Raw`에는 해당 `data` 항목의 원본 JSON을 보존합니다. 취소 결과의 `Raw`에는 전체 응답 envelope를 보존합니다.
 
@@ -75,8 +77,31 @@ SDK 기본 로컬 제한은 공개 50회/초, private 일반 50회/초, 주문 �
 
 SDK는 HTTP 상태와 `{success,data,error}` envelope를 모두 검사합니다. `NO_BALANCE`, 주문 없음·이미 종료됨, `INVALID_USER_STATUS`, `TRY_AGAIN`, `EXCEED_TIME_WINDOW`, HTTP 429와 5xx를 공통 `trade.APIError` 범주로 변환하며 거래소의 symbolic message는 `ExchangeCode`에 보존합니다. 인증 헤더, Secret과 서명 원문은 오류에 포함하지 않습니다.
 
+## WebSocket
+
+`StreamClient`는 public `wss://ws-api.korbit.co.kr/v2/public`과 private `wss://ws-api.korbit.co.kr/v2/private`를 분리합니다. `PublicStream`과 `PrivateStream`을 생성할 때 선택한 EIP route는 해당 세션의 모든 재연결에서도 고정됩니다.
+
+private handshake는 매 연결 세대마다 Secret Provider를 다시 조회하고 `timestamp`, `recvWindow`를 REST와 같은 방식으로 서명합니다. 서명은 URL query의 마지막 파라미터로 넣고 API Key는 `X-KAPI-KEY` 헤더로 전송합니다. 인증 query가 포함된 endpoint는 오류와 상태 객체에 보존하지 않습니다.
+
+| 구분 | 지원 채널 | 구독 조건 |
+|---|---|---|
+| public | `ticker`, `orderbook`, `trade` | 거래쌍 1개 이상 |
+| private | `myOrder`, `myTrade` | 거래쌍 1개 이상, 선택적 `AccountSeqs` |
+| private | `myAsset` | 선택적 `AccountSeqs`, 거래쌍 없음 |
+
+- 구독과 해제는 각 항목에 단조 증가하는 `requestId`를 넣은 JSON 배열로 전송합니다.
+- `Subscribe`와 `Unsubscribe`로 실행 중 구독을 변경할 수 있고 현재 구독은 재연결 때 자동 복구합니다.
+- 서버의 `success`, `fail`, `error` 제어 응답도 `StreamMessage`로 handler에 전달합니다. 실패한 subscribe ack는 재연결 구독 목록에서 제거합니다.
+- 데이터 이벤트의 `snapshot` 여부와 원본 JSON을 보존하며 `StreamMessage.Decode`로 채널별 타입에 변환합니다.
+- public `tradeId`는 거래쌍별로 증가하지만 연속성을 보장하지 않고 재연결 후 중복 전송될 수 있으므로 소비자가 거래쌍과 `tradeId`로 중복을 제거해야 합니다.
+- public 메시지는 부하 시 유실될 수 있습니다. 호가는 주기적으로 REST `OrderBook` snapshot과 비교하고 재연결 후 새 snapshot을 받은 뒤 다시 신뢰해야 합니다.
+- private 메시지는 연결 중에는 유실 대신 소켓이 강제 종료될 수 있지만 구독 직후 상태 snapshot을 보내지 않습니다. 최초 연결과 재연결마다 `Balances`, `OpenOrders`, `OrderHistory`, `MyTrades`로 주문·체결·잔고를 재조정해야 합니다.
+- WebSocket control ping을 기본 15초마다 보내고 5초 안에 pong이 없으면 같은 route로 재연결합니다.
+
+한 세션의 handler는 수신 순서대로 호출됩니다. 느린 처리는 사용자 애플리케이션에서 별도 bounded queue로 분리해야 하며, 재조정 중 들어온 이벤트와 REST 결과는 주문 ID·체결 ID·하위 계정을 기준으로 병합해야 합니다.
+
 ## 공식 기준
 
 - [Korbit Open API 문서](https://docs.korbit.co.kr/)
 - [Korbit Open API LLM 문서](https://docs.korbit.co.kr/llms.txt)
-
+- [Korbit WebSocket API](https://docs.korbit.co.kr/llms/en/websocket_api.md)
