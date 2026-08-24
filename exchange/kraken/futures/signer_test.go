@@ -47,3 +47,29 @@ func TestSignAuthentRejectsInvalidInput(t *testing.T) {
 		})
 	}
 }
+
+func TestSignChallengeOfficialVector(t *testing.T) {
+	t.Parallel()
+
+	const challenge = "c100b894-1729-464d-ace1-52dbce11db42"
+	secret := []byte("7zxMEF5p/Z8l2p2U7Ghv6x14Af+Fx+92tPgUdVQ748FOIrEoT9bgT+bTRfXc5pz8na+hL/QdrCVG7bh9KpT0eMTm")
+	signature, err := SignChallenge(challenge, secret)
+	if err != nil {
+		t.Fatalf("SignChallenge() error = %v", err)
+	}
+	const expected = "4JEpF3ix66GA2B+ooK128Ift4XQVtc137N9yeg4Kqsn9PI0Kpzbysl9M1IeCEdjg0zl00wkVqcsnG4bmnlMb3A=="
+	if signature != expected {
+		t.Fatalf("SignChallenge() = %q, want %q", signature, expected)
+	}
+}
+
+func TestSignChallengeRejectsInvalidInput(t *testing.T) {
+	t.Parallel()
+
+	if _, err := SignChallenge(" bad\n", []byte("dGVzdA==")); err == nil {
+		t.Fatal("SignChallenge() challenge error = nil")
+	}
+	if _, err := SignChallenge("challenge", []byte("%%")); err == nil {
+		t.Fatal("SignChallenge() secret error = nil")
+	}
+}

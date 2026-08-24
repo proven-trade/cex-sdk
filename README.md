@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot REST·WebSocket과 Futures REST 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket 1차 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -13,7 +13,7 @@
 - [OKX V5 Spot·SWAP REST](docs/exchanges/OKX.md)
 - [Coinbase Advanced Trade Spot](docs/exchanges/COINBASE.md)
 - [Kraken Spot REST·WebSocket v2](docs/exchanges/KRAKEN.md)
-- [Kraken Futures REST](docs/exchanges/KRAKEN_FUTURES.md)
+- [Kraken Futures REST·WebSocket v1](docs/exchanges/KRAKEN_FUTURES.md)
 
 ## 현재 기준
 
@@ -47,7 +47,7 @@
 | Kraken Spot REST | 공개 시세, 계정, 주문·체결 구현됨 |
 | Kraken Spot WebSocket v2 | public 시세·상품 규칙, private 주문·체결·잔고 stream 구현됨 |
 | Kraken Futures REST | 공개 시세·캔들, 지갑, 포지션, 주문·체결 구현됨 |
-| Kraken Futures WebSocket | 예정 |
+| Kraken Futures WebSocket v1 | public 시세·호가·체결, private 지갑·주문·체결·포지션 stream 구현됨 |
 | 나머지 P1 거래소 | 예정 |
 
 ## 요청별 EIP 선택
@@ -274,7 +274,7 @@ defer session.Close()
 
 세부 계약과 제한·연결 정책은 [Kraken Spot 문서](docs/exchanges/KRAKEN.md)를 참고합니다.
 
-## Kraken Futures REST 1차 범위
+## Kraken Futures REST·WebSocket v1 1차 범위
 
 - Futures 상품 규칙, 전체 ticker, 전체 L2 호가, 최근 공개 체결, OHLCV 캔들
 - cash·margin·multi-collateral 지갑, 열린 포지션
@@ -284,8 +284,11 @@ defer session.Close()
 - 단일 클라이언트에서 동시 요청에도 항상 증가하는 millisecond nonce
 - 공개 EIP별 제한과 private 계정별 derivatives point pool 분리
 - 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
+- public ticker·ticker lite·L2 호가·체결 WebSocket
+- private 잔고·체결·미체결 주문·포지션·계정 원장·운영 알림 WebSocket
+- 연결별 EIP 고정, challenge 재발급·재서명, 재연결·재구독
 
-세부 계약과 제한 정책은 [Kraken Futures 문서](docs/exchanges/KRAKEN_FUTURES.md)를 참고합니다.
+세부 계약과 제한·연결 정책은 [Kraken Futures 문서](docs/exchanges/KRAKEN_FUTURES.md)를 참고합니다.
 
 ## 공통 Spot API
 

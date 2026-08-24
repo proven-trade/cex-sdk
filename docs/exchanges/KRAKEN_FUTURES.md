@@ -1,8 +1,8 @@
-# Kraken Futures REST 어댑터
+# Kraken Futures REST·WebSocket v1 어댑터
 
 ## 범위
 
-`exchange/kraken/futures`는 Kraken Derivatives REST v3와 Futures Charts v1의 첫 번째 범위를 제공한다.
+`exchange/kraken/futures`는 Kraken Derivatives REST v3, Futures Charts v1과 WebSocket v1의 첫 번째 범위를 제공한다.
 
 - Futures 상품 규칙과 전체 ticker
 - 단일 상품의 전체 비누적 L2 호가
@@ -11,9 +11,11 @@
 - 열린 포지션, 미체결 주문, 계정 체결
 - 시장가, 지정가, post-only, IOC, FOK 주문 생성
 - 주문 취소와 최근 주문 상태 조회
+- WebSocket ticker, ticker lite, L2 호가, public 체결
+- WebSocket 잔고, 체결, 미체결 주문, 포지션, 계정 원장, 운영 알림
 - 요청별 EIP route 선택
 
-조건부 주문, 주문 수정, 일괄 주문, 레버리지 설정, 자금 이동과 WebSocket은 후속 범위다. 첫 범위 밖의 주문 종류와 잘못된 수량·가격은 전송 전에 검증 오류로 거부한다.
+조건부 주문, 주문 수정, 일괄 주문, 레버리지 설정과 자금 이동은 후속 범위다. 첫 범위 밖의 주문 종류, 잘못된 수량·가격과 지원하지 않는 WebSocket 구독 조합은 전송 전에 검증 오류로 거부한다.
 
 ## 자격증명
 
@@ -116,9 +118,93 @@ private 제한은 EIP를 바꿔도 우회되지 않도록 account ID를 기준�
 
 HTTP 429의 `Retry-After`는 공통 limiter에 반영한다. HTTP 200이어도 `result`가 `error`이거나 `error`·`errors`가 존재하면 인증, 권한, 제한, 잔고 부족, 주문 없음, 거래소 장애 범주로 정규화한다.
 
+## WebSocket v1
+
+public과 private stream은 모두 `wss://futures.kraken.com/ws/v1`을 사용한다. public stream은 다음 feed를 지원한다.
+
+| feed | typed data | 동작 |
+|---|---|---|
+| `ticker` | `StreamTicker` | 전체 ticker snapshot과 최대 초당 1회 update |
+| `ticker_lite` | `StreamTicker` | 축약 ticker update |
+| `book` | `StreamBookSnapshot`, `StreamBookUpdate` | 전체 L2 snapshot 뒤 가격 레벨 delta |
+| `trade` | `StreamTradeSnapshot`, `StreamTrade` | 최근 체결 snapshot 뒤 체결 delta |
+| `heartbeat` | `StreamMessage` | 연결 상태 확인 feed |
+
+```go
+streamClient, err := krakenfutures.NewStreamClient(krakenfutures.StreamClientConfig{
+	Connector:            streamConnector,
+	RESTClient:           client,
+	DefaultEgressRouteID: "seoul-a",
+})
+if err != nil {
+	return err
+}
+
+public, err := streamClient.PublicStream(
+	krakenfutures.PublicStreamRequest{Subscriptions: []krakenfutures.PublicStreamSubscription{
+		{Feed: krakenfutures.PublicFeedTicker, ProductIDs: []string{"PI_XBTUSD"}},
+		{Feed: krakenfutures.PublicFeedBook, ProductIDs: []string{"PI_XBTUSD"}},
+	}},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer public.Close()
+
+err = public.Run(ctx, func(_ context.Context, message krakenfutures.StreamMessage) error {
+	if message.Feed != string(krakenfutures.PublicFeedTicker) {
+		return nil
+	}
+	var ticker krakenfutures.StreamTicker
+	return message.Decode(&ticker)
+})
+```
+
+public stream은 `Subscribe`와 `Unsubscribe`로 구독을 변경할 수 있다. 연결이 끊기면 선택한 route를 유지하면서 현재 구독 목록을 정렬된 순서로 복구한다. `book`과 `trade`의 `seq`가 이어지지 않으면 로컬 상태를 버리고 재연결해 새 snapshot부터 다시 구성해야 한다.
+
+private stream은 다음 feed를 지원한다.
+
+| feed | typed data | 비고 |
+|---|---|---|
+| `balances` | `StreamBalances` | holding, 단일 collateral, multi-collateral wallet |
+| `fills` | `StreamFills` | 전체 또는 선택 상품 체결 |
+| `open_orders` | `StreamOpenOrders` | 미체결 주문 snapshot과 delta |
+| `open_orders_verbose` | `StreamOpenOrders` | 실패한 post-only 주문을 포함한 상세 delta |
+| `open_positions` | `StreamOpenPositions` | 열린 포지션 snapshot |
+| `account_log` | `StreamAccountLog` | wallet·포지션 원장 snapshot과 delta |
+| `notifications_auth` | `StreamNotifications` | 점검·시장·기능 알림 |
+
+```go
+private, err := streamClient.PrivateStream(
+	krakenfutures.PrivateStreamRequest{Subscriptions: []krakenfutures.PrivateStreamSubscription{
+		{Feed: krakenfutures.PrivateFeedFills},
+		{Feed: krakenfutures.PrivateFeedOpenOrders},
+		{Feed: krakenfutures.PrivateFeedOpenPositions},
+		{Feed: krakenfutures.PrivateFeedBalances},
+	}},
+	trade.WithEgressRoute("seoul-b"),
+)
+```
+
+private 연결은 매번 API key로 새 challenge를 요청한다. challenge 원문을 SHA-256으로 해시하고 Base64 decode한 Secret으로 HMAC-SHA-512 서명한 뒤 Base64로 인코딩한다. 모든 private 구독에는 API key, 원 challenge와 서명을 함께 보낸다. 재연결 시 자격증명을 다시 조회하고 새 challenge를 서명한 뒤 전체 feed를 다시 구독한다.
+
+Secret 조회 전에 API key의 route 허용 목록과 `read` 권한을 검사한다. 최초 handshake와 모든 재연결은 같은 EIP route를 사용한다. 거래소가 private 구독 승인 응답에서 인증 필드를 되돌려주더라도 `StreamMessage.Raw`에서는 `api_key`, `original_challenge`, `signed_challenge`를 제거한다. 자격증명 바이트와 송신 JSON은 사용 직후 덮어쓴다.
+
+공식 연결 관리 지침은 60초보다 자주 ping을 보내도록 요구한다. 기본 ping 간격은 30초이며 `PingInterval`로 조정할 수 있다. challenge 응답 제한 시간은 기본 10초이고 `ChallengeTimeout`으로 설정한다.
+
 ## 공식 문서
 
 - [Futures REST 인증](https://docs.kraken.com/api/docs/guides/futures-rest/)
+- [Futures WebSocket 개요](https://docs.kraken.com/exchange/api-reference/futures-websocket)
+- [Futures WebSocket challenge](https://docs.kraken.com/exchange/api-reference/futures-websocket/challenge)
+- [Futures WebSocket challenge 서명](https://support.kraken.com/articles/360022635652-sign-challenge-websocket-api-derivatives)
+- [Futures WebSocket ticker](https://docs.kraken.com/exchange/api-reference/futures-websocket/ticker)
+- [Futures WebSocket book](https://docs.kraken.com/exchange/api-reference/futures-websocket/book)
+- [Futures WebSocket fills](https://docs.kraken.com/exchange/api-reference/futures-websocket/fills)
+- [Futures WebSocket open orders](https://docs.kraken.com/exchange/api-reference/futures-websocket/open_orders)
+- [Futures WebSocket open positions](https://docs.kraken.com/exchange/api-reference/futures-websocket/open_position)
+- [Futures WebSocket balances](https://docs.kraken.com/exchange/api-reference/futures-websocket/balances)
 - [상품 목록](https://docs.kraken.com/api/docs/futures-api/trading/get-instruments)
 - [Ticker](https://docs.kraken.com/api/docs/futures-api/trading/get-tickers)
 - [호가](https://docs.kraken.com/api/docs/futures-api/trading/get-orderbook)

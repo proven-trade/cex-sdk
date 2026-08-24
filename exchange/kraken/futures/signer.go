@@ -33,3 +33,25 @@ func SignAuthent(postData, nonce, endpointPath string, encodedSecret []byte) (st
 	}
 	return base64.StdEncoding.EncodeToString(mac.Sum(nil)), nil
 }
+
+// SignChallenge는 Kraken Futures private WebSocket challenge 서명을 생성한다.
+func SignChallenge(challenge string, encodedSecret []byte) (string, error) {
+	if challenge == "" || strings.TrimSpace(challenge) != challenge ||
+		strings.ContainsAny(challenge, "\r\n") {
+		return "", fmt.Errorf("Kraken Futures WebSocket challenge is invalid")
+	}
+	secret, err := base64.StdEncoding.DecodeString(string(encodedSecret))
+	if err != nil {
+		return "", fmt.Errorf("decode Kraken Futures API secret: %w", err)
+	}
+	if len(secret) == 0 {
+		return "", fmt.Errorf("Kraken Futures API secret is required")
+	}
+	defer clear(secret)
+	digest := sha256.Sum256([]byte(challenge))
+	mac := hmac.New(sha512.New, secret)
+	if _, err := mac.Write(digest[:]); err != nil {
+		return "", fmt.Errorf("write Kraken Futures WebSocket HMAC payload: %w", err)
+	}
+	return base64.StdEncoding.EncodeToString(mac.Sum(nil)), nil
+}
