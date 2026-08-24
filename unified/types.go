@@ -121,7 +121,7 @@ type PublicTrade struct {
 	Timestamp int64
 }
 
-// CandleInterval은 P0 거래소가 공통 지원하는 캔들 구간이다.
+// CandleInterval은 공통 Spot 어댑터가 지원하는 캔들 구간이다.
 type CandleInterval string
 
 const (

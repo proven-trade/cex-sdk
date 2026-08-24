@@ -88,16 +88,18 @@ type PlaceOrderRequest struct {
 	Tags          string      `json:"tags,omitempty"`
 }
 
-// OrderInfoRequest는 거래소 주문 ID와 거래쌍으로 주문 한 건을 조회한다.
+// OrderInfoRequest는 거래소 주문 ID 또는 사용자 주문 ID와 거래쌍으로 주문 한 건을 조회한다.
 type OrderInfoRequest struct {
-	OrderID string
-	Symbol  string
+	OrderID       string
+	ClientOrderID string
+	Symbol        string
 }
 
-// CancelOrderRequest는 거래소 주문 ID와 거래쌍으로 주문을 취소한다.
+// CancelOrderRequest는 거래소 주문 ID 또는 사용자 주문 ID와 거래쌍으로 주문을 취소한다.
 type CancelOrderRequest struct {
-	OrderID string
-	Symbol  string
+	OrderID       string
+	ClientOrderID string
+	Symbol        string
 }
 
 // OpenOrdersRequest는 페이지 기반 미체결 주문 조회 조건이다.
@@ -231,7 +233,7 @@ func (request PlaceOrderRequest) validate() error {
 }
 
 func (request OrderInfoRequest) validate() error {
-	if err := validateOrderID(request.OrderID); err != nil {
+	if err := validateOrderIdentity(request.OrderID, request.ClientOrderID); err != nil {
 		return err
 	}
 	return validateSymbol(request.Symbol)
@@ -242,7 +244,7 @@ func (request OrderInfoRequest) values() url.Values {
 }
 
 func (request CancelOrderRequest) validate() error {
-	if err := validateOrderID(request.OrderID); err != nil {
+	if err := validateOrderIdentity(request.OrderID, request.ClientOrderID); err != nil {
 		return err
 	}
 	return validateSymbol(request.Symbol)
@@ -286,6 +288,19 @@ func validateSymbol(symbol string) error {
 func validateOrderID(orderID string) error {
 	if !orderIDPattern.MatchString(orderID) {
 		return validationError("invalid order ID")
+	}
+	return nil
+}
+
+func validateOrderIdentity(orderID, clientOrderID string) error {
+	if (orderID == "") == (clientOrderID == "") {
+		return validationError("exactly one of order ID or client order ID is required")
+	}
+	if orderID != "" {
+		return validateOrderID(orderID)
+	}
+	if !clientOrderIDPattern.MatchString(clientOrderID) {
+		return validationError("invalid client order ID")
 	}
 	return nil
 }

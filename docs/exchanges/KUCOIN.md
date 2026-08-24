@@ -1,6 +1,6 @@
 # KuCoin Classic Spot REST·WebSocket 어댑터
 
-구현 기준은 KuCoin Classic Spot REST·WebSocket API와 REST 기본 주소 `https://api.kucoin.com`입니다. 2026년에 추가된 Unified Trading Account API와 별개인 Classic 계정용 어댑터이며, 공통 Spot API는 후속 단계 범위입니다.
+구현 기준은 KuCoin Classic Spot REST·WebSocket API와 REST 기본 주소 `https://api.kucoin.com`입니다. 2026년에 추가된 Unified Trading Account API와 별개인 Classic 계정용 어댑터입니다. `NewUnifiedSpot`은 Classic native API를 프로젝트 공통 Spot 계약으로 변환합니다.
 
 ## 전제조건
 
@@ -27,8 +27,9 @@ private API를 사용하려면 `credential.Provider`가 반환하는 `credential
 | 캔들 | `Candles` | `GET /api/v1/market/candles` |
 | 계정 | `Accounts` | `GET /api/v1/accounts` |
 | 주문 생성 | `PlaceOrder` | `POST /api/v1/hf/orders` |
-| 주문 상세·취소 | `OrderInfo`, `CancelOrder` | `GET`, `DELETE /api/v1/hf/orders/{orderId}` |
+| 주문 상세·취소 | `OrderInfo`, `CancelOrder` | `GET`, `DELETE /api/v1/hf/orders/{orderId}`, `/client-order/{clientOid}` |
 | 미체결 주문 | `OpenOrders` | `GET /api/v1/hf/orders/active/page` |
+| 미체결 거래쌍 | `OpenOrderSymbols` | `GET /api/v1/hf/orders/active/symbols` |
 | public 연결 token | `PublicWebSocketToken` | `POST /api/v1/bullet-public` |
 | private 연결 token | `PrivateWebSocketToken` | `POST /api/v1/bullet-private` |
 
@@ -122,6 +123,22 @@ token REST 요청과 WebSocket handshake는 모두 세션에서 선택한 같은
 
 token과 `WebSocketToken.Raw`에는 짧은 수명의 접속 자격이 포함됩니다. 로그, 메트릭 label, 오류 문자열에 저장하지 않아야 합니다. public feed도 재연결 구간에는 이벤트 유실이 가능하며 private 주문·잔고는 연결 복구 뒤 REST 조회로 최종 상태를 재조정해야 합니다.
 
+## 공통 Spot API
+
+`NewUnifiedSpot`으로 생성한 어댑터는 `unified.SpotClient`의 마켓, 현재가, 호가, 최근 체결, 캔들, 잔고, 주문 생성·조회·취소·미체결 목록 계약을 모두 구현합니다.
+
+- 공통 `BASE/QUOTE` 마켓은 KuCoin의 `BASE-QUOTE` symbol로 변환합니다.
+- 공통 호가 깊이는 최대 16이므로 KuCoin 20단계 snapshot을 받은 뒤 요청 깊이만 남깁니다.
+- 공개 체결 nanosecond 시각과 캔들 second 시각은 공통 Unix millisecond로 변환합니다.
+- 잔고는 주문에 사용되는 `trade` 계정만 조회하고 `available`과 `holds`를 각각 사용 가능·잠금 수량으로 매핑합니다.
+- 시장가 매수의 공통 `QuoteAmount`는 KuCoin `funds`, 시장가 매도의 `Quantity`는 `size`로 변환합니다.
+- 공통 post-only 지정가는 KuCoin GTC와 `postOnly=true` 조합으로 전송합니다.
+- 공통 주문에 `ClientOrderID`가 없으면 `[0-9A-Za-z_-]{1,40}` 범위 안에서 `proven-` 접두사의 무작위 ID를 생성합니다.
+- 거래소 주문 ID와 사용자 주문 ID 중 하나로 주문 조회·취소가 가능합니다.
+- 전체 마켓 미체결 조회는 전체 상품을 순회하지 않고 `OpenOrderSymbols`로 대상 symbol을 얻은 뒤 각 페이지를 끝까지 조회합니다.
+
+공통 주문 상태는 `isActive`, `cancelExist`, `size`, `dealSize`를 함께 사용합니다. 활성 주문의 체결 수량이 0이면 `new`, 0보다 크면 `partially_filled`이며, 비활성 취소 주문은 `canceled`, 전체 수량이 체결된 주문은 `filled`로 변환합니다. 거래소 응답만으로 확정할 수 없는 상태는 `unknown`으로 남깁니다.
+
 ## 주문 안전 계약
 
 - `ClientOrderID`는 모든 주문에서 필수이며 `[0-9A-Za-z_-]{1,40}` 형식으로 검증합니다.
@@ -144,6 +161,9 @@ KuCoin은 HTTP 200에서도 `code`가 `200000`이 아닌 논리 오류를 반환
 - [KuCoin Spot Market Data](https://www.kucoin.com/docs-new/rest/spot-trading/market-data/get-all-symbols)
 - [KuCoin Add Order](https://www.kucoin.com/docs-new/rest/spot-trading/orders/add-order)
 - [KuCoin Open Orders By Page](https://www.kucoin.com/docs-new/rest/spot-trading/orders/get-open-orders-by-page)
+- [KuCoin Get Order By ClientOid](https://www.kucoin.com/docs-new/rest/spot-trading/orders/get-order-by-clientoid)
+- [KuCoin Cancel Order By ClientOid](https://www.kucoin.com/docs-new/rest/spot-trading/orders/cancel-order-by-clientoid)
+- [KuCoin Symbols With Open Orders](https://www.kucoin.com/docs-new/rest/spot-trading/orders/get-symbols-with-open-order)
 - [KuCoin Public WebSocket Token](https://www.kucoin.com/docs-new/websocket-api/base-info/get-public-token-spot-margin)
 - [KuCoin Private WebSocket Token](https://www.kucoin.com/docs-new/websocket-api/base-info/get-private-token-spot-margin)
 - [KuCoin WebSocket Ticker](https://www.kucoin.com/docs-new/3470063w0)

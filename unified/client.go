@@ -7,7 +7,7 @@ import (
 	"github.com/proven-trade/proven-trade-sdk/model"
 )
 
-// SpotClient는 P0 거래소가 공통으로 제공하는 Spot 거래 기능이다.
+// SpotClient는 지원 거래소가 공통으로 제공하는 Spot 거래 기능이다.
 type SpotClient interface {
 	Exchange() model.ExchangeID
 	Markets(context.Context, ...trade.RequestOption) ([]MarketInfo, error)
