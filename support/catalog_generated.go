@@ -143,10 +143,10 @@ var catalogData = []ProductSupport{
 	{
 		Exchange: model.ExchangeID("gateio"), DisplayName: "Gate.io", Tier: "P2",
 		Product: ProductID("spot"), ProductName: "Spot",
-		REST: Status("planned"), WebSocketPublic: Status("planned"), WebSocketPrivate: Status("planned"),
-		Unified: Status("planned"), AutomatedTests: Status("planned"),
+		REST: Status("implemented"), WebSocketPublic: Status("planned"), WebSocketPrivate: Status("planned"),
+		Unified: Status("planned"), AutomatedTests: Status("implemented"),
 		LiveReadSmoke: Status("planned"), LiveTradeSmoke: Status("planned"),
-		Docs: []string{},
+		Docs: []string{"docs/exchanges/GATEIO.md"},
 	},
 	{
 		Exchange: model.ExchangeID("gateio"), DisplayName: "Gate.io", Tier: "P2",

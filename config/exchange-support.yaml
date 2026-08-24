@@ -262,14 +262,14 @@
       "tier": "P2",
       "product_id": "spot",
       "product_name": "Spot",
-      "rest": "planned",
+      "rest": "implemented",
       "websocket_public": "planned",
       "websocket_private": "planned",
       "unified": "planned",
-      "automated_tests": "planned",
+      "automated_tests": "implemented",
       "live_read_smoke": "planned",
       "live_trade_smoke": "planned",
-      "docs": []
+      "docs": ["docs/exchanges/GATEIO.md"]
     },
     {
       "exchange_id": "gateio",
