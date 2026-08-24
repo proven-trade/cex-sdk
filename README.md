@@ -23,7 +23,7 @@
 | private IP별 HTTP 연결 풀과 요청별 EIP 선택 | 구현됨 |
 | 다차원 요청 제한기 | 구현됨 |
 | Binance Spot REST | 공개 시세, 계정, 주문 생성·조회·취소·목록 구현됨 |
-| Bitget | 다음 구현 대상 |
+| Bitget v3 UTA | Spot·USDT-M 공개 시세, 자산, 포지션, 주문 구현됨 |
 | Upbit | 다음 구현 대상 |
 | 파생상품·WebSocket·통합 API | 예정 |
 
@@ -112,3 +112,15 @@ go run ./cmd/egressdiag \
 - 주문 mutation의 불명확한 네트워크 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
 
 현재 지원 범위는 개발 중인 초기 API이며 아직 안정 버전 호환성을 보장하지 않습니다.
+
+## Bitget v3 UTA 1차 범위
+
+- Spot·USDT-M Futures 상품 정보, 현재가, 호가, 최근 체결, 캔들
+- 통합 계정 자산과 USDT-M Futures 포지션
+- Spot·USDT-M Futures 주문 생성, 조회, 취소, 미체결 목록, 주문 이력
+- HMAC SHA-256 및 Base64 서명과 Passphrase 인증
+- 전체 `6000/IP/분` 및 endpoint별 `IP 또는 UID/초` 요청 제한
+- Demo Trading의 `paptrading: 1` 헤더 옵션
+- 불명확한 주문 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
+
+세부 계약과 주의사항은 [Bitget v3 UTA 문서](docs/exchanges/BITGET.md)를 참고합니다.
