@@ -123,7 +123,44 @@ err = market.Run(ctx, func(ctx context.Context, message usdm.MarketStreamMessage
 })
 ```
 
-typed 공개 이벤트는 aggregate trade, 마크가, 캔들, 24시간 ticker, 최우선 호가와 호가 갱신을 제공합니다. 추가 native 이벤트도 `Payload`와 `Raw`에서 손실 없이 decode할 수 있습니다. 로컬 오더북은 `StreamDepth`의 update ID 연결성을 검사하고 gap 발생 시 REST snapshot으로 다시 구성해야 합니다.
+typed 공개 이벤트는 aggregate trade, 마크가, 캔들, 24시간 ticker, 최우선 호가와 호가 갱신을 제공합니다. 추가 native 이벤트도 `Payload`와 `Raw`에서 손실 없이 decode할 수 있습니다.
+
+## 로컬 오더북과 같은 EIP 복구
+
+`LocalOrderBook`은 diff depth WebSocket을 먼저 열어 이벤트를 버퍼링하고, 같은 `EgressRouteID`로 `/fapi/v1/depth` snapshot을 조회합니다. REST와 WebSocket route가 다르거나 부분 호가 구독만 있으면 네트워크 작업 전에 거부합니다.
+
+```go
+depth, err := usdm.DiffDepthStream("BTCUSDT", 100*time.Millisecond)
+if err != nil {
+	return err
+}
+market, err := streams.MarketStream(
+	usdm.MarketStreamRequest{Subscriptions: []usdm.StreamSubscription{depth}},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer market.Close()
+
+book, err := usdm.NewLocalOrderBook(usdm.LocalOrderBookConfig{
+	RESTClient:    restClient,
+	Symbol:        "BTCUSDT",
+	EgressRouteID: "seoul-b",
+	ViewDepth:     20,
+})
+if err != nil {
+	return err
+}
+
+err = book.Run(ctx, market, func(ctx context.Context, view usdm.LocalOrderBookView) error {
+	return handleBook(view)
+})
+```
+
+공식 sequence 규칙에 따라 snapshot의 `lastUpdateId`보다 `u`가 작은 이벤트만 버리고, 첫 처리 이벤트가 `U <= lastUpdateId <= u`인지 확인합니다. 동기화 후에는 모든 새 이벤트의 `pu`가 직전 `u`와 같은지 검사합니다. `pu` 불일치나 WebSocket 연결 세대 변경이 감지되면 기존 장부를 폐기하고 같은 EIP에서 snapshot을 다시 받아 복구합니다. 수량은 절대값으로 반영하고 0이면 해당 가격 단계를 삭제합니다.
+
+snapshot 기본 limit은 1,000이고 `ViewDepth` 기본값은 20입니다. `SynchronizationID`는 성공한 초기화 횟수, `GapCount`는 감지한 sequence gap 횟수이며 `Generation`은 WebSocket 재연결 세대를 나타냅니다. 동기화 중 이벤트가 `MaxBufferedEvents`를 넘으면 `ErrDepthBufferOverflow`로 안전하게 종료합니다.
 
 ## private User Data Stream
 
@@ -166,7 +203,7 @@ err = userData.Run(ctx, func(ctx context.Context, message usdm.UserDataStreamMes
 - 서버 protocol ping 응답과 client ping은 공통 `stream.Session`이 처리합니다.
 - `Run` context가 세션 수명을 결정하며 `trade.WithTimeout`은 WebSocket 생성 옵션으로 허용하지 않습니다.
 - 구독 제어 응답은 이벤트와 섞여 전달되므로 `MarketStreamMessage.Response`를 먼저 확인합니다.
-- 실시간 호가의 sequence gap 복구와 장시간 soak test는 애플리케이션 운영 절차에 포함해야 합니다.
+- 로컬 오더북 자동 gap 복구와 별개로 장시간 soak test는 애플리케이션 운영 절차에 포함해야 합니다.
 
 ## 공식 기준 문서
 
@@ -175,5 +212,6 @@ err = userData.Run(ctx, func(ctx context.Context, message usdm.UserDataStreamMes
 - [Binance USDⓈ-M Account REST API](https://developers.binance.com/en/docs/catalog/core-trading-derivatives-trading-usd-s-m-futures/api/rest-api/account)
 - [Binance USDⓈ-M Market Data REST API](https://developers.binance.com/en/docs/catalog/core-trading-derivatives-trading-usd-s-m-futures/api/rest-api/market-data)
 - [Binance USDⓈ-M WebSocket 연결](https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/websocket-market-streams/Connect)
+- [Binance USDⓈ-M 로컬 오더북 관리](https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/websocket-market-streams/How-to-manage-a-local-order-book-correctly)
 - [Binance USDⓈ-M WebSocket 분리 진입점 변경](https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/websocket-market-streams/Important-WebSocket-Change-Notice)
 - [Binance USDⓈ-M User Data Stream](https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/user-data-streams)

@@ -43,7 +43,7 @@
 | 다차원 요청 제한기 | 구현됨 |
 | Binance Spot REST | 공개 시세, 계정, 주문 생성·조회·취소·목록 구현됨 |
 | Binance USDⓈ-M Futures REST | 공개 시세, 계정 V3, 포지션 V3, 주문 구현됨 |
-| Binance USDⓈ-M Futures WebSocket | 분리 public·market 시세와 listenKey private stream 구현됨 |
+| Binance USDⓈ-M Futures WebSocket | 분리 public·market 시세, listenKey private stream·로컬 오더북 자동 `pu` 갭 복구 구현됨 |
 | Bitget v3 UTA | Spot·USDT-M 공개 시세, 자산, 포지션, 주문 구현됨 |
 | Upbit Spot REST | 공개 시세, 잔고, 주문 생성·조회·취소·목록 구현됨 |
 | 공통 Spot API·적합성 테스트 | Binance·Bitget·Upbit·Bybit·OKX·Coinbase·Kraken·Bithumb·Coinone·Korbit·KuCoin·Gate.io 구현됨 |
@@ -207,6 +207,7 @@ defer session.Close()
 - public·market 동적 구독과 같은 EIP 재연결 시 구독 자동 복구
 - REST listenKey 발급·갱신과 private 계정·포지션·주문·마진콜 stream
 - listenKey 만료·갱신 실패 시 같은 EIP로 새 키를 발급하는 자동 재연결
+- 같은 EIP의 REST snapshot과 diff depth를 결합한 로컬 오더북·`pu` sequence gap 자동 복구
 
 세부 계약과 주의사항은 [Binance USDⓈ-M Futures 문서](docs/exchanges/BINANCE_USDM.md)를 참고합니다.
 

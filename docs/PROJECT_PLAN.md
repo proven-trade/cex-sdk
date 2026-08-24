@@ -531,6 +531,7 @@ const (
 - Binance Spot public/private stream 구현 완료
 - Binance Spot 동일 EIP REST snapshot·diff depth 로컬 오더북과 sequence gap·재연결 복구 구현 완료
 - Binance USDⓈ-M Futures 분리 public/market 및 listenKey private stream 구현 완료
+- Binance USDⓈ-M Futures 동일 EIP REST snapshot·diff depth 로컬 오더북과 `pu` gap·재연결 복구 구현 완료
 - Bitget v3 UTA public/private stream 구현 완료
 - Bitget Spot books snapshot·pseq/seq 로컬 오더북과 동일 EIP 재연결 기반 gap 복구 구현 완료
 - Upbit Spot public/private stream 구현 완료

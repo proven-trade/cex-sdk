@@ -251,6 +251,27 @@ func (market *MarketStream) Close() error { return market.session.Close() }
 // Generation은 성공한 public·market 연결 세대 번호를 반환한다.
 func (market *MarketStream) Generation() uint64 { return market.session.Generation() }
 
+// EgressRouteID는 public·market 연결과 재연결에 고정된 송신 경로를 반환한다.
+func (market *MarketStream) EgressRouteID() transport.EgressRouteID {
+	return market.session.EgressRouteID()
+}
+
+func (market *MarketStream) hasDiffDepthStream(symbol string) bool {
+	prefix := strings.ToLower(symbol) + "@depth"
+	market.stateMu.Lock()
+	defer market.stateMu.Unlock()
+	for _, subscription := range market.subscriptions {
+		if subscription.Route != StreamRoutePublic {
+			continue
+		}
+		if subscription.Name == prefix || subscription.Name == prefix+"@100ms" ||
+			subscription.Name == prefix+"@500ms" {
+			return true
+		}
+	}
+	return false
+}
+
 func (market *MarketStream) resubscribe(
 	ctx context.Context,
 	connection corestream.Connection,
