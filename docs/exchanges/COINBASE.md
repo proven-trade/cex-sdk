@@ -8,7 +8,7 @@
 - 공개 Spot 상품 목록과 단건 상품
 - 공개 호가, 최근 체결, 캔들
 - 거래 계정 목록과 단건 계정
-- 시장가 IOC, 지정가 GTC 주문 생성
+- 시장가 IOC, 지정가 GTC·SOR IOC·FOK 주문 생성
 - 최대 100건 주문 일괄 취소
 - 주문 단건과 cursor 기반 주문 목록
 - cursor 기반 체결 목록
@@ -88,10 +88,12 @@ book, err := client.OrderBook(
 
 ## 주문
 
-첫 범위는 다음 두 설정을 타입으로 분리한다.
+첫 범위는 다음 네 설정을 타입으로 분리한다.
 
 - `MarketMarketIOC`: `QuoteSize` 또는 `BaseSize` 중 정확히 하나
 - `LimitLimitGTC`: `BaseSize`, `LimitPrice`, 선택적 `PostOnly`
+- `SORLimitIOC`: `BaseSize`, `LimitPrice`
+- `LimitLimitFOK`: `BaseSize`, `LimitPrice`
 
 ```go
 reference, err := client.PlaceOrder(

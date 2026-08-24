@@ -92,12 +92,19 @@ func (client *Client) CancelOrders(
 		return nil, err
 	}
 	var result struct {
-		Results []CancelResult `json:"results"`
+		Results []json.RawMessage `json:"results"`
 	}
 	if err := client.decodeSuccess(response, commonexchange.OperationMutation, &result); err != nil {
 		return nil, err
 	}
-	return result.Results, nil
+	items := make([]CancelResult, len(result.Results))
+	for index, raw := range result.Results {
+		if err := json.Unmarshal(raw, &items[index]); err != nil {
+			return nil, client.decodeBodyError(response, commonexchange.OperationMutation, err)
+		}
+		items[index].Raw = cloneBytes(raw)
+	}
+	return items, nil
 }
 
 // OrderInfo는 주문 ID로 단일 주문을 조회한다.

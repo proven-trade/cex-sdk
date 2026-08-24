@@ -228,6 +228,20 @@ func (configuration OrderConfiguration) validate() error {
 			return validationError("limit order size and price must be positive decimal strings")
 		}
 	}
+	if configuration.SORLimitIOC != nil {
+		count++
+		limit := configuration.SORLimitIOC
+		if !isPositiveDecimal(limit.BaseSize) || !isPositiveDecimal(limit.LimitPrice) {
+			return validationError("SOR IOC order size and price must be positive decimal strings")
+		}
+	}
+	if configuration.LimitLimitFOK != nil {
+		count++
+		limit := configuration.LimitLimitFOK
+		if !isPositiveDecimal(limit.BaseSize) || !isPositiveDecimal(limit.LimitPrice) {
+			return validationError("FOK order size and price must be positive decimal strings")
+		}
+	}
 	if count != 1 {
 		return validationError("exactly one supported order configuration is required")
 	}

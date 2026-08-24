@@ -165,10 +165,24 @@ type LimitGTCConfiguration struct {
 	PostOnly   bool   `json:"post_only,omitempty"`
 }
 
+// SORLimitIOCConfiguration은 즉시 체결 후 잔량을 취소하는 지정가 주문이다.
+type SORLimitIOCConfiguration struct {
+	BaseSize   string `json:"base_size"`
+	LimitPrice string `json:"limit_price"`
+}
+
+// LimitFOKConfiguration은 전량 즉시 체결되지 않으면 취소하는 지정가 주문이다.
+type LimitFOKConfiguration struct {
+	BaseSize   string `json:"base_size"`
+	LimitPrice string `json:"limit_price"`
+}
+
 // OrderConfiguration은 지원하는 Spot 주문 종류 중 하나를 담는다.
 type OrderConfiguration struct {
-	MarketMarketIOC *MarketIOCConfiguration `json:"market_market_ioc,omitempty"`
-	LimitLimitGTC   *LimitGTCConfiguration  `json:"limit_limit_gtc,omitempty"`
+	MarketMarketIOC *MarketIOCConfiguration   `json:"market_market_ioc,omitempty"`
+	LimitLimitGTC   *LimitGTCConfiguration    `json:"limit_limit_gtc,omitempty"`
+	SORLimitIOC     *SORLimitIOCConfiguration `json:"sor_limit_ioc,omitempty"`
+	LimitLimitFOK   *LimitFOKConfiguration    `json:"limit_limit_fok,omitempty"`
 }
 
 // Order는 주문 조회와 user stream에서 공유하는 주문 필드다.
@@ -214,9 +228,10 @@ type OrderReference struct {
 
 // CancelResult는 일괄 취소 항목별 접수 결과다.
 type CancelResult struct {
-	Success       bool   `json:"success"`
-	FailureReason string `json:"failure_reason"`
-	OrderID       string `json:"order_id"`
+	Success       bool            `json:"success"`
+	FailureReason string          `json:"failure_reason"`
+	OrderID       string          `json:"order_id"`
+	Raw           json.RawMessage `json:"-"`
 }
 
 // Fill은 계정의 주문 체결 한 건이다.
