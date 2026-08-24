@@ -1,4 +1,4 @@
-# Bithumb Spot REST 어댑터
+# Bithumb Spot REST·WebSocket 어댑터
 
 구현 기준은 빗썸 Developer Docs 2.1.5와 REST 기본 주소 `https://api.bithumb.com`입니다. 현재 빗썸 주문 API는 v1과 v2가 함께 사용되므로 SDK도 endpoint별 버전을 그대로 유지합니다.
 
@@ -69,9 +69,60 @@ SDK 기본 로컬 제한은 공식 안내의 공개 150회/초, private 140회/�
 
 주문 생성·취소의 전송 오류, 응답 본문 읽기 실패, 성공 응답 JSON 파싱 실패, HTTP 5xx는 실제 처리 여부를 단정할 수 없습니다. SDK는 자동 재시도하지 않고 `trade.ErrUnknownExecutionState`로 반환합니다. 고유한 `ClientOrderID`를 사용하고 불명확한 결과는 `OrderInfo`로 확인해야 합니다.
 
+## WebSocket
+
+`StreamClient`는 현재 공식 분리 규칙에 따라 public v1과 private v2 endpoint를 사용합니다.
+
+| 연결 | Endpoint | 스트림 |
+|---|---|---|
+| Public v1 | `wss://ws-api.bithumb.com/websocket/v1` | `ticker`, `trade`, `orderbook` |
+| Private v2 | `wss://ws-api.bithumb.com/websocket/v2/private` | `myOrder`, `myAsset` |
+
+```go
+streams, err := bithumb.NewStreamClient(bithumb.StreamClientConfig{
+	Connector:             connector,
+	Credentials:           descriptor,
+	CredentialProvider:    secretProvider,
+	DefaultEgressRouteID: "seoul-a",
+})
+if err != nil {
+	return err
+}
+
+public, err := streams.PublicStream(
+	bithumb.StreamRequest{
+		Types: []bithumb.StreamDataType{
+			{Type: "ticker", Codes: []string{"KRW-BTC"}, OnlyRealtime: true},
+			{Type: "orderbook", Codes: []string{"KRW-BTC"}, Level: "1000"},
+		},
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer public.Close()
+```
+
+public DEFAULT 응답은 `StreamTicker`, `StreamTrade`, `StreamOrderBook`으로 decode할 수 있습니다. private v2 DEFAULT 응답은 의미가 분리된 `MyOrderEvent`의 `order_*`, `trade_*`, 누적 체결·수수료·취소 필드와 `MyAssetEvent`의 자산 목록으로 제공합니다. `SIMPLE` 형식도 envelope를 분류하지만 축약 필드는 `StreamMessage.Payload`에서 사용자 구조체로 decode해야 합니다.
+
+private 연결은 REST와 같은 HS256 JWT를 `Authorization` handshake 헤더에 넣되 query hash는 포함하지 않습니다. 모든 연결과 재연결은 세션에서 선택한 EIP route에 고정되며, 재연결마다 다음 작업을 새로 수행합니다.
+
+1. Secret Provider에서 Access Key와 Secret Key 조회
+2. 새 nonce와 Unix millisecond timestamp로 JWT 생성
+3. private v2 endpoint 연결
+4. 새 ticket을 포함한 현재 구독 요청 전송
+5. 사용한 자격증명 byte slice 파기
+
+고정 ticket을 직접 지정하지 않으면 public/private 모두 재연결마다 새 ticket을 생성합니다. private 요청은 생성 시 read 권한과 route 허용 목록을 Secret 조회보다 먼저 검사합니다. `myOrder`는 `Codes`를 생략해 전체 마켓을 구독할 수 있고 `myAsset`은 codes를 받지 않습니다.
+
+서버 idle timeout은 약 120초입니다. SDK 기본값은 30초마다 WebSocket PING frame을 보내고 10초 안에 PONG을 받지 못하면 같은 route로 재연결합니다. 공식 연결 제한은 public/private 공통 IP당 초당 10회이며, 반복 초과 시 10분간 차단될 수 있습니다. 한 프로세스에 여러 세션이 있으면 연결·재연결 합계를 운영 메트릭으로 감시해야 합니다.
+
+서버의 `permessage-deflate`는 선택 기능입니다. 현재 공통 connector는 압축을 요청하지 않으며 서버는 같은 JSON을 비압축으로 전송합니다. Private v1은 2026년 9월 30일 종료 예정이므로 SDK는 deprecated endpoint를 제공하지 않습니다.
+
 ## 현재 제외 범위
 
-이번 REST 단계에는 주문 가능 정보, 일·주·월 캔들, 다건 주문·취소·조회, TWAP, 입출금과 WebSocket을 포함하지 않습니다. WebSocket은 연결별 EIP 고정과 private 인증을 포함한 별도 단계로 구현합니다.
+주문 가능 정보, 일·주·월 캔들, 다건 주문·취소·조회, TWAP, 입출금은 현재 범위에 포함하지 않습니다.
 
 ## 공식 기준 문서
 
@@ -83,3 +134,8 @@ SDK 기본 로컬 제한은 공식 안내의 공개 150회/초, private 140회/�
 - [주문 취소 접수](https://apidocs.bithumb.com/reference/주문-취소-접수)
 - [대기 주문 목록 조회](https://apidocs.bithumb.com/reference/대기-주문-목록-조회)
 - [종료 주문 목록 조회](https://apidocs.bithumb.com/reference/종료-주문-목록-조회)
+- [WebSocket 기본 정보](https://apidocs.bithumb.com/reference/기본-정보)
+- [WebSocket 연결 관리](https://apidocs.bithumb.com/reference/연결-관리)
+- [Private v2 MyOrder](https://apidocs.bithumb.com/reference/내-주문-및-체결-myorder)
+- [Private v2 MyAsset](https://apidocs.bithumb.com/reference/내-자산-myasset)
+- [Private v2 마이그레이션](https://apidocs.bithumb.com/reference/private-v2-마이그레이션-가이드)

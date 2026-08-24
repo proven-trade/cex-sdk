@@ -549,7 +549,7 @@ const (
 - Kraken Spot WebSocket v2 public/private 구현 완료
 - Kraken Futures WebSocket v1 public/private 구현 완료
 - Bithumb Spot REST 구현 완료
-- Bithumb public/private WebSocket 구현 예정
+- Bithumb public v1/private v2 WebSocket 구현 완료
 - Coinone Spot REST/WebSocket 구현 예정
 - Korbit Spot REST/WebSocket 구현 예정
 - 지원 매트릭스와 운영 수요 순으로 거래소 추가
