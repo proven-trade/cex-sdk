@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST, Upbit Spot REST 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST 1차 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -31,7 +31,8 @@
 | 공통 Spot API·적합성 테스트 | Binance·Bitget·Upbit 구현됨 |
 | 공통 WebSocket 연결 계층 | route 고정, 재연결, 재구독 훅, heartbeat 구현됨 |
 | Binance Spot WebSocket | public market·private user data stream 구현됨 |
-| Bitget·Upbit WebSocket·P1 거래소 | 예정 |
+| Bitget v3 UTA WebSocket | Spot·USDT Futures public, UTA private stream 구현됨 |
+| Upbit WebSocket·P1 거래소 | 예정 |
 
 ## 요청별 EIP 선택
 
