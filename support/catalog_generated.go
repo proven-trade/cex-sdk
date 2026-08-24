@@ -104,7 +104,7 @@ var catalogData = []ProductSupport{
 		Exchange: model.ExchangeID("bithumb"), DisplayName: "Bithumb", Tier: "P1",
 		Product: ProductID("spot"), ProductName: "Spot",
 		REST: Status("implemented"), WebSocketPublic: Status("implemented"), WebSocketPrivate: Status("implemented"),
-		Unified: Status("planned"), AutomatedTests: Status("implemented"),
+		Unified: Status("implemented"), AutomatedTests: Status("implemented"),
 		LiveReadSmoke: Status("pending"), LiveTradeSmoke: Status("pending"),
 		Docs: []string{"docs/exchanges/BITHUMB.md"},
 	},

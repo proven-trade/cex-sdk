@@ -120,6 +120,12 @@ private 연결은 REST와 같은 HS256 JWT를 `Authorization` handshake 헤더�
 
 서버의 `permessage-deflate`는 선택 기능입니다. 현재 공통 connector는 압축을 요청하지 않으며 서버는 같은 JSON을 비압축으로 전송합니다. Private v1은 2026년 9월 30일 종료 예정이므로 SDK는 deprecated endpoint를 제공하지 않습니다.
 
+## 공통 Spot API
+
+`NewUnifiedSpot`은 native 클라이언트를 `unified.SpotClient`로 변환합니다. 공통 `BTC/KRW` 마켓은 Bithumb의 `KRW-BTC`로 변환하며, 시장가 매수의 `QuoteAmount`는 `order_type=price`의 `price`, 시장가 매도의 `Quantity`는 `order_type=market`의 `volume`으로 전송합니다.
+
+미체결 주문은 v2 `next_key` cursor가 끝날 때까지 조회하며 모든 페이지에 같은 요청별 EIP를 전달합니다. Bithumb v1 주문 상세의 `uuid`와 v2 주문 생성·목록·취소의 `order_id` 차이는 공통 `Order.ID`로 정규화합니다.
+
 ## 현재 제외 범위
 
 주문 가능 정보, 일·주·월 캔들, 다건 주문·취소·조회, TWAP, 입출금은 현재 범위에 포함하지 않습니다.
