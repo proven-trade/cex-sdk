@@ -100,6 +100,14 @@ private handshake는 매 연결 세대마다 Secret Provider를 다시 조회하
 
 한 세션의 handler는 수신 순서대로 호출됩니다. 느린 처리는 사용자 애플리케이션에서 별도 bounded queue로 분리해야 하며, 재조정 중 들어온 이벤트와 REST 결과는 주문 ID·체결 ID·하위 계정을 기준으로 병합해야 합니다.
 
+## 공통 Spot API
+
+`NewUnifiedSpot`은 native 클라이언트를 `unified.SpotClient`로 변환합니다. 공통 `BTC/KRW`는 Korbit의 소문자 `btc_krw`로 변환하며, 시장가 매수의 `QuoteAmount`는 `amt`, 시장가 매도의 `Quantity`는 `qty`로 전송합니다. `ClientOrderID`를 생략하면 36자 이내의 암호학적 난수 ID를 생성합니다.
+
+Korbit에 native 3분봉이 없으므로 1분봉을 `start`와 `end`로 최대 200개씩 나눠 같은 요청별 EIP에서 조회하고 공통 epoch 기준으로 합성합니다. 전체 마켓 미체결 조회는 public `CurrencyPairs` 뒤 각 거래쌍의 private `OpenOrders`를 같은 EIP에서 순회합니다.
+
+공통 잠금 잔고는 `tradeInUse + withdrawalInUse`를 decimal 문자열 정밀도로 계산합니다. `pending`, `open`, 부분 체결, 완료, 부분 체결 후 취소, 만료 상태는 공통 주문 상태로 변환합니다.
+
 ## 공식 기준
 
 - [Korbit Open API 문서](https://docs.korbit.co.kr/)

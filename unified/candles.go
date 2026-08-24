@@ -8,6 +8,22 @@ import (
 	"time"
 )
 
+// AddDecimals는 하나 이상의 음이 아닌 decimal 문자열을 정밀도 손실 없이 더한다.
+func AddDecimals(values ...string) (string, error) {
+	if len(values) == 0 {
+		return "", validationError("at least one decimal value is required")
+	}
+	total := scaledDecimal{integer: big.NewInt(0)}
+	for _, value := range values {
+		parsed, err := parseScaledDecimal(value)
+		if err != nil {
+			return "", fmt.Errorf("decode decimal sum value: %w", err)
+		}
+		total = addScaledDecimals(total, parsed)
+	}
+	return total.String(), nil
+}
+
 // AggregateCandles는 작은 구간의 캔들을 더 큰 epoch 정렬 구간으로 합성한다.
 // 입력 순서와 중복 시각에 관계없이 처리하며 결과는 최신 구간부터 반환한다.
 func AggregateCandles(source []Candle, interval time.Duration, limit int) ([]Candle, error) {

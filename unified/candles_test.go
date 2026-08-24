@@ -44,3 +44,18 @@ func TestAggregateCandlesRejectsInvalidInput(t *testing.T) {
 		t.Fatal("invalid decimal error = nil")
 	}
 }
+
+func TestAddDecimalsPreservesPrecision(t *testing.T) {
+	t.Parallel()
+
+	got, err := AddDecimals("100000.00000001", "0.00000009", "2.50")
+	if err != nil {
+		t.Fatalf("AddDecimals() error = %v", err)
+	}
+	if got != "100002.50000010" {
+		t.Fatalf("AddDecimals() = %q", got)
+	}
+	if _, err := AddDecimals("1e-8"); err == nil {
+		t.Fatal("AddDecimals() error = nil")
+	}
+}

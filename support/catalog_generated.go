@@ -120,7 +120,7 @@ var catalogData = []ProductSupport{
 		Exchange: model.ExchangeID("korbit"), DisplayName: "Korbit", Tier: "P1",
 		Product: ProductID("spot"), ProductName: "Spot",
 		REST: Status("implemented"), WebSocketPublic: Status("implemented"), WebSocketPrivate: Status("implemented"),
-		Unified: Status("planned"), AutomatedTests: Status("implemented"),
+		Unified: Status("implemented"), AutomatedTests: Status("implemented"),
 		LiveReadSmoke: Status("pending"), LiveTradeSmoke: Status("pending"),
 		Docs: []string{"docs/exchanges/KORBIT.md"},
 	},
