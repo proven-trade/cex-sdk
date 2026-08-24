@@ -169,6 +169,46 @@ public typed data는 다음 구조체로 decode할 수 있습니다.
 
 캔들은 `CandleStreamArgument`로 인자를 만들고 `StreamEndpointBusiness` 세션에서 구독해야 합니다. public과 business 인자를 같은 연결에 섞으면 생성 시 거부합니다. 동적 `Subscribe`와 `Unsubscribe`가 성공하면 현재 목록을 갱신하고 재연결 때 같은 endpoint와 EIP route에서 복구합니다.
 
+## Spot·SWAP 로컬 오더북
+
+`LocalOrderBook`은 public `books`, `books5`, `bbo-tbt` channel을 지원합니다. `books`는 최초 400단계 snapshot 뒤의 증분 update를 적용하고, `books5`와 `bbo-tbt`는 각각 5단계와 1단계의 완전 snapshot으로 매번 장부를 교체합니다.
+
+```go
+books, err := okx.PublicStreamArgument("books", "BTC-USDT")
+if err != nil {
+	return err
+}
+public, err := streams.PublicStream(
+	okx.PublicStreamRequest{
+		Endpoint:  okx.StreamEndpointPublic,
+		Arguments: []okx.StreamArgument{books},
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer public.Close()
+
+book, err := okx.NewLocalOrderBook(okx.LocalOrderBookConfig{
+	Channel:       "books",
+	InstrumentID:  "BTC-USDT",
+	ViewDepth:     20,
+	EgressRouteID: "seoul-b",
+})
+if err != nil {
+	return err
+}
+
+err = book.Run(ctx, public, func(ctx context.Context, view okx.LocalOrderBookView) error {
+	return handleBook(view)
+})
+```
+
+`books` update의 `prevSeqId`가 직전 `seqId`와 다르면 장부를 폐기하고 WebSocket을 같은 EIP route로 다시 연결해 새 snapshot을 받습니다. 약 60초 동안 변경이 없을 때 오는 빈 heartbeat update의 `prevSeqId == seqId`와 정비 중 `seqId`가 감소하는 공식 예외는 정상 처리합니다. 수량 0은 해당 가격 단계를 삭제합니다.
+
+2026년 6월 23일부터 JSON `books` 계열의 `checksum`은 폐지되어 항상 0이므로 SDK는 무결성 판단에 사용하지 않고 `prevSeqId`·`seqId`만 검증합니다. `SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 재연결을 유발한 sequence 이상 횟수, `Generation`은 WebSocket 연결 세대를 나타냅니다. channel·상품·EIP가 public stream과 일치하지 않으면 연결 전에 거부합니다.
+
 private stream은 연결마다 Unix 초 timestamp와 `timestamp + "GET" + "/users/self/verify"` 원문으로 새 서명을 만들어 login합니다.
 
 ```go
@@ -212,4 +252,5 @@ OKX는 연결당 login·subscribe·unsubscribe 요청을 합해 시간당 480회
 - [OKX V5 Place Order](https://www.okx.com/docs-v5/en/#order-book-trading-trade-post-place-order)
 - [OKX V5 WebSocket](https://www.okx.com/docs-v5/en/#overview-websocket)
 - [OKX V5 Public Channels](https://www.okx.com/docs-v5/en/#order-book-trading-market-data-ws-channel)
+- [OKX Order Book checksum 폐지 안내](https://www.okx.com/en-gb/help/okx-order-book-channels-checksum-field-deprecation)
 - [OKX V5 Private Channels](https://www.okx.com/docs-v5/en/#order-book-trading-account-websocket)

@@ -274,6 +274,25 @@ func (public *PublicStream) Close() error { return public.managed.session.Close(
 // Generation은 성공한 public stream 연결 세대 번호를 반환한다.
 func (public *PublicStream) Generation() uint64 { return public.managed.session.Generation() }
 
+// EgressRouteID는 public 연결과 재연결에 고정된 송신 경로를 반환한다.
+func (public *PublicStream) EgressRouteID() transport.EgressRouteID {
+	return public.managed.session.EgressRouteID()
+}
+
+func (public *PublicStream) hasArgument(argument StreamArgument) bool {
+	if public.endpoint != StreamEndpointPublic {
+		return false
+	}
+	public.managed.mu.Lock()
+	defer public.managed.mu.Unlock()
+	_, exists := public.managed.arguments[streamArgumentKey(argument)]
+	return exists
+}
+
+func (public *PublicStream) reconnect() error {
+	return public.managed.session.Reconnect()
+}
+
 // PrivateStream은 OKX private channel 연결을 관리한다.
 type PrivateStream struct {
 	managed *managedStream

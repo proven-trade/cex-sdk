@@ -56,7 +56,7 @@
 | Bybit V5 REST | Spot·Linear 공개 시세, 통합 잔고, 포지션, 주문 구현됨 |
 | Bybit V5 WebSocket | Spot·Linear public, Unified private stream·snapshot/delta 로컬 오더북 자동 복구 구현됨 |
 | OKX V5 REST | Spot·SWAP 공개 시세, 거래 계정, 포지션, 주문 구현됨 |
-| OKX V5 WebSocket | public 시세·business 캔들·private 계정 stream 구현됨 |
+| OKX V5 WebSocket | public 시세·business 캔들·private 계정 stream·로컬 오더북 자동 복구 구현됨 |
 | Coinbase Advanced Trade REST | Spot 공개 시세, 계정, 주문·체결 구현됨 |
 | Coinbase Advanced Trade WebSocket | public 시세·private user 주문 stream 구현됨 |
 | Kraken Spot REST | 공개 시세, 계정, 주문·체결 구현됨 |
@@ -279,6 +279,7 @@ defer session.Close()
 - public ticker·호가·체결, business 캔들 WebSocket
 - private 계정·잔고/포지션·주문 WebSocket
 - 연결별 EIP 고정, application heartbeat, 재로그인·재구독
+- `books` prevSeqId/seqId 로컬 오더북과 `books5`·`bbo-tbt` snapshot, 같은 EIP 자동 갭 복구
 
 세부 계약과 주의사항은 [OKX V5 문서](docs/exchanges/OKX.md)를 참고합니다.
 
