@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Classic Spot REST·WebSocket과 Futures REST 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Classic Spot·Futures REST·WebSocket 1차 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -19,7 +19,7 @@
 - [Coinone Spot REST·WebSocket](docs/exchanges/COINONE.md)
 - [Korbit Spot REST·WebSocket](docs/exchanges/KORBIT.md)
 - [KuCoin Classic Spot REST·WebSocket](docs/exchanges/KUCOIN.md)
-- [KuCoin Classic Futures REST](docs/exchanges/KUCOIN_FUTURES.md)
+- [KuCoin Classic Futures REST·WebSocket](docs/exchanges/KUCOIN_FUTURES.md)
 
 ## 현재 기준
 
@@ -65,6 +65,7 @@
 | KuCoin Classic Spot REST | 상품 규칙, 공개 시세, 계정, HF 주문 생성·조회·취소·미체결 목록 구현됨 |
 | KuCoin Classic Spot WebSocket | public 시세·호가·체결, private 주문·잔고 stream 구현됨 |
 | KuCoin Classic Futures REST | 계약 규칙, 공개 시세, 계정·포지션, 주문·체결 구현됨 |
+| KuCoin Classic Futures WebSocket | public 시세·호가·캔들·체결, private 주문·잔고·포지션 stream 구현됨 |
 
 ## 요청별 EIP 선택
 
@@ -380,7 +381,7 @@ defer session.Close()
 
 세부 인증·주문·요청 제한·연결 계약은 [KuCoin Classic Spot 문서](docs/exchanges/KUCOIN.md)를 참고합니다.
 
-## KuCoin Classic Futures REST 1차 범위
+## KuCoin Classic Futures REST·WebSocket 1차 범위
 
 - 전체·단일 계약 규칙, 현재가, 20·100단계 호가, 최근 체결, 캔들
 - 결제 통화별 계정 요약과 열린 포지션
@@ -391,6 +392,11 @@ defer session.Close()
 - `gw-ratelimit-*` 응답 헤더를 이용한 로컬 요청 제한 상태 보정
 - 요청별 EIP 선택과 자격증명 route 허용 검사
 - 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
+- public Ticker V2·증분 호가·5/50단계 호가·캔들·체결 WebSocket
+- private 주문·잔고·전체 또는 단일 계약 포지션 WebSocket
+- 실행 중 구독 변경, 실패 응답 반영, 재연결 구독 복구
+- 연결별 EIP 고정과 재연결마다 같은 route를 통한 token 재발급
+- KuCoin JSON ping/pong heartbeat와 서버가 발급한 연결 제한 검증
 
 세부 인증·주문·요청 제한 계약은 [KuCoin Classic Futures 문서](docs/exchanges/KUCOIN_FUTURES.md)를 참고합니다.
 

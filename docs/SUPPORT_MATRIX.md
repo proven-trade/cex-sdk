@@ -22,7 +22,7 @@
 | P1 | Coinone | Spot | 구현 | 구현 | 구현 | 구현 | 구현 | 대기 | 대기 | [문서](exchanges/COINONE.md) |
 | P1 | Korbit | Spot | 구현 | 구현 | 구현 | 구현 | 구현 | 대기 | 대기 | [문서](exchanges/KORBIT.md) |
 | P2 | KuCoin | Spot | 구현 | 구현 | 구현 | 구현 | 구현 | 대기 | 대기 | [문서](exchanges/KUCOIN.md) |
-| P2 | KuCoin | Futures | 구현 | 예정 | 예정 | 해당 없음 | 구현 | 예정 | 예정 | [문서](exchanges/KUCOIN_FUTURES.md) |
+| P2 | KuCoin | Futures | 구현 | 구현 | 구현 | 해당 없음 | 구현 | 예정 | 예정 | [문서](exchanges/KUCOIN_FUTURES.md) |
 | P2 | Gate.io | Spot | 예정 | 예정 | 예정 | 예정 | 예정 | 예정 | 예정 | — |
 | P2 | Gate.io | Futures | 예정 | 예정 | 예정 | 해당 없음 | 예정 | 예정 | 예정 | — |
 

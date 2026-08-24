@@ -1,6 +1,6 @@
-# KuCoin Classic Futures REST 어댑터
+# KuCoin Classic Futures REST·WebSocket 어댑터
 
-구현 기준은 KuCoin Classic Futures REST API와 기본 주소 `https://api-futures.kucoin.com`입니다. Go 패키지는 `exchange/kucoin/futures`이며, Spot용 `exchange/kucoin`과 독립된 native API를 제공합니다.
+구현 기준은 KuCoin Classic Futures REST·WebSocket API와 REST 기본 주소 `https://api-futures.kucoin.com`입니다. Go 패키지는 `exchange/kucoin/futures`이며, Spot용 `exchange/kucoin`과 독립된 native API를 제공합니다.
 
 ## 전제조건
 
@@ -31,6 +31,8 @@ private API를 사용하려면 `credential.Provider`가 반환하는 `credential
 | 주문 상세·취소 | `OrderInfo`, `CancelOrder` | `GET`, `DELETE /api/v1/orders/{orderId}` 또는 취소용 `/client-order/{clientOid}` |
 | 미체결 주문 | `OpenOrders` | `GET /api/v1/orders?status=active` |
 | 체결 이력 | `Fills` | `GET /api/v1/fills` |
+| public 연결 token | `PublicWebSocketToken` | `POST /api/v1/bullet-public` |
+| private 연결 token | `PrivateWebSocketToken` | `POST /api/v1/bullet-private` |
 
 가격, 금액, 비율은 `float64`로 변환하지 않고 `Decimal` 문자열로 보존합니다. 객체와 배열 항목의 `Raw`에는 해당 `data` 원본 JSON을 보존합니다. 캔들은 `timestamp, open, high, low, close, volume, turnover` 순서이며, `From`과 `To`를 지정할 때 최대 500개 구간을 허용합니다.
 
@@ -81,6 +83,69 @@ VIP 0 기준 기본 로컬 quota는 각 30초 구간의 Public 2,000 weight와 F
 
 Public 풀은 IP 기준이므로 요청별 EIP가 각각 독립된 bucket을 사용합니다. Futures private 풀은 UID 기준이므로 EIP를 바꿔도 quota가 늘어나지 않습니다. 다중 EIP는 public 처리량 분산과 API Key IP 허용 목록·장애 격리를 위한 기능이며 private 제한 우회 용도가 아닙니다.
 
+public token 발급은 Public pool에서 10 weight, private token 발급은 Futures pool에서 10 weight를 사용합니다. WebSocket 재연결마다 새 token을 발급하므로 연결 장애가 반복될 때 REST 요청 제한도 함께 소비됩니다.
+
+## WebSocket
+
+`StreamClient`는 연결 전에 Futures REST token을 발급하고 KuCoin이 반환한 `instanceServers` 중 사용 가능한 WebSocket endpoint를 선택합니다. production에서는 `wss`만 허용하며 `AllowInsecureWebSocket`은 로컬 테스트에서만 사용해야 합니다.
+
+| 구분 | `StreamChannel` | KuCoin topic |
+|---|---|---|
+| public 최우선 호가 | `StreamChannelTicker` | `/contractMarket/tickerV2:{symbol}` |
+| public 증분 호가 | `StreamChannelLevel2` | `/contractMarket/level2:{symbol}` |
+| public 5단계 호가 | `StreamChannelOrderBook5` | `/contractMarket/level2Depth5:{symbol}` |
+| public 50단계 호가 | `StreamChannelOrderBook50` | `/contractMarket/level2Depth50:{symbol}` |
+| public 캔들 | `StreamChannelCandles` | `/contractMarket/limitCandle:{symbol}_{interval}` |
+| public 체결 | `StreamChannelTrade` | `/contractMarket/execution:{symbol}` |
+| private 주문 | `StreamChannelOrders` | `/contractMarket/tradeOrders` 또는 `:{symbol}` |
+| private 잔고 | `StreamChannelBalance` | `/contractAccount/wallet` |
+| private 포지션 | `StreamChannelPositions` | `/contract/positionAll` 또는 `/contract/position:{symbol}` |
+
+public 구독은 계약 symbol을 요구하고 캔들만 `StreamCandleInterval`을 함께 지정합니다. private 주문·포지션은 symbol을 생략하면 전체 계약을 받고 지정하면 해당 계약만 받습니다. private 잔고는 symbol을 받지 않습니다. 연결당 구독은 최대 300개로 제한하고 subscribe·unsubscribe 명령을 최소 100ms 간격으로 전송합니다. 실행 중 `Subscribe`와 `Unsubscribe`로 구독을 바꿀 수 있으며, 오류 응답을 받은 변경은 로컬 복구 목록에서 되돌립니다.
+
+```go
+streamClient, err := futures.NewStreamClient(futures.StreamClientConfig{
+	Connector:            connector,
+	RESTClient:           client,
+	DefaultEgressRouteID: "seoul-a",
+})
+if err != nil {
+	return err
+}
+
+public, err := streamClient.PublicStream(
+	futures.StreamRequest{Subscriptions: []futures.StreamSubscription{
+		{Channel: futures.StreamChannelTicker, Symbol: "XBTUSDTM"},
+		{
+			Channel:  futures.StreamChannelCandles,
+			Symbol:   "XBTUSDTM",
+			Interval: futures.StreamCandle1Minute,
+		},
+	}},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer public.Close()
+
+return public.Run(ctx, func(_ context.Context, message futures.StreamMessage) error {
+	if message.Channel != futures.StreamChannelTicker {
+		return nil
+	}
+	var ticker futures.StreamTicker
+	return message.Decode(&ticker)
+})
+```
+
+token REST 요청과 WebSocket handshake는 모두 세션에서 선택한 같은 EIP route를 사용합니다. 연결된 세션은 route를 바꾸지 않으며 재연결 시에도 같은 route에서 token과 `connectId`를 새로 만들고 현재 구독을 복구합니다. private 세션은 token 발급 전에 자격증명의 route 허용 목록과 읽기 권한을 검사하므로 허용되지 않은 route에서는 Secret을 조회하지 않습니다.
+
+기본 heartbeat는 15초마다 `{type:"ping"}`을 보내고 9초 안에 같은 ID의 `{type:"pong"}`을 기다립니다. 이 값은 token 응답의 `pingInterval`보다 짧고 `pingTimeout`보다 길지 않아야 합니다. 서버가 더 엄격한 값을 반환하면 연결을 시작하지 않고 설정 오류를 반환합니다.
+
+`StreamChannelLevel2`는 단일 `sequence`가 포함된 원본 증분 feed입니다. SDK가 로컬 호가장을 자동으로 조립하지는 않습니다. 먼저 이벤트를 임시 저장한 다음 별도 전체 호가 REST snapshot을 기준으로 연속 sequence만 적용해야 합니다. sequence 공백이나 재연결이 발생하면 기존 캐시를 버리고 snapshot부터 다시 조정해야 합니다. 5·50단계 snapshot channel은 전체 호가 복구용이 아닙니다.
+
+token과 `WebSocketToken.Raw`에는 짧은 수명의 접속 자격이 포함됩니다. 로그, 메트릭 label, 오류 문자열에 저장하지 않아야 합니다. public feed도 재연결 구간에는 이벤트 유실이 가능하며 private 주문·잔고·포지션은 연결 복구 뒤 REST 조회로 최종 상태를 재조정해야 합니다.
+
 ## 주문 안전 계약
 
 - `ClientOrderID`는 모든 주문에서 필수이며 `[0-9A-Za-z_-]{1,40}` 형식으로 검증합니다.
@@ -106,5 +171,13 @@ KuCoin은 HTTP 200에서도 `code`가 `200000`이 아닌 논리 오류를 반환
 - [KuCoin Futures Account](https://www.kucoin.com/docs-new/rest/account-info/account-funding/get-account-futures)
 - [KuCoin Futures Position List](https://www.kucoin.com/docs-new/rest/futures-trading/positions/get-position-list)
 - [KuCoin Futures Add Order](https://www.kucoin.com/docs-new/rest/futures-trading/orders/add-order)
+- [KuCoin Futures Public WebSocket Token](https://www.kucoin.com/docs-new/websocket-api/base-info/get-public-token-futures)
+- [KuCoin Futures Private WebSocket Token](https://www.kucoin.com/docs-new/websocket-api/base-info/get-private-token-futures)
+- [KuCoin Futures Ticker V2](https://www.kucoin.com/docs-new/3470080w0)
+- [KuCoin Futures Incremental Order Book](https://www.kucoin.com/docs-new/3470164w0)
+- [KuCoin Futures Klines](https://www.kucoin.com/docs-new/3470086w0)
+- [KuCoin Futures Orders](https://www.kucoin.com/docs-new/3470090w0)
+- [KuCoin Futures Balance](https://www.kucoin.com/docs-new/3470092w0)
+- [KuCoin Futures Positions](https://www.kucoin.com/docs-new/3470093w0)
 - [KuCoin Futures Error Codes](https://www.kucoin.com/docs-new/error-code/futures)
 - [KuCoin Change Log](https://www.kucoin.com/docs-new/change-log)

@@ -135,7 +135,7 @@ var catalogData = []ProductSupport{
 	{
 		Exchange: model.ExchangeID("kucoin"), DisplayName: "KuCoin", Tier: "P2",
 		Product: ProductID("futures"), ProductName: "Futures",
-		REST: Status("implemented"), WebSocketPublic: Status("planned"), WebSocketPrivate: Status("planned"),
+		REST: Status("implemented"), WebSocketPublic: Status("implemented"), WebSocketPrivate: Status("implemented"),
 		Unified: Status("not_applicable"), AutomatedTests: Status("implemented"),
 		LiveReadSmoke: Status("planned"), LiveTradeSmoke: Status("planned"),
 		Docs: []string{"docs/exchanges/KUCOIN_FUTURES.md"},
