@@ -1,0 +1,114 @@
+# OKX V5 Spot·SWAP REST 어댑터
+
+## 범위
+
+`exchange/okx` 패키지는 OKX V5의 다음 REST 기능을 제공합니다.
+
+| 상품 | 공개 시세 | 거래 계정 | 포지션 | 주문 |
+|---|---:|---:|---:|---:|
+| `SPOT` | 지원 | 지원 | 해당 없음 | 현금 거래 지원 |
+| `SWAP` | 지원 | 지원 | 지원 | 교차·격리 마진 지원 |
+
+공개 시세는 상품 규칙, 전체 ticker, 호가, 최근 체결, 캔들을 포함합니다. 주문은 생성, 단건 조회, 취소, 미체결 목록, 최근 7일 이력을 포함합니다. Spot margin, 선물, 옵션, 일괄 주문, 조건부 주문, 자산 이동은 아직 범위에 포함하지 않습니다.
+
+## 클라이언트와 지역별 endpoint
+
+기본 REST endpoint는 `https://www.okx.com`입니다. 계정 등록 지역에 따라 OKX가 별도 도메인을 요구하면 공식 안내에 맞는 주소를 `BaseURL`로 지정해야 합니다. SDK는 지역 제한을 우회하거나 임의의 대체 도메인을 선택하지 않습니다.
+
+```go
+client, err := okx.New(okx.Config{
+	Executor:             executor,
+	Credentials:          descriptor,
+	CredentialProvider:   secretProvider,
+	DefaultEgressRouteID: "seoul-a",
+	BaseURL:              "https://www.okx.com",
+	DemoTrading:          true,
+})
+if err != nil {
+	return err
+}
+```
+
+`DemoTrading: true`이면 모든 요청에 `x-simulated-trading: 1` 헤더를 추가합니다. 운영 키와 Demo 키 및 endpoint 설정을 섞지 않아야 합니다.
+
+## 인증과 시간 보정
+
+private API는 `credential.Material`의 다음 세 값을 사용합니다.
+
+| 필드 | OKX 값 |
+|---|---|
+| `APIKey` | API Key |
+| `SecretKey` | Secret Key |
+| `Passphrase` | API Key 생성 시 설정한 Passphrase |
+
+서명 원문은 다음과 같습니다.
+
+```text
+timestamp + uppercase(method) + requestPathWithSortedQuery + exactJSONBody
+```
+
+HMAC SHA-256 결과를 Base64로 인코딩해 `OK-ACCESS-SIGN`에 넣습니다. `OK-ACCESS-TIMESTAMP`는 UTC ISO-8601 밀리초 형식을 사용합니다. 서명은 요청 제한 대기가 끝난 뒤 최종 query와 JSON 바이트를 대상으로 생성합니다.
+
+`ServerTime`은 요청 왕복 시간의 중간값과 서버 timestamp를 비교해 서명 시계 오프셋을 갱신합니다. 운영 환경에서도 NTP 또는 chrony 동기화가 전제입니다.
+
+## 계정 모드와 주문
+
+Spot 현금 주문은 `InstrumentTypeSpot`과 `TradeModeCash`를 사용합니다. Spot 시장가 주문은 `TargetCurrencyBase` 또는 `TargetCurrencyQuote`로 `sz`의 기준 통화를 명시할 수 있습니다.
+
+SWAP 주문은 `TradeModeCross` 또는 `TradeModeIsolated`를 사용합니다. 계정이 long/short 포지션 모드이면 `PositionSideLong` 또는 `PositionSideShort`를 지정하고, net 모드이면 비워 두거나 `PositionSideNet`을 사용합니다. SDK는 계정의 실제 포지션 모드를 임의로 변경하지 않으므로 계정 설정과 요청이 맞지 않으면 OKX 오류를 그대로 정규화해 반환합니다.
+
+```go
+reference, err := client.PlaceOrder(
+	ctx,
+	okx.PlaceOrderRequest{
+		InstrumentType: okx.InstrumentTypeSwap,
+		InstrumentID:   "BTC-USDT-SWAP",
+		TradeMode:      okx.TradeModeCross,
+		ClientOrderID:  "strategya0001",
+		Side:           okx.SideBuy,
+		PositionSide:   okx.PositionSideLong,
+		OrderType:      okx.OrderTypeLimit,
+		Quantity:       "1",
+		Price:          "60000",
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+```
+
+가격과 수량은 `float64`가 아닌 decimal 문자열입니다. `ClientOrderID`는 OKX 규칙에 맞게 영문자와 숫자로 최대 32자까지 허용합니다.
+
+## 요청 제한
+
+SDK limiter는 공식 제한의 실제 scope를 분리합니다.
+
+| endpoint 종류 | 로컬 bucket | 제한 |
+|---|---|---:|
+| 상품 규칙 | route + 상품 유형 | 20/2초 |
+| 전체 ticker | route | 20/2초 |
+| 호가 | route | 40/2초 |
+| 최근 체결 | route | 100/2초 |
+| 캔들 | route | 40/2초 |
+| 잔고·포지션 | 계정 | 10/2초 |
+| 주문 생성·취소·단건 조회 | 계정 + 상품 + HTTP method | 60/2초 |
+| 미체결 주문 | 계정 | 60/2초 |
+| 최근 7일 주문 이력 | 계정 | 40/2초 |
+
+EIP route를 바꾸면 IP scope만 분리됩니다. 사용자 ID 또는 사용자+상품 scope 제한은 같은 계정 bucket을 공유하므로 다중 EIP를 계정 제한 우회 수단으로 사용하지 않습니다.
+
+## 안전한 주문 실패
+
+OKX는 top-level `code`가 `0`이어도 주문 접수 항목의 `sCode`로 실패를 반환할 수 있습니다. SDK는 두 수준을 모두 검사합니다.
+
+주문 생성·취소의 전송 타임아웃, 연결 단절, 읽을 수 없는 응답, HTTP 5xx, `50004`·`50013`·`50026`·`51149`처럼 실행 여부가 불명확한 결과는 `trade.ErrUnknownExecutionState`로 반환하며 자동 재시도하지 않습니다. 고유한 `ClientOrderID`로 `OrderInfo` 또는 향후 private order stream을 조회해 최종 상태를 조정해야 합니다.
+
+## 요청별 EIP 선택
+
+모든 메서드는 `trade.RequestOption`을 받습니다. 옵션이 없으면 클라이언트 기본 route를 사용하고, `trade.WithEgressRoute`를 지정하면 해당 요청만 선택한 private IP 전용 연결 풀로 보냅니다. 자격증명에 허용되지 않은 route는 Secret 조회 전에 거부됩니다.
+
+## 공식 기준 문서
+
+- [OKX V5 API 안내와 인증](https://www.okx.com/docs-v5/en/#overview-rest-authentication)
+- [OKX V5 Public Data](https://www.okx.com/docs-v5/en/#public-data-rest-api)
+- [OKX V5 Market Data](https://www.okx.com/docs-v5/en/#order-book-trading-market-data)
+- [OKX V5 Trading Account](https://www.okx.com/docs-v5/en/#trading-account-rest-api)
+- [OKX V5 Place Order](https://www.okx.com/docs-v5/en/#order-book-trading-trade-post-place-order)

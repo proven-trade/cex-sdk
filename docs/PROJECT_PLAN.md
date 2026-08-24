@@ -161,7 +161,8 @@ proven-trade-sdk/
 │   ├── binance/              # Spot / USD-M 어댑터
 │   ├── bitget/               # Spot / USDT-M 어댑터
 │   ├── upbit/                # Spot 어댑터
-│   └── bybit/                # Spot / Linear 어댑터
+│   ├── bybit/                # Spot / Linear 어댑터
+│   └── okx/                  # Spot / SWAP 어댑터
 ├── model/                    # 공통 타입, capability, decimal 규칙
 ├── transport/                # net.Dialer, http.Transport, timeout, retry
 ├── stream/                   # route 고정 WebSocket 연결과 재연결
@@ -539,6 +540,8 @@ const (
 
 - Bybit V5 Spot·Linear REST 구현 완료
 - Bybit V5 Spot·Linear public/private WebSocket 구현 완료
+- OKX V5 Spot·SWAP REST 구현 완료
+- OKX V5 Spot·SWAP public/private WebSocket 구현
 - 지원 매트릭스와 운영 수요 순으로 거래소 추가
 - 어댑터 생성 템플릿 및 문서 자동 생성
 - deprecated API 감지 및 변경 알림 프로세스

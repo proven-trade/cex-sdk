@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST 1차 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -10,10 +10,11 @@
 - [공통 WebSocket 연결 계층](docs/STREAMS.md)
 - [Binance Spot WebSocket](docs/exchanges/BINANCE_WEBSOCKET.md)
 - [Bybit V5 Spot·Linear REST](docs/exchanges/BYBIT.md)
+- [OKX V5 Spot·SWAP REST](docs/exchanges/OKX.md)
 
 ## 현재 기준
 
-- 구현 거래소: Binance, Bitget, Upbit, Bybit
+- 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX
 - 구현 언어: Go
 - 네트워크: 단일 ENI의 여러 secondary private IPv4와 EIP 1:1 연결
 - IP 선택: 클라이언트 기본값과 요청별 `egressRouteId` 재정의
@@ -36,6 +37,8 @@
 | Upbit Spot WebSocket | public 시세·private 내 주문·자산 stream 구현됨 |
 | Bybit V5 REST | Spot·Linear 공개 시세, 통합 잔고, 포지션, 주문 구현됨 |
 | Bybit V5 WebSocket | Spot·Linear public, Unified private stream 구현됨 |
+| OKX V5 REST | Spot·SWAP 공개 시세, 거래 계정, 포지션, 주문 구현됨 |
+| OKX V5 WebSocket | 예정 |
 | 나머지 P1 거래소 | 예정 |
 
 ## 요청별 EIP 선택
@@ -214,6 +217,19 @@ defer session.Close()
 - 연결별 EIP 고정, application heartbeat, 재인증·재구독
 
 세부 계약과 주의사항은 [Bybit V5 문서](docs/exchanges/BYBIT.md)를 참고합니다.
+
+## OKX V5 Spot·SWAP REST 1차 범위
+
+- 서버 시간 보정과 Spot·SWAP 상품 정보
+- 전체 ticker, 호가, 최근 체결, 캔들
+- 거래 계정 잔고와 SWAP 포지션
+- 주문 생성, 단건 조회, 취소, 미체결 목록, 최근 7일 이력
+- UTC ISO-8601 timestamp, HMAC SHA-256, Base64 서명, Passphrase 인증
+- Demo Trading 헤더와 지역별 `BaseURL` 재정의
+- IP·사용자·사용자+상품 단위 요청 제한 분리
+- 주문별 `sCode` 오류와 불명확한 mutation 결과 정규화
+
+세부 계약과 주의사항은 [OKX V5 문서](docs/exchanges/OKX.md)를 참고합니다.
 
 ## 공통 Spot API
 
