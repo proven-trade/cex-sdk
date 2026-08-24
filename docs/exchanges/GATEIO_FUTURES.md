@@ -1,6 +1,6 @@
-# Gate.io API v4 무기한 Futures REST 어댑터
+# Gate.io API v4 무기한 Futures REST·WebSocket 어댑터
 
-구현 기준은 Gate.io API v4 Perpetual Futures REST와 기본 주소 `https://api.gateio.ws/api/v4`입니다. Go 패키지는 `exchange/gateio/futures`이며 USDT·BTC·USD1 결제 통화를 명시적으로 선택합니다.
+구현 기준은 Gate.io API v4 Perpetual Futures REST·WebSocket입니다. REST 기본 주소는 `https://api.gateio.ws/api/v4`, WebSocket 기본 주소는 `wss://fx-ws.gateio.ws/v4/ws/{settle}`입니다. Go 패키지는 `exchange/gateio/futures`이며 USDT·BTC·USD1 결제 통화를 명시적으로 선택합니다.
 
 ## 전제조건
 
@@ -36,6 +36,36 @@ tickers, err := client.Tickers(
 )
 ```
 
+Futures private WebSocket은 서명 정보와 별도로 Gate.io 숫자 사용자 ID를 payload에 요구합니다. `StreamClientConfig.UserID`에 실제 Futures UID를 넣고, 내부 제한 키인 `credential.Descriptor.AccountID`와 혼동하지 않아야 합니다.
+
+```go
+streamClient, err := futures.NewStreamClient(futures.StreamClientConfig{
+	Connector:            connector,
+	Credentials:          credentials,
+	CredentialProvider:   provider,
+	UserID:               "1666",
+	DefaultEgressRouteID: "seoul-a",
+})
+if err != nil {
+	return err
+}
+
+private, err := streamClient.PrivateStream(
+	futures.StreamRequest{
+		Settlement: futures.SettlementUSDT,
+		Subscriptions: []futures.StreamSubscription{
+			{Channel: futures.StreamChannelOrders, Contract: "!all"},
+			{Channel: futures.StreamChannelPositions, Contract: "BTC_USDT"},
+		},
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer private.Close()
+```
+
 ## 지원 범위
 
 | 영역 | 메서드 | API |
@@ -55,6 +85,28 @@ tickers, err := client.Tickers(
 | 계정 체결 | `MyTrades` | `GET /futures/{settle}/my_trades` |
 
 가격·수량·금액·수수료는 문자열로 보존합니다. 주문·체결의 JSON 정수 ID는 `Identifier`가 부동소수점 변환 없이 문자열로 보존하며, double timestamp는 `Decimal`이 원문 십진 표현을 유지합니다. 목록 항목과 단일 객체의 `Raw`에는 해당 원본 JSON을 보존합니다.
+
+## WebSocket 지원 범위
+
+| 구분 | 채널 | SDK 채널 |
+|---|---|---|
+| public 통계 | `futures.tickers` | `StreamChannelTicker` |
+| public 체결 | `futures.trades` | `StreamChannelTrades` |
+| public 캔들 | `futures.candlesticks` | `StreamChannelCandles` |
+| public 최우선 호가 | `futures.book_ticker` | `StreamChannelBookTicker` |
+| public 증분 호가 | `futures.order_book_update` | `StreamChannelOrderBookUpdate` |
+| private 주문 | `futures.orders` | `StreamChannelOrders` |
+| private 계정 체결 | `futures.usertrades` | `StreamChannelUserTrades` |
+| private 잔고 | `futures.balances` | `StreamChannelBalances` |
+| private 포지션 | `futures.positions` | `StreamChannelPositions` |
+
+- `StreamRequest.Settlement`가 BTC·USDT·USD1 endpoint를 결정합니다. 최초 연결과 모든 재연결은 선택한 EIP route와 정산 통화를 그대로 유지합니다.
+- 캔들은 10초, 1·5·15·30분, 1·4·8시간, 1·7일을 지원합니다. 계약에 `mark_` 또는 `index_` 접두사를 붙이면 마크가·지수가 캔들을 구독합니다.
+- 증분 호가는 20ms·100ms를 지원합니다. 20ms는 Gate.io 규칙에 따라 20단계만 허용하며 100ms의 단계 값은 생략하거나 20·50·100을 지정합니다.
+- 주문·계정 체결·포지션은 계약명 대신 `!all`을 지정할 수 있습니다. 잔고 구독은 사용자 ID만 payload로 전송합니다.
+- public·private 실행 중 구독 추가·해제를 지원합니다. 서버가 동적 명령을 거절하면 재연결 복구 목록도 이전 상태로 되돌립니다.
+- private 구독은 최초 연결, 재연결, 실행 중 변경마다 Secret을 다시 읽고 `channel`, `event`, Unix second를 HMAC-SHA-512로 서명합니다. 자격증명의 route·읽기 권한은 Secret 조회 전에 검사합니다.
+- 숫자 또는 문자열로 오는 수량·가격·시각은 `Decimal`로 정밀도 손실 없이 보존합니다. JSON text frame만 해석하며 연결 생존 확인은 WebSocket protocol ping/pong을 사용합니다.
 
 ## 주문 계약
 
@@ -83,9 +135,10 @@ private 요청 서명은 Spot과 같은 Gate.io API v4 규칙을 사용합니다
 
 ## 운영 검증
 
-자동 테스트는 공개·private 전체 수명주기, 서명 원문과 JSON 본문 일치, 요청별 route, route 허용 목록 사전 차단, Secret 덮어쓰기, 요청 제한 분리, 정확한 ID·timestamp 해석, 주문 검증과 불명확한 mutation 상태를 검증합니다. 실제 Gate.io Futures 계정과 지정 EIP를 이용한 읽기·주문 smoke는 아직 대기 상태입니다.
+자동 테스트는 REST 공개·private 전체 수명주기와 WebSocket public·private 구독, 서명 원문과 JSON 본문 일치, 요청별 route, 같은 route 재연결, route 허용 목록 사전 차단, Secret 덮어쓰기, 요청 제한 분리, 정확한 ID·timestamp·decimal 해석, 동적 구독 실패 rollback, 주문 검증과 불명확한 mutation 상태를 검증합니다. 실제 Gate.io Futures 계정과 지정 EIP를 이용한 읽기·주문 smoke는 아직 대기 상태입니다.
 
 ## 공식 기준
 
 - [Gate.io API v4 Perpetual Futures](https://www.gate.com/docs/developers/apiv4/en/futures/)
+- [Gate.io API v4 Futures WebSocket](https://www.gate.com/docs/developers/futures/)
 - [Gate.io API v4 인증·요청 제한](https://www.gate.com/docs/developers/apiv4/en/)

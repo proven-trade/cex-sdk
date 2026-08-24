@@ -151,7 +151,7 @@ var catalogData = []ProductSupport{
 	{
 		Exchange: model.ExchangeID("gateio"), DisplayName: "Gate.io", Tier: "P2",
 		Product: ProductID("futures"), ProductName: "Futures",
-		REST: Status("implemented"), WebSocketPublic: Status("planned"), WebSocketPrivate: Status("planned"),
+		REST: Status("implemented"), WebSocketPublic: Status("implemented"), WebSocketPrivate: Status("implemented"),
 		Unified: Status("not_applicable"), AutomatedTests: Status("implemented"),
 		LiveReadSmoke: Status("planned"), LiveTradeSmoke: Status("planned"),
 		Docs: []string{"docs/exchanges/GATEIO_FUTURES.md"},

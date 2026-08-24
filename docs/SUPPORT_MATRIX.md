@@ -24,7 +24,7 @@
 | P2 | KuCoin | Spot | 구현 | 구현 | 구현 | 구현 | 구현 | 대기 | 대기 | [문서](exchanges/KUCOIN.md) |
 | P2 | KuCoin | Futures | 구현 | 구현 | 구현 | 해당 없음 | 구현 | 예정 | 예정 | [문서](exchanges/KUCOIN_FUTURES.md) |
 | P2 | Gate.io | Spot | 구현 | 구현 | 구현 | 구현 | 구현 | 예정 | 예정 | [문서](exchanges/GATEIO.md) |
-| P2 | Gate.io | Futures | 구현 | 예정 | 예정 | 해당 없음 | 구현 | 예정 | 예정 | [문서](exchanges/GATEIO_FUTURES.md) |
+| P2 | Gate.io | Futures | 구현 | 구현 | 구현 | 해당 없음 | 구현 | 예정 | 예정 | [문서](exchanges/GATEIO_FUTURES.md) |
 
 현재 REST 구현 상품군은 19개이고 계획 상품군은 0개입니다.
 
