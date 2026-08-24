@@ -189,6 +189,11 @@ func (session *Session) Generation() uint64 {
 	return session.generation
 }
 
+// EgressRouteID는 최초 연결과 모든 재연결에 고정된 송신 경로를 반환한다.
+func (session *Session) EgressRouteID() transport.EgressRouteID {
+	return session.config.EgressRouteID
+}
+
 // Reconnect는 현재 연결만 종료해 같은 route의 새 연결을 시작하게 한다.
 func (session *Session) Reconnect() error {
 	session.mu.Lock()

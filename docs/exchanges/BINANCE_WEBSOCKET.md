@@ -137,4 +137,48 @@ public 구독 응답과 private WebSocket API 응답은 이벤트와 섞여 수�
 - private WebSocket API 연결은 한 계정당 하나의 active subscription만 생성합니다.
 - `Run` context가 세션 전체 수명을 결정하며 `trade.WithTimeout`은 허용하지 않습니다.
 
-로컬 order book은 연결 재수립만으로 복구되지 않습니다. `depthUpdate`의 update ID gap을 검사하고 공식 절차대로 REST depth snapshot을 다시 받아야 합니다.
+## 로컬 오더북과 자동 갭 복구
+
+`LocalOrderBook`은 공식 Binance 절차에 따라 diff depth 이벤트를 먼저 버퍼링한 뒤 같은 EIP route로 REST depth snapshot을 조회합니다. 최초 적용 이벤트가 `lastUpdateId + 1`을 포함해야 동기화를 완료하며, 이후 update ID가 끊기거나 WebSocket 연결 세대가 바뀌면 새 snapshot으로 자동 재동기화합니다.
+
+```go
+depthStream, err := binance.SymbolMarketStream("BTCUSDT", "depth")
+if err != nil {
+	return err
+}
+market, err := streams.MarketStream(
+	binance.MarketStreamRequest{Streams: []string{depthStream}},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer market.Close()
+
+book, err := binance.NewLocalOrderBook(binance.LocalOrderBookConfig{
+	RESTClient:    restClient,
+	Symbol:        "BTCUSDT",
+	EgressRouteID: "seoul-b",
+	ViewDepth:     20,
+})
+if err != nil {
+	return err
+}
+
+err = book.Run(ctx, market, func(ctx context.Context, view binance.LocalOrderBookView) error {
+	return consumeBook(view)
+})
+```
+
+운영 계약은 다음과 같습니다.
+
+- REST snapshot과 WebSocket은 반드시 같은 `EgressRouteID`를 사용하며 다르면 연결 전에 거부합니다.
+- 전체 diff depth인 `<symbol>@depth` 또는 `<symbol>@depth@100ms`만 허용하며 partial depth stream은 거부합니다.
+- snapshot 기본 limit은 Binance 최대치인 5,000, 사용자에게 전달하는 정렬된 상위 호가는 기본 20단계입니다.
+- snapshot보다 오래된 이벤트는 버리고, 최초 연결 이벤트가 snapshot 다음 update ID를 포함하지 못하면 snapshot을 다시 조회합니다.
+- 동기화 뒤 `U > localUpdateId + 1`이면 gap으로 판단하고 해당 이벤트를 보존한 채 snapshot부터 다시 맞춥니다.
+- 재연결 세대가 바뀌면 이전 세대의 로컬 상태를 폐기하고 같은 EIP로 재동기화합니다.
+- 동기화 중 버퍼가 `MaxBufferedEvents`를 넘으면 `ErrDepthBufferOverflow`로 종료해 손상된 장부를 노출하지 않습니다.
+- `SynchronizationID`, `Generation`, `GapCount`, `LastUpdateID`로 재동기화와 데이터 연속성을 관측할 수 있습니다.
+
+Binance snapshot은 각 방향 최대 5,000단계만 제공하므로 snapshot에 없고 이후에도 변경되지 않은 더 먼 가격 단계는 로컬 장부에 존재하지 않을 수 있습니다.

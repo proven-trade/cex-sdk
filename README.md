@@ -50,7 +50,7 @@
 | Spot live smoke CLI | 12개 Spot 어댑터의 지정 EIP·공개 조회·선택적 잔고 JSON 증적 구현됨 |
 | Spot 주문 smoke 안전 계약 | post-only·금액 상한·EIP/호가 선검사·취소 정리 구현됨 |
 | 공통 WebSocket 연결 계층 | route 고정, 재연결, 재구독 훅, heartbeat 구현됨 |
-| Binance Spot WebSocket | public market·private user data stream 구현됨 |
+| Binance Spot WebSocket | public market·private user data stream·로컬 오더북 자동 갭 복구 구현됨 |
 | Bitget v3 UTA WebSocket | Spot·USDT Futures public, UTA private stream 구현됨 |
 | Upbit Spot WebSocket | public 시세·private 내 주문·자산 stream 구현됨 |
 | Bybit V5 REST | Spot·Linear 공개 시세, 통합 잔고, 포지션, 주문 구현됨 |
@@ -219,6 +219,7 @@ defer session.Close()
 - 계정 잔고, 잔고 변화, 주문·체결, 외부 잠금 typed event
 - 연결별 EIP 선택과 자격증명 route 허용 검사
 - 초당 수신 메시지 제한을 고려한 구독 명령 직렬화
+- 같은 EIP의 REST snapshot과 diff depth를 결합한 로컬 오더북·sequence gap 자동 복구
 
 세부 계약과 주의사항은 [Binance Spot WebSocket 문서](docs/exchanges/BINANCE_WEBSOCKET.md)를 참고합니다.
 

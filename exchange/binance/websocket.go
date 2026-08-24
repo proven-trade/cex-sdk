@@ -287,6 +287,23 @@ func (market *MarketStream) Generation() uint64 {
 	return market.session.Generation()
 }
 
+// EgressRouteID는 public stream 연결과 재연결에 고정된 송신 경로를 반환한다.
+func (market *MarketStream) EgressRouteID() transport.EgressRouteID {
+	return market.session.EgressRouteID()
+}
+
+func (market *MarketStream) hasDiffDepthStream(symbol string) bool {
+	prefix := strings.ToLower(symbol) + "@depth"
+	market.mu.Lock()
+	defer market.mu.Unlock()
+	for streamName := range market.streams {
+		if streamName == prefix || streamName == prefix+"@100ms" {
+			return true
+		}
+	}
+	return false
+}
+
 func (market *MarketStream) resubscribe(ctx context.Context, connection corestream.Connection) error {
 	market.commandMu.Lock()
 	defer market.commandMu.Unlock()
