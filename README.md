@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Classic Spot·Futures REST·WebSocket, Gate.io Spot REST·WebSocket·공통 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Classic Spot·Futures REST·WebSocket, Gate.io Spot REST·WebSocket·공통 API와 Futures REST가 구현되어 있습니다.
 
 ## 문서
 
@@ -21,6 +21,7 @@
 - [KuCoin Classic Spot REST·WebSocket](docs/exchanges/KUCOIN.md)
 - [KuCoin Classic Futures REST·WebSocket](docs/exchanges/KUCOIN_FUTURES.md)
 - [Gate.io API v4 Spot REST·WebSocket](docs/exchanges/GATEIO.md)
+- [Gate.io API v4 Futures REST](docs/exchanges/GATEIO_FUTURES.md)
 
 ## 현재 기준
 
@@ -70,6 +71,7 @@
 | Gate.io API v4 Spot REST | 거래쌍 규칙, 공개 시세, 계정, 주문 생성·조회·취소·미체결·체결 구현됨 |
 | Gate.io API v4 Spot WebSocket | public 시세·호가·체결, private 주문·체결·잔고 stream 구현됨 |
 | Gate.io 공통 Spot API | 공통 마켓·시세·잔고·주문 계약과 적합성 테스트 구현됨 |
+| Gate.io API v4 Futures REST | 계약 규칙, 공개 시세, 계정·포지션, 주문·체결 구현됨 |
 
 ## 요청별 EIP 선택
 
@@ -423,6 +425,20 @@ defer session.Close()
 - `unified.SpotClient` 전체 계약과 공통 적합성 테스트
 
 세부 인증·주문·요청 제한·연결 계약은 [Gate.io API v4 Spot 문서](docs/exchanges/GATEIO.md)를 참고합니다.
+
+## Gate.io API v4 Futures REST 1차 범위
+
+- USDT·BTC·USD1 결제 통화별 무기한 계약 규칙과 단일 계약 조회
+- 현재가·마크가·지수가, 호가, 공개 체결, 캔들
+- 결제 통화별 계정 요약과 격리·교차 및 단방향·양방향 포지션
+- signed decimal 계약 수량 기반 지정가·시장가·reduce-only·전량 청산 주문
+- 주문 상세·취소·상태별 목록과 계정 체결 페이지
+- SHA-512 본문 해시와 HMAC-SHA-512 hex 요청 서명
+- public EIP+endpoint, private UID+endpoint, 주문·취소 UID 제한 분리
+- 요청별 EIP 선택과 자격증명 route 허용 검사
+- 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
+
+세부 계약은 [Gate.io API v4 Futures 문서](docs/exchanges/GATEIO_FUTURES.md)를 참고합니다.
 
 ## 공통 Spot API
 
