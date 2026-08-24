@@ -1,6 +1,6 @@
-# Gate.io API v4 Spot REST 어댑터
+# Gate.io API v4 Spot REST·WebSocket 어댑터
 
-구현 기준은 Gate.io API v4 Spot REST와 기본 주소 `https://api.gateio.ws/api/v4`입니다. 이 단계는 Spot native REST API이며 WebSocket, 공통 Spot API, Futures는 후속 단계에서 추가합니다.
+구현 기준은 Gate.io API v4 Spot REST·JSON WebSocket과 기본 주소 `https://api.gateio.ws/api/v4`, `wss://api.gateio.ws/ws/v4/`입니다. 공통 Spot API와 Futures는 후속 단계에서 추가합니다.
 
 ## 전제조건
 
@@ -68,6 +68,67 @@ SDK가 지원하는 거래쌍, 통화, 주문 ID와 숫자 query는 URL 인코�
 
 Provider가 반환한 API Key와 Secret byte slice는 요청 뒤 가능한 범위에서 덮어씁니다. Go 문자열과 HTTP 계층 내부 복사본까지 완전히 지울 수 있다는 보장은 하지 않습니다.
 
+## WebSocket
+
+`StreamClient`는 public과 private이 같은 JSON endpoint를 사용하되, private 구독 명령마다 현재 Unix second와 API Key로 새 서명을 만듭니다.
+
+| 구분 | `StreamChannel` | Gate.io 채널 |
+|---|---|---|
+| public 현재가 | `StreamChannelTicker` | `spot.tickers` |
+| public 체결 | `StreamChannelTrades` | `spot.trades` |
+| public 캔들 | `StreamChannelCandles` | `spot.candlesticks` |
+| public 최우선 호가 | `StreamChannelBookTicker` | `spot.book_ticker` |
+| public 증분 호가 | `StreamChannelOrderBookUpdate` | `spot.order_book_update` |
+| private 주문 | `StreamChannelOrders` | `spot.orders` |
+| private 내 체결 | `StreamChannelUserTrades` | `spot.usertrades` |
+| private 잔고 | `StreamChannelBalances` | `spot.balances` |
+
+```go
+streamClient, err := gateio.NewStreamClient(gateio.StreamClientConfig{
+	Connector:            connector,
+	Credentials:          descriptor,
+	CredentialProvider:   provider,
+	DefaultEgressRouteID: "seoul-a",
+})
+if err != nil {
+	return err
+}
+
+public, err := streamClient.PublicStream(
+	gateio.StreamRequest{Subscriptions: []gateio.StreamSubscription{
+		{Channel: gateio.StreamChannelTicker, CurrencyPair: "BTC_USDT"},
+		{
+			Channel:        gateio.StreamChannelOrderBookUpdate,
+			CurrencyPair:   "BTC_USDT",
+			UpdateInterval: gateio.StreamUpdate100Millis,
+		},
+	}},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer public.Close()
+
+return public.Run(ctx, func(_ context.Context, message gateio.StreamMessage) error {
+	if message.Channel != gateio.StreamChannelTicker || message.Event != "update" {
+		return nil
+	}
+	var ticker gateio.StreamTicker
+	return message.Decode(&ticker)
+})
+```
+
+public 캔들은 REST와 달리 10초부터 7일까지의 공식 구간만 허용합니다. 증분 호가는 20ms 또는 100ms 통지 주기를 명시해야 합니다. private 주문·내 체결은 안전한 복구 범위를 분명히 하기 위해 거래쌍을 요구하며, 잔고 채널은 거래쌍을 받지 않습니다.
+
+private 서명 원문은 `channel=<channel>&event=<subscribe 또는 unsubscribe>&time=<Unix second>`이고 HMAC-SHA-512 소문자 hex를 `auth.SIGN`에 넣습니다. API Key는 `auth.KEY`, 인증 방식은 `api_key`입니다. 구독 시각과 서버 시각 차이는 60초 이하여야 하므로 인스턴스의 시각 동기화가 필요합니다.
+
+연결은 선택한 EIP route에 수명주기 동안 고정됩니다. 재연결하면 같은 route로 새 handshake를 수행하고 현재 구독을 새 시각으로 다시 서명해 복구합니다. 실행 중 `Subscribe`와 `Unsubscribe`를 사용할 수 있으며, 서버가 오류 응답을 보낸 변경은 로컬 복구 목록에서 되돌립니다. 기본 heartbeat는 30초마다 WebSocket protocol ping을 보내고 10초 안에 pong을 기다립니다. Gate.io의 연결 제한은 IP당 300개이며 여러 프로세스·클라이언트의 합산 연결 수는 SDK 밖에서도 관리해야 합니다.
+
+`StreamChannelOrderBookUpdate`의 수량은 증감량이 아니라 해당 가격의 절대 수량이며 0이면 가격 단계를 삭제해야 합니다. 연결 뒤 이벤트를 임시 저장하고 `OrderBook`에서 `with_id=true` snapshot을 받은 다음 `U <= snapshotID+1 <= u`인 첫 이벤트부터 적용합니다. 이후에는 직전 `u+1`이 다음 범위에 포함되는지 확인하고 공백이 생기거나 재연결되면 기존 로컬 호가장을 버리고 다시 snapshot을 받아야 합니다.
+
+JSON endpoint만 지원하며 Gate.io SBE binary push는 현재 범위에 포함하지 않습니다. public 이벤트 유실과 private 재연결 구간은 REST 조회로 최종 상태를 재조정해야 합니다. 시스템의 `spot.system` upgrade 알림을 받으면 연결 종료를 기다리지 말고 운영 계층에서 새 세션으로 교체하는 것이 안전합니다.
+
 ## 요청 제한과 EIP
 
 기본 로컬 quota는 현재 공식 기본 제한을 따릅니다.
@@ -101,10 +162,11 @@ Gate.io의 비정상 응답은 일반적으로 비-2xx 상태와 `label`, `messa
 
 ## 운영 검증
 
-자동 테스트는 서명 원문·본문·query 일치, 요청별 route 선택, route 허용 목록 사전 검사, Secret 덮어쓰기, 요청 제한 분리, 오류 분류, mutation 불명확 상태를 검증합니다. 실제 Gate.io 계정과 지정 EIP를 이용한 읽기·주문 smoke는 아직 대기 상태입니다.
+자동 테스트는 REST 서명 원문·본문·query 일치, 요청별 route 선택, route 허용 목록 사전 검사, Secret 덮어쓰기, 요청 제한 분리, 오류 분류, mutation 불명확 상태를 검증합니다. WebSocket은 public 재연결·재구독, private 명령 서명, typed event decode, 동적 구독 실패 rollback을 검증합니다. 실제 Gate.io 계정과 지정 EIP를 이용한 읽기·주문·장시간 stream smoke는 아직 대기 상태입니다.
 
 ## 공식 기준
 
 - [Gate.io API v4 개요·인증·요청 제한](https://www.gate.com/docs/developers/apiv4/en/)
 - [Gate.io API v4 Spot](https://www.gate.com/docs/developers/apiv4/en/spot/)
+- [Gate.io API v4 Spot WebSocket](https://www.gate.com/docs/developers/apiv4/ws/en/)
 - [Gate.io API v4 반환 label](https://www.gate.com/docs/developers/apiv4/en/#label-list)
