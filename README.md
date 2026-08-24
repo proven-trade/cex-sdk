@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST 1차 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -15,10 +15,11 @@
 - [Kraken Spot REST·WebSocket v2](docs/exchanges/KRAKEN.md)
 - [Kraken Futures REST·WebSocket v1](docs/exchanges/KRAKEN_FUTURES.md)
 - [Bithumb Spot REST·WebSocket](docs/exchanges/BITHUMB.md)
+- [Coinone Spot REST](docs/exchanges/COINONE.md)
 
 ## 현재 기준
 
-- 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb
+- 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone
 - 구현 언어: Go
 - 네트워크: 단일 ENI의 여러 secondary private IPv4와 EIP 1:1 연결
 - IP 선택: 클라이언트 기본값과 요청별 `egressRouteId` 재정의
@@ -51,7 +52,8 @@
 | Kraken Futures WebSocket v1 | public 시세·호가·체결, private 지갑·주문·체결·포지션 stream 구현됨 |
 | Bithumb Spot REST | 공개 시세, 잔고, v1 상세·v2 주문 생성·취소·목록 구현됨 |
 | Bithumb WebSocket | public v1 시세·private v2 주문·자산 stream 구현됨 |
-| Coinone, Korbit | 예정 |
+| Coinone Spot REST | public v2 시세, v2.1 잔고·주문·체결 구현됨 |
+| Coinone WebSocket, Korbit | 예정 |
 
 ## 요청별 EIP 선택
 
@@ -308,6 +310,19 @@ defer session.Close()
 - 연결별 EIP 고정, 새 HS256 JWT와 ticket을 이용한 재인증·재구독
 
 세부 계약과 REST·WebSocket v1/v2 endpoint 구분은 [Bithumb Spot 문서](docs/exchanges/BITHUMB.md)를 참고합니다.
+
+## Coinone Spot REST 1차 범위
+
+- 기준 통화별 마켓, 현재가, 호가, 최근 체결, 캔들
+- 통화별 잔고
+- 시장가·지정가·스탑 지정가 주문 생성, 상세, 취소, 미종료·종료 목록
+- 정확한 JSON bytes의 Base64 payload와 HMAC-SHA512 hex 서명
+- 공개 route 1,200회/분, private 포트폴리오 80회/초, 주문 40회/초 제한 분리
+- 응답 remaining 헤더를 이용한 로컬 요청 제한 상태 보정
+- 요청별 EIP 선택과 자격증명 route 허용 검사
+- 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
+
+세부 인증·주문·요청 제한 계약은 [Coinone Spot REST 문서](docs/exchanges/COINONE.md)를 참고합니다.
 
 ## 공통 Spot API
 

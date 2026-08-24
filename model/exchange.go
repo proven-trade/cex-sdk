@@ -15,6 +15,7 @@ const (
 	ExchangeCoinbase ExchangeID = "coinbase"
 	ExchangeKraken   ExchangeID = "kraken"
 	ExchangeBithumb  ExchangeID = "bithumb"
+	ExchangeCoinone  ExchangeID = "coinone"
 )
 
 // Valid는 거래소 식별자가 비어 있지 않은지 반환한다.
