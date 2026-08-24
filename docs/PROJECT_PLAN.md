@@ -526,7 +526,8 @@ const (
 ### Phase 3 — WebSocket과 운영 강화
 
 - 공통 route 고정 연결, reconnect, 재구독 수명주기 구현 완료
-- public/private stream
+- Binance Spot public/private stream 구현 완료
+- Bitget·Upbit public/private stream
 - 거래소별 인증, heartbeat, sequence gap recovery
 - dashboard/alert/runbook
 - 장애 주입 및 장시간 soak test

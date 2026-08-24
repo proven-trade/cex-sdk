@@ -2,12 +2,13 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층과 Binance Spot·USDⓈ-M Futures, Bitget v3 UTA, Upbit Spot REST 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST, Upbit Spot REST 1차 API가 구현되어 있습니다.
 
 ## 문서
 
 - [프로젝트 기획서](docs/PROJECT_PLAN.md)
 - [공통 WebSocket 연결 계층](docs/STREAMS.md)
+- [Binance Spot WebSocket](docs/exchanges/BINANCE_WEBSOCKET.md)
 
 ## 현재 기준
 
@@ -29,7 +30,8 @@
 | Upbit Spot REST | 공개 시세, 잔고, 주문 생성·조회·취소·목록 구현됨 |
 | 공통 Spot API·적합성 테스트 | Binance·Bitget·Upbit 구현됨 |
 | 공통 WebSocket 연결 계층 | route 고정, 재연결, 재구독 훅, heartbeat 구현됨 |
-| 거래소별 WebSocket·P1 거래소 | 예정 |
+| Binance Spot WebSocket | public market·private user data stream 구현됨 |
+| Bitget·Upbit WebSocket·P1 거래소 | 예정 |
 
 ## 요청별 EIP 선택
 
@@ -156,6 +158,18 @@ defer session.Close()
 - HTTP 503 응답 문구별 불명확한 실행 상태 분류
 
 세부 계약과 주의사항은 [Binance USDⓈ-M Futures 문서](docs/exchanges/BINANCE_USDM.md)를 참고합니다.
+
+## Binance Spot WebSocket 1차 범위
+
+- public combined market stream과 동적 구독·구독 해제
+- 재연결 시 현재 구독 목록 자동 복구
+- aggregate trade, trade, kline, ticker, book ticker, depth typed event
+- WebSocket API HMAC 서명 기반 private user data 구독
+- 계정 잔고, 잔고 변화, 주문·체결, 외부 잠금 typed event
+- 연결별 EIP 선택과 자격증명 route 허용 검사
+- 초당 수신 메시지 제한을 고려한 구독 명령 직렬화
+
+세부 계약과 주의사항은 [Binance Spot WebSocket 문서](docs/exchanges/BINANCE_WEBSOCKET.md)를 참고합니다.
 
 ## Bitget v3 UTA 1차 범위
 
