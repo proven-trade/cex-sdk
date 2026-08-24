@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
 	"net/url"
 	"strings"
@@ -178,6 +179,26 @@ func (public *PublicStream) Close() error { return public.managed.session.Close(
 
 // Generation은 성공한 public 연결 세대 번호를 반환한다.
 func (public *PublicStream) Generation() uint64 { return public.managed.session.Generation() }
+
+// EgressRouteID는 public stream 연결과 재연결에 고정된 송신 경로를 반환한다.
+func (public *PublicStream) EgressRouteID() transport.EgressRouteID {
+	return public.managed.session.EgressRouteID()
+}
+
+func (public *PublicStream) hasOrderBookSubscription(market string) bool {
+	for _, dataType := range public.managed.request.Types {
+		if dataType.Type != "orderbook" {
+			continue
+		}
+		for _, code := range dataType.Codes {
+			resolved, err := orderBookMarketCode(code)
+			if err == nil && strings.EqualFold(resolved, market) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // PrivateStream은 업비트 내 주문·자산 WebSocket 연결을 관리한다.
 type PrivateStream struct{ managed *managedStream }
@@ -355,7 +376,8 @@ func validateStreamRequest(request StreamRequest, private bool) (StreamRequest, 
 	if request.Format == "" {
 		request.Format = StreamFormatDefault
 	}
-	if request.Format != StreamFormatDefault && request.Format != StreamFormatSimple && request.Format != StreamFormatJSONList {
+	if request.Format != StreamFormatDefault && request.Format != StreamFormatSimple &&
+		request.Format != StreamFormatJSONList && request.Format != StreamFormatSimpleList {
 		return StreamRequest{}, validationError("unsupported WebSocket format %q", request.Format)
 	}
 	if request.Ticket != "" && (strings.TrimSpace(request.Ticket) != request.Ticket || strings.ContainsFunc(request.Ticket, unicode.IsControl)) {
@@ -382,12 +404,32 @@ func validateStreamRequest(request StreamRequest, private bool) (StreamRequest, 
 		} else if len(dataType.Codes) == 0 {
 			return StreamRequest{}, validationError("public WebSocket type requires market codes")
 		}
+		if dataType.Level != "" {
+			if private || dataType.Type != "orderbook" {
+				return StreamRequest{}, validationError("only public orderbook accepts level")
+			}
+			if _, err := nonnegativeStreamDecimal("orderbook level", dataType.Level); err != nil {
+				return StreamRequest{}, err
+			}
+		}
 		codes := make([]string, len(dataType.Codes))
 		copy(codes, dataType.Codes)
-		for _, code := range codes {
+		codeSeen := make(map[string]struct{}, len(codes))
+		for index, code := range codes {
 			if code == "" || strings.TrimSpace(code) != code || strings.ContainsFunc(code, unicode.IsControl) {
 				return StreamRequest{}, validationError("invalid WebSocket market code")
 			}
+			code = strings.ToUpper(code)
+			if dataType.Type == "orderbook" {
+				if _, err := orderBookMarketCode(code); err != nil {
+					return StreamRequest{}, err
+				}
+			}
+			if _, exists := codeSeen[code]; exists {
+				return StreamRequest{}, validationError("duplicate WebSocket market code %q", code)
+			}
+			codeSeen[code] = struct{}{}
+			codes[index] = code
 		}
 		dataType.Codes = codes
 		keyBytes, _ := json.Marshal(dataType)
@@ -400,6 +442,32 @@ func validateStreamRequest(request StreamRequest, private bool) (StreamRequest, 
 	}
 	request.Types = types
 	return request, nil
+}
+
+func orderBookMarketCode(code string) (string, error) {
+	dot := strings.LastIndex(code, ".")
+	if dot < 0 {
+		if err := validateMarket(code); err != nil {
+			return "", err
+		}
+		return code, nil
+	}
+	market, unit := code[:dot], code[dot+1:]
+	if market == "" || (unit != "1" && unit != "5" && unit != "15" && unit != "30") {
+		return "", validationError("unsupported WebSocket order book unit in %q", code)
+	}
+	if err := validateMarket(market); err != nil {
+		return "", err
+	}
+	return market, nil
+}
+
+func nonnegativeStreamDecimal(name string, value Decimal) (*big.Rat, error) {
+	parsed, ok := new(big.Rat).SetString(string(value))
+	if !ok || parsed.Sign() < 0 {
+		return nil, validationError("%s must be a nonnegative decimal", name)
+	}
+	return parsed, nil
 }
 
 func validateWebSocketURL(raw string, allowInsecure bool) (string, error) {

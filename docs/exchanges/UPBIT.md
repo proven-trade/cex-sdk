@@ -129,7 +129,51 @@ public typed 범위는 다음과 같습니다.
 - `orderbook`: `StreamOrderBook`
 - `candle.{unit}`: `StreamCandle`
 
-`OnlySnapshot`과 `OnlyRealtime`은 동시에 지정할 수 없습니다. 응답 형식은 `DEFAULT`, `SIMPLE`, `JSON_LIST`를 지원합니다. typed 구조체는 전체 필드 이름을 사용하는 `DEFAULT` 기준이며, `SIMPLE`은 `Payload`에서 축약 필드 구조체로 직접 decode할 수 있습니다.
+`OnlySnapshot`과 `OnlyRealtime`은 동시에 지정할 수 없습니다. 응답 형식은 `DEFAULT`, `SIMPLE`, `JSON_LIST`, `SIMPLE_LIST`를 지원합니다. 오더북 `StreamOrderBook`은 전체 필드와 축약 필드를 모두 decode하며, 다른 typed 구조체에서 `SIMPLE` 계열을 사용할 때는 `Payload`에서 축약 필드 구조체로 직접 decode합니다.
+
+### Spot 로컬 오더북 snapshot
+
+업비트 오더북은 증분 delta가 아니라 SNAPSHOT과 REALTIME 모두 각 메시지에 완전한 호가 목록을 제공합니다. 공식 응답에는 오더북 sequence가 없으므로 REST snapshot과 임의의 연속 번호를 조합하지 않습니다. `LocalOrderBook`은 각 메시지의 마켓·timestamp·정렬·가격·수량을 독립적으로 검증하고 최신 snapshot view로 전달합니다.
+
+```go
+public, err := streams.PublicStream(
+	upbit.StreamRequest{
+		Types: []upbit.StreamDataType{{
+			Type:  "orderbook",
+			Codes: []string{"KRW-BTC.5"},
+			Level: "10000",
+		}},
+		Format: upbit.StreamFormatSimpleList,
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer public.Close()
+
+book, err := upbit.NewLocalOrderBook(upbit.LocalOrderBookConfig{
+	Market:        "KRW-BTC",
+	EgressRouteID: "seoul-b",
+	ViewDepth:     5,
+})
+if err != nil {
+	return err
+}
+
+err = book.Run(ctx, public, func(ctx context.Context, view upbit.LocalOrderBookView) error {
+	return consumeBook(view)
+})
+```
+
+운영 계약은 다음과 같습니다.
+
+- 로컬 오더북과 WebSocket의 `EgressRouteID`가 다르면 연결 전에 거부합니다.
+- 마켓 코드는 대문자로 정규화하며 `.1`, `.5`, `.15`, `.30` 호가 개수 옵션을 검증합니다.
+- KRW 마켓의 `Level`은 JSON 숫자로 전송하며, 다른 stream type에는 지정할 수 없습니다.
+- 각 이벤트가 완전한 snapshot이므로 이전 상태를 병합하지 않고 통째로 교체합니다.
+- 네트워크 재연결 시 같은 EIP와 새 ticket으로 다시 구독하며, 다음 완전한 snapshot부터 `Generation`이 증가한 view를 제공합니다.
+- 공식 오더북 응답에 sequence가 없으므로 탐지할 수 없는 gap count를 만들지 않습니다. `SnapshotID`, `Generation`, `Timestamp`, `StreamType`으로 수신과 재연결을 관측합니다.
 
 private stream은 handshake 요청의 `Authorization` 헤더에 HS512 JWT를 넣습니다.
 
@@ -177,6 +221,7 @@ SDK는 브라우저가 아니므로 Origin 헤더를 설정하지 않습니다. 
 - [Upbit 인증](https://docs.upbit.com/kr/reference/auth)
 - [Upbit 요청 수 제한](https://docs.upbit.com/kr/reference/rate-limits)
 - [Upbit WebSocket 사용 안내](https://docs.upbit.com/kr/reference/websocket-guide)
+- [Upbit 호가 WebSocket](https://docs.upbit.com/kr/reference/websocket-orderbook)
 - [Upbit WebSocket 요청 형식](https://docs.upbit.com/kr/reference/websocket-request-format)
 - [Upbit 내 주문 WebSocket](https://docs.upbit.com/kr/reference/websocket-myorder)
 - [Upbit 내 자산 WebSocket](https://docs.upbit.com/kr/reference/websocket-myasset)

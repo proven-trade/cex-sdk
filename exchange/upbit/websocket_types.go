@@ -9,17 +9,37 @@ import (
 type StreamFormat string
 
 const (
-	StreamFormatDefault  StreamFormat = "DEFAULT"
-	StreamFormatSimple   StreamFormat = "SIMPLE"
-	StreamFormatJSONList StreamFormat = "JSON_LIST"
+	StreamFormatDefault    StreamFormat = "DEFAULT"
+	StreamFormatSimple     StreamFormat = "SIMPLE"
+	StreamFormatJSONList   StreamFormat = "JSON_LIST"
+	StreamFormatSimpleList StreamFormat = "SIMPLE_LIST"
 )
 
 // StreamDataType은 구독할 데이터 종류와 마켓 목록이다.
 type StreamDataType struct {
 	Type         string   `json:"type"`
 	Codes        []string `json:"codes,omitempty"`
+	Level        Decimal  `json:"level,omitempty"`
 	OnlySnapshot bool     `json:"is_only_snapshot,omitempty"`
 	OnlyRealtime bool     `json:"is_only_realtime,omitempty"`
+}
+
+// MarshalJSON은 호가 모아보기 level을 정밀도 손실 없는 JSON 숫자로 변환한다.
+func (dataType StreamDataType) MarshalJSON() ([]byte, error) {
+	var level json.RawMessage
+	if dataType.Level != "" {
+		level = json.RawMessage(dataType.Level)
+	}
+	return json.Marshal(struct {
+		Type         string          `json:"type"`
+		Codes        []string        `json:"codes,omitempty"`
+		Level        json.RawMessage `json:"level,omitempty"`
+		OnlySnapshot bool            `json:"is_only_snapshot,omitempty"`
+		OnlyRealtime bool            `json:"is_only_realtime,omitempty"`
+	}{
+		Type: dataType.Type, Codes: dataType.Codes, Level: level,
+		OnlySnapshot: dataType.OnlySnapshot, OnlyRealtime: dataType.OnlyRealtime,
+	})
 }
 
 // StreamRequest는 ticket, 데이터 종류와 응답 형식을 정의한다.
@@ -111,6 +131,75 @@ type StreamOrderBook struct {
 	OrderBook    []OrderBookUnit `json:"orderbook_units"`
 	Level        Decimal         `json:"level"`
 	StreamType   string          `json:"stream_type"`
+}
+
+// UnmarshalJSON은 DEFAULT와 SIMPLE 계열 호가 필드를 같은 타입으로 변환한다.
+func (book *StreamOrderBook) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		Type               string          `json:"type"`
+		SimpleType         string          `json:"ty"`
+		Code               string          `json:"code"`
+		SimpleCode         string          `json:"cd"`
+		Timestamp          int64           `json:"timestamp"`
+		SimpleTimestamp    int64           `json:"tms"`
+		TotalAskSize       Decimal         `json:"total_ask_size"`
+		SimpleTotalAskSize Decimal         `json:"tas"`
+		TotalBidSize       Decimal         `json:"total_bid_size"`
+		SimpleTotalBidSize Decimal         `json:"tbs"`
+		OrderBook          []OrderBookUnit `json:"orderbook_units"`
+		SimpleOrderBook    []struct {
+			AskPrice Decimal `json:"ap"`
+			BidPrice Decimal `json:"bp"`
+			AskSize  Decimal `json:"as"`
+			BidSize  Decimal `json:"bs"`
+		} `json:"obu"`
+		Level            Decimal `json:"level"`
+		SimpleLevel      Decimal `json:"lv"`
+		StreamType       string  `json:"stream_type"`
+		SimpleStreamType string  `json:"st"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return fmt.Errorf("decode Upbit stream order book: %w", err)
+	}
+	book.Type = wire.Type
+	if book.Type == "" {
+		book.Type = wire.SimpleType
+	}
+	book.Code = wire.Code
+	if book.Code == "" {
+		book.Code = wire.SimpleCode
+	}
+	book.Timestamp = wire.Timestamp
+	if book.Timestamp == 0 {
+		book.Timestamp = wire.SimpleTimestamp
+	}
+	book.TotalAskSize = wire.TotalAskSize
+	if book.TotalAskSize == "" {
+		book.TotalAskSize = wire.SimpleTotalAskSize
+	}
+	book.TotalBidSize = wire.TotalBidSize
+	if book.TotalBidSize == "" {
+		book.TotalBidSize = wire.SimpleTotalBidSize
+	}
+	book.OrderBook = wire.OrderBook
+	if book.OrderBook == nil && wire.SimpleOrderBook != nil {
+		book.OrderBook = make([]OrderBookUnit, len(wire.SimpleOrderBook))
+		for index, unit := range wire.SimpleOrderBook {
+			book.OrderBook[index] = OrderBookUnit{
+				AskPrice: unit.AskPrice, BidPrice: unit.BidPrice,
+				AskSize: unit.AskSize, BidSize: unit.BidSize,
+			}
+		}
+	}
+	book.Level = wire.Level
+	if book.Level == "" {
+		book.Level = wire.SimpleLevel
+	}
+	book.StreamType = wire.StreamType
+	if book.StreamType == "" {
+		book.StreamType = wire.SimpleStreamType
+	}
+	return nil
 }
 
 // StreamCandle은 실시간 캔들 이벤트다.
