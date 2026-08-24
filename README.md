@@ -68,7 +68,7 @@
 | Coinone Spot REST | public v2 시세, v2.1 잔고·주문·체결 구현됨 |
 | Coinone WebSocket | public 시세·private 주문·자산 stream·source ID 검증 로컬 오더북 구현됨 |
 | Korbit Spot REST | 공개 시세·상품 규칙, 잔고, 주문·체결 구현됨 |
-| Korbit WebSocket | public 시세·private 주문·체결·자산 stream 구현됨 |
+| Korbit WebSocket | public 시세·private 주문·체결·자산 stream·완전 snapshot 로컬 오더북 구현됨 |
 | KuCoin Classic Spot REST | 상품 규칙, 공개 시세, 계정, HF 주문 생성·조회·취소·미체결 목록 구현됨 |
 | KuCoin Classic Spot WebSocket | public 시세·호가·체결, private 주문·잔고 stream 구현됨 |
 | KuCoin Classic Futures REST | 계약 규칙, 공개 시세, 계정·포지션, 주문·체결 구현됨 |
@@ -386,6 +386,7 @@ defer session.Close()
 - 실행 중 구독 변경, 실패 ack 반영, 재연결 구독 복구
 - 연결별 EIP 고정, 재연결마다 private handshake 재서명
 - public 유실과 private 재연결 구간을 위한 REST 재조정 계약
+- 최대 30호가의 완전 snapshot 기반 로컬 오더북과 묶음 level·동일 EIP 검증
 
 세부 인증·주문·요청 제한·연결 계약은 [Korbit Spot 문서](docs/exchanges/KORBIT.md)를 참고합니다.
 

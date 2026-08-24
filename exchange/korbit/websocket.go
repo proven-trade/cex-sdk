@@ -220,6 +220,31 @@ func (public *PublicStream) Close() error { return public.managed.session.Close(
 // Generation은 성공한 public 연결 세대 번호를 반환한다.
 func (public *PublicStream) Generation() uint64 { return public.managed.session.Generation() }
 
+// EgressRouteID는 public stream 연결과 재연결에 고정된 송신 경로를 반환한다.
+func (public *PublicStream) EgressRouteID() transport.EgressRouteID {
+	return public.managed.session.EgressRouteID()
+}
+
+func (public *PublicStream) hasOrderBookSubscription(symbol, level string) bool {
+	public.managed.stateMu.Lock()
+	defer public.managed.stateMu.Unlock()
+	matchCount := 0
+	matchedLevel := false
+	for _, subscription := range public.managed.subs {
+		if subscription.Channel != StreamChannelOrderBook {
+			continue
+		}
+		for _, subscribedSymbol := range subscription.Symbols {
+			if subscribedSymbol != symbol {
+				continue
+			}
+			matchCount++
+			matchedLevel = subscription.Level == level
+		}
+	}
+	return matchCount == 1 && matchedLevel
+}
+
 // PrivateStream은 코빗 private 주문·체결·자산 WebSocket 연결을 관리한다.
 type PrivateStream struct{ managed *managedStream }
 

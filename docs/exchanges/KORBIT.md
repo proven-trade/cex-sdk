@@ -100,6 +100,49 @@ private handshake는 매 연결 세대마다 Secret Provider를 다시 조회하
 
 한 세션의 handler는 수신 순서대로 호출됩니다. 느린 처리는 사용자 애플리케이션에서 별도 bounded queue로 분리해야 하며, 재조정 중 들어온 이벤트와 REST 결과는 주문 ID·체결 ID·하위 계정을 기준으로 병합해야 합니다.
 
+### Spot 로컬 오더북 snapshot
+
+코빗 `orderbook`은 구독 직후 `snapshot: true`인 최신 호가를 보내고 이후 `false` 또는 `null`인 실시간 전체 호가를 제공합니다. 각 프레임은 양방향 최대 30단계를 포함하며 sequence는 없습니다. `LocalOrderBook`은 매 프레임을 독립 검증해 이전 상태와 병합하지 않고 통째로 교체합니다.
+
+```go
+public, err := streams.PublicStream(
+	korbit.StreamRequest{Subscriptions: []korbit.StreamSubscription{{
+		Channel: korbit.StreamChannelOrderBook,
+		Symbols: []string{"btc_krw"},
+		Level:   "1000",
+	}}},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer public.Close()
+
+book, err := korbit.NewLocalOrderBook(korbit.LocalOrderBookConfig{
+	Symbol:        "btc_krw",
+	Level:         "1000",
+	EgressRouteID: "seoul-b",
+	ViewDepth:     30,
+})
+if err != nil {
+	return err
+}
+
+err = book.Run(ctx, public, func(ctx context.Context, view korbit.LocalOrderBookView) error {
+	return consumeBook(view)
+})
+```
+
+운영 계약은 다음과 같습니다.
+
+- 로컬 오더북과 WebSocket의 심볼·`Level`·`EgressRouteID`가 다르면 연결 전에 거부합니다.
+- 응답에는 구독 `level`이 없으므로 같은 심볼의 orderbook 구독이 여러 개면 서로 구분할 수 없어 사전 거부합니다.
+- asks는 낮은 가격부터, bids는 높은 가격부터인 best-first 순서와 가격·수량·선택적 금액을 검증합니다.
+- 같은 연결 세대에서 data timestamp가 역행한 프레임은 무시하고, 같은 millisecond의 복수 변경은 유실하지 않도록 같은 timestamp는 허용합니다.
+- 재연결 시 같은 EIP와 현재 구독으로 복구하고 새 세대의 첫 전체 호가를 받아들입니다. `SnapshotID`, `Generation`, envelope·data timestamp, `Snapshot`으로 상태를 관측합니다.
+- `LocalOrderBook.Run`이 대상 구독의 수명주기를 소유하므로 실행 중 해당 구독을 제거하지 않아야 합니다.
+- 공식 계약상 public 메시지는 부하 시 누락될 수 있고 sequence가 없어 누락을 탐지할 수 없습니다. 정합성이 매우 중요한 운영에서는 같은 EIP의 REST `OrderBook`을 주기적으로 조회해 view와 대조해야 합니다.
+
 ## 공통 Spot API
 
 `NewUnifiedSpot`은 native 클라이언트를 `unified.SpotClient`로 변환합니다. 공통 `BTC/KRW`는 Korbit의 소문자 `btc_krw`로 변환하며, 시장가 매수의 `QuoteAmount`는 `amt`, 시장가 매도의 `Quantity`는 `qty`로 전송합니다. `ClientOrderID`를 생략하면 36자 이내의 암호학적 난수 ID를 생성합니다.
@@ -113,3 +156,4 @@ Korbit에 native 3분봉이 없으므로 1분봉을 `start`와 `end`로 최대 2
 - [Korbit Open API 문서](https://docs.korbit.co.kr/)
 - [Korbit Open API LLM 문서](https://docs.korbit.co.kr/llms.txt)
 - [Korbit WebSocket API](https://docs.korbit.co.kr/llms/en/websocket_api.md)
+- [Korbit public WebSocket](https://docs.korbit.co.kr/llms/en/websocket_api/public.md)
