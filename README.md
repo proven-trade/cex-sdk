@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot REST 1차 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -12,6 +12,7 @@
 - [Bybit V5 Spot·Linear REST](docs/exchanges/BYBIT.md)
 - [OKX V5 Spot·SWAP REST](docs/exchanges/OKX.md)
 - [Coinbase Advanced Trade Spot](docs/exchanges/COINBASE.md)
+- [Kraken Spot REST](docs/exchanges/KRAKEN.md)
 
 ## 현재 기준
 
@@ -42,6 +43,8 @@
 | OKX V5 WebSocket | public 시세·business 캔들·private 계정 stream 구현됨 |
 | Coinbase Advanced Trade REST | Spot 공개 시세, 계정, 주문·체결 구현됨 |
 | Coinbase Advanced Trade WebSocket | public 시세·private user 주문 stream 구현됨 |
+| Kraken Spot REST | 공개 시세, 계정, 주문·체결 구현됨 |
+| Kraken Futures·WebSocket | 예정 |
 | 나머지 P1 거래소 | 예정 |
 
 ## 요청별 EIP 선택
@@ -251,6 +254,19 @@ defer session.Close()
 - 연결별 EIP 고정, 새 JWT 재인증, 재구독
 
 세부 계약과 자격증명 저장 형식은 [Coinbase Advanced Trade 문서](docs/exchanges/COINBASE.md)를 참고합니다.
+
+## Kraken Spot REST 1차 범위
+
+- 서버 시간, Spot 상품 규칙, ticker, L2 호가, 최근 체결, OHLCV
+- 자산별 총 잔고
+- 시장가·지정가 주문 생성, 주문 조회·취소, 미체결·종료 주문 목록
+- 계정 체결 이력
+- Base64 secret 기반 SHA-256과 HMAC-SHA-512 `API-Sign`
+- 단일 클라이언트에서 동시 요청에도 항상 증가하는 millisecond nonce
+- 공개 EIP, private API key counter, 계정+상품 주문 제한 분리
+- 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
+
+세부 계약과 제한 정책은 [Kraken Spot 문서](docs/exchanges/KRAKEN.md)를 참고합니다.
 
 ## 공통 Spot API
 
