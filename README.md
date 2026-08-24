@@ -58,7 +58,7 @@
 | OKX V5 REST | Spot·SWAP 공개 시세, 거래 계정, 포지션, 주문 구현됨 |
 | OKX V5 WebSocket | public 시세·business 캔들·private 계정 stream·로컬 오더북 자동 복구 구현됨 |
 | Coinbase Advanced Trade REST | Spot 공개 시세, 계정, 주문·체결 구현됨 |
-| Coinbase Advanced Trade WebSocket | public 시세·private user 주문 stream 구현됨 |
+| Coinbase Advanced Trade WebSocket | public 시세·private user 주문 stream·level2 로컬 오더북 자동 갭 복구 구현됨 |
 | Kraken Spot REST | 공개 시세, 계정, 주문·체결 구현됨 |
 | Kraken Spot WebSocket v2 | public 시세·상품 규칙, private 주문·체결·잔고 stream 구현됨 |
 | Kraken Futures REST | 공개 시세·캔들, 지갑, 포지션, 주문·체결 구현됨 |
@@ -295,6 +295,7 @@ defer session.Close()
 - public ticker·ticker batch·체결·호가·캔들·상품 상태 WebSocket
 - private user 주문 WebSocket과 자동 heartbeat
 - 연결별 EIP 고정, 새 JWT 재인증, 재구독
+- level2 snapshot·절대 수량 update 로컬 오더북과 sequence gap 시 같은 EIP 자동 재연결
 
 세부 계약과 자격증명 저장 형식은 [Coinbase Advanced Trade 문서](docs/exchanges/COINBASE.md)를 참고합니다.
 

@@ -179,7 +179,28 @@ err = public.Run(ctx, func(ctx context.Context, message coinbase.StreamMessage) 
 })
 ```
 
-서버는 `level2` 구독 데이터를 `channel=l2_data`로 전달하므로 handler에서 raw `Channel`을 분기할 때 이 이름을 사용해야 한다. `SequenceNumber`를 노출하지만 첫 범위에는 로컬 오더북 gap 자동 복구가 포함되지 않는다. snapshot을 적용한 뒤 update의 `NewQuantity`를 해당 가격 레벨의 전체 수량으로 교체하고, 값이 `0`이면 레벨을 제거해야 한다.
+서버는 `level2` 구독 데이터를 `channel=l2_data`로 전달하므로 raw handler에서 `StreamChannelLevel2Data`를 기준으로 분기해야 한다. snapshot을 적용한 뒤 update의 `NewQuantity`를 해당 가격 레벨의 전체 수량으로 교체하고, 값이 `0`이면 레벨을 제거해야 한다.
+
+`level2`를 로컬 장부로 소비할 때는 위 `public.Run` 대신 `LocalOrderBook.Run`이 해당 public stream을 소유하도록 한다.
+
+```go
+book, err := coinbase.NewLocalOrderBook(coinbase.LocalOrderBookConfig{
+	ProductID:     "BTC-USD",
+	ViewDepth:     20,
+	EgressRouteID: "seoul-b",
+})
+if err != nil {
+	return err
+}
+
+err = book.Run(ctx, public, func(ctx context.Context, view coinbase.LocalOrderBookView) error {
+	return handleBook(view)
+})
+```
+
+SDK는 상품별 `SequenceNumber`가 직전 값보다 정확히 1 증가하는지 검사한다. 더 작은 오래된 순서는 무시하고, 앞으로 건너뛴 순서나 새 연결에서 snapshot보다 먼저 온 update는 현재 장부를 폐기한 뒤 같은 EIP route로 재연결해 새 snapshot을 받는다. snapshot 이벤트는 언제든 전체 장부를 교체하며, 한 메시지에 같은 상품 이벤트가 여러 개 있으면 배열 순서대로 모두 반영한 뒤 한 번만 handler를 호출한다.
+
+`SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 재연결을 유발한 sequence 이상 횟수, `Generation`은 WebSocket 연결 세대를 나타낸다. `ViewDepth` 기본값은 20이며 handler에 복사하는 상위 호가 수만 제한하고 내부 장부는 전체 snapshot과 이후 모든 가격 레벨을 유지한다. 로컬 오더북과 public stream의 상품·EIP가 다르면 네트워크 연결 전에 거부한다.
 
 public `Subscribe`와 `Unsubscribe`가 성공하면 현재 구독 목록을 갱신한다. 연결이 끊기면 같은 EIP route에서 heartbeat를 포함한 현재 목록을 채널별 메시지로 다시 구독한다. Coinbase는 연결 후 5초 안에 구독 메시지를 요구하며 채널 하나마다 별도 메시지를 보내야 한다.
 

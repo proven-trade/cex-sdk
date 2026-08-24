@@ -554,6 +554,7 @@ const (
 - OKX V5 Spot·SWAP public/private WebSocket 구현 완료
 - Coinbase Advanced Trade Spot REST 구현 완료
 - Coinbase Advanced Trade public/user WebSocket 구현 완료
+- Coinbase Advanced Trade Spot level2 로컬 오더북과 sequence gap·동일 EIP 재연결 복구 구현 완료
 - Kraken Spot REST 구현 완료
 - Kraken Futures REST 구현 완료
 - Kraken Spot WebSocket v2 public/private 구현 완료

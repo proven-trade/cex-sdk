@@ -16,6 +16,7 @@ const (
 	StreamChannelTicker       StreamChannel = "ticker"
 	StreamChannelTickerBatch  StreamChannel = "ticker_batch"
 	StreamChannelLevel2       StreamChannel = "level2"
+	StreamChannelLevel2Data   StreamChannel = "l2_data"
 	StreamChannelUser         StreamChannel = "user"
 )
 

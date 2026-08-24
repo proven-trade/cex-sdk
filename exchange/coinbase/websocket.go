@@ -249,6 +249,30 @@ func (stream *PublicStream) Close() error { return stream.managed.session.Close(
 // Generation은 성공한 공개 stream 연결 세대 번호를 반환한다.
 func (stream *PublicStream) Generation() uint64 { return stream.managed.session.Generation() }
 
+// EgressRouteID는 공개 연결과 모든 재연결에 고정된 송신 경로를 반환한다.
+func (stream *PublicStream) EgressRouteID() transport.EgressRouteID {
+	return stream.managed.session.EgressRouteID()
+}
+
+func (stream *PublicStream) hasSubscription(channel StreamChannel, productID string) bool {
+	stream.managed.mu.Lock()
+	defer stream.managed.mu.Unlock()
+	subscription, exists := stream.managed.subscriptions[channel]
+	if !exists {
+		return false
+	}
+	for _, subscribedProductID := range subscription.ProductIDs {
+		if subscribedProductID == productID {
+			return true
+		}
+	}
+	return false
+}
+
+func (stream *PublicStream) reconnect() error {
+	return stream.managed.session.Reconnect()
+}
+
 // UserStream은 user data endpoint의 인증 구독과 재연결을 관리한다.
 type UserStream struct {
 	session *corestream.Session
