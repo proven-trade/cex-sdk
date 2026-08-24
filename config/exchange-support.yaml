@@ -115,7 +115,7 @@
       "rest": "implemented",
       "websocket_public": "implemented",
       "websocket_private": "implemented",
-      "unified": "planned",
+      "unified": "implemented",
       "automated_tests": "implemented",
       "live_read_smoke": "pending",
       "live_trade_smoke": "pending",
