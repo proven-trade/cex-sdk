@@ -15,7 +15,7 @@ var catalogData = []ProductSupport{
 	{
 		Exchange: model.ExchangeID("binance"), DisplayName: "Binance", Tier: "P0",
 		Product: ProductID("usdm_futures"), ProductName: "USDⓈ-M Futures",
-		REST: Status("implemented"), WebSocketPublic: Status("planned"), WebSocketPrivate: Status("planned"),
+		REST: Status("implemented"), WebSocketPublic: Status("implemented"), WebSocketPrivate: Status("implemented"),
 		Unified: Status("not_applicable"), AutomatedTests: Status("implemented"),
 		LiveReadSmoke: Status("pending"), LiveTradeSmoke: Status("pending"),
 		Docs: []string{"docs/exchanges/BINANCE_USDM.md"},

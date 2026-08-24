@@ -18,6 +18,8 @@ const (
 	defaultPingTimeout = 5 * time.Second
 )
 
+var errReconnectRequested = errors.New("stream reconnect requested")
+
 // SessionConfig는 재연결 WebSocket 세션의 동작을 정의한다.
 type SessionConfig struct {
 	Connector            Connector
@@ -43,6 +45,7 @@ type Session struct {
 	generation uint64
 	started    bool
 	closed     bool
+	reconnect  bool
 }
 
 type permanentError struct {
@@ -144,6 +147,7 @@ func (session *Session) Run(ctx context.Context, handler MessageHandler) error {
 
 		attempt = 0
 		err, handlerFailed := session.consume(ctx, connection, handler)
+		err = session.reconnectCause(connection, err)
 		session.remove(connection)
 		_ = connection.Close(closeGoingAway, "connection ended")
 		if handlerFailed {
@@ -185,6 +189,23 @@ func (session *Session) Generation() uint64 {
 	return session.generation
 }
 
+// Reconnect는 현재 연결만 종료해 같은 route의 새 연결을 시작하게 한다.
+func (session *Session) Reconnect() error {
+	session.mu.Lock()
+	if session.closed {
+		session.mu.Unlock()
+		return ErrSessionClosed
+	}
+	connection := session.connection
+	if connection == nil {
+		session.mu.Unlock()
+		return ErrNotConnected
+	}
+	session.reconnect = true
+	session.mu.Unlock()
+	return connection.Close(closeGoingAway, "reconnect requested")
+}
+
 // Close는 현재 연결을 닫고 이후 재연결을 중단한다.
 func (session *Session) Close() error {
 	session.mu.Lock()
@@ -193,6 +214,7 @@ func (session *Session) Close() error {
 		return nil
 	}
 	session.closed = true
+	session.reconnect = false
 	connection := session.connection
 	session.connection = nil
 	session.mu.Unlock()
@@ -233,6 +255,7 @@ func (session *Session) install(connection Connection) (uint64, bool) {
 		return session.generation, false
 	}
 	session.connection = connection
+	session.reconnect = false
 	session.generation++
 	return session.generation, true
 }
@@ -243,6 +266,16 @@ func (session *Session) remove(connection Connection) {
 	if session.connection == connection {
 		session.connection = nil
 	}
+}
+
+func (session *Session) reconnectCause(connection Connection, cause error) error {
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if session.connection == connection && session.reconnect {
+		session.reconnect = false
+		return errReconnectRequested
+	}
+	return cause
 }
 
 func (session *Session) dialRequest(ctx context.Context) (DialRequest, error) {

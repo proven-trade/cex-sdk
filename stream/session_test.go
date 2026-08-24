@@ -276,6 +276,79 @@ func TestSessionCloseStopsBlockingRead(t *testing.T) {
 	}
 }
 
+func TestSessionReconnectReplacesConnectionOnSameRoute(t *testing.T) {
+	t.Parallel()
+
+	first := newFakeConnection()
+	second := newFakeConnection(fakeReadResult{
+		message: Message{Type: MessageText, Data: []byte("reconnected")},
+	})
+	connector := &scriptedConnector{steps: []connectStep{
+		{connection: first},
+		{connection: second},
+	}}
+	connected := make(chan uint64, 2)
+	session, err := NewSession(SessionConfig{
+		Connector:     connector,
+		EgressRouteID: "route-b",
+		Request:       DialRequest{Endpoint: "wss://stream.example.test/ws"},
+		Observer: func(change StateChange) {
+			if change.State == StateConnected {
+				connected <- change.Generation
+			}
+		},
+		Backoff: func(int) time.Duration { return 0 },
+	})
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- session.Run(ctx, func(_ context.Context, message Message) error {
+			if string(message.Data) == "reconnected" {
+				cancel()
+			}
+			return nil
+		})
+	}()
+	select {
+	case generation := <-connected:
+		if generation != 1 {
+			t.Fatalf("first generation = %d, want 1", generation)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("session did not establish first connection")
+	}
+	if err := session.Reconnect(); err != nil {
+		t.Fatalf("Reconnect() error = %v", err)
+	}
+	select {
+	case generation := <-connected:
+		if generation != 2 {
+			t.Fatalf("second generation = %d, want 2", generation)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("session did not reconnect")
+	}
+	select {
+	case runErr := <-done:
+		if !errors.Is(runErr, context.Canceled) {
+			t.Fatalf("Run() error = %v, want context.Canceled", runErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run() did not finish")
+	}
+	if err := session.Reconnect(); !errors.Is(err, ErrNotConnected) {
+		t.Fatalf("Reconnect() after Run error = %v, want ErrNotConnected", err)
+	}
+	calls, routes, _ := connector.snapshot()
+	if calls != 2 || len(routes) != 2 || routes[0] != "route-b" || routes[1] != "route-b" {
+		t.Fatalf("connect calls = %d, routes = %v", calls, routes)
+	}
+}
+
 func TestSessionReturnsHandlerErrorWithoutReconnect(t *testing.T) {
 	t.Parallel()
 

@@ -529,6 +529,7 @@ const (
 
 - 공통 route 고정 연결, reconnect, 재구독 수명주기 구현 완료
 - Binance Spot public/private stream 구현 완료
+- Binance USDⓈ-M Futures 분리 public/market 및 listenKey private stream 구현 완료
 - Bitget v3 UTA public/private stream 구현 완료
 - Upbit Spot public/private stream 구현 완료
 - 거래소별 sequence gap recovery와 장시간 soak test

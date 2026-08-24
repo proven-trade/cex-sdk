@@ -38,8 +38,15 @@ const (
 	Candle15Minutes CandleInterval = "15m"
 	Candle30Minutes CandleInterval = "30m"
 	Candle1Hour     CandleInterval = "1h"
+	Candle2Hours    CandleInterval = "2h"
 	Candle4Hours    CandleInterval = "4h"
+	Candle6Hours    CandleInterval = "6h"
+	Candle8Hours    CandleInterval = "8h"
+	Candle12Hours   CandleInterval = "12h"
 	Candle1Day      CandleInterval = "1d"
+	Candle3Days     CandleInterval = "3d"
+	Candle1Week     CandleInterval = "1w"
+	Candle1Month    CandleInterval = "1M"
 )
 
 // CandlesRequest는 OHLCV 캔들 조회 조건이다.
@@ -315,7 +322,9 @@ func validateSymbol(value string) error {
 
 func (interval CandleInterval) valid() bool {
 	switch interval {
-	case Candle1Minute, Candle3Minutes, Candle5Minutes, Candle15Minutes, Candle30Minutes, Candle1Hour, Candle4Hours, Candle1Day:
+	case Candle1Minute, Candle3Minutes, Candle5Minutes, Candle15Minutes,
+		Candle30Minutes, Candle1Hour, Candle2Hours, Candle4Hours, Candle6Hours,
+		Candle8Hours, Candle12Hours, Candle1Day, Candle3Days, Candle1Week, Candle1Month:
 		return true
 	default:
 		return false
