@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Classic Spot REST·WebSocket 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Classic Spot REST·WebSocket과 Futures REST 1차 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -19,6 +19,7 @@
 - [Coinone Spot REST·WebSocket](docs/exchanges/COINONE.md)
 - [Korbit Spot REST·WebSocket](docs/exchanges/KORBIT.md)
 - [KuCoin Classic Spot REST·WebSocket](docs/exchanges/KUCOIN.md)
+- [KuCoin Classic Futures REST](docs/exchanges/KUCOIN_FUTURES.md)
 
 ## 현재 기준
 
@@ -63,6 +64,7 @@
 | Korbit WebSocket | public 시세·private 주문·체결·자산 stream 구현됨 |
 | KuCoin Classic Spot REST | 상품 규칙, 공개 시세, 계정, HF 주문 생성·조회·취소·미체결 목록 구현됨 |
 | KuCoin Classic Spot WebSocket | public 시세·호가·체결, private 주문·잔고 stream 구현됨 |
+| KuCoin Classic Futures REST | 계약 규칙, 공개 시세, 계정·포지션, 주문·체결 구현됨 |
 
 ## 요청별 EIP 선택
 
@@ -377,6 +379,20 @@ defer session.Close()
 - KuCoin JSON ping/pong heartbeat와 서버가 발급한 연결 제한 검증
 
 세부 인증·주문·요청 제한·연결 계약은 [KuCoin Classic Spot 문서](docs/exchanges/KUCOIN.md)를 참고합니다.
+
+## KuCoin Classic Futures REST 1차 범위
+
+- 전체·단일 계약 규칙, 현재가, 20·100단계 호가, 최근 체결, 캔들
+- 결제 통화별 계정 요약과 열린 포지션
+- 계약 수량 기반 지정가·시장가 주문 생성, 상세, 취소, 미체결·체결 페이지
+- 격리·교차 증거금과 단방향·헤지 포지션 방향
+- HMAC-SHA256 Base64 요청 서명과 API Key 버전 2 Passphrase 서명
+- Public IP와 Futures UID 30초 weight pool 분리
+- `gw-ratelimit-*` 응답 헤더를 이용한 로컬 요청 제한 상태 보정
+- 요청별 EIP 선택과 자격증명 route 허용 검사
+- 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
+
+세부 인증·주문·요청 제한 계약은 [KuCoin Classic Futures 문서](docs/exchanges/KUCOIN_FUTURES.md)를 참고합니다.
 
 ## 공통 Spot API
 

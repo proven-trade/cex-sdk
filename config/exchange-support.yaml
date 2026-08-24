@@ -247,14 +247,14 @@
       "tier": "P2",
       "product_id": "futures",
       "product_name": "Futures",
-      "rest": "planned",
+      "rest": "implemented",
       "websocket_public": "planned",
       "websocket_private": "planned",
       "unified": "not_applicable",
-      "automated_tests": "planned",
+      "automated_tests": "implemented",
       "live_read_smoke": "planned",
       "live_trade_smoke": "planned",
-      "docs": []
+      "docs": ["docs/exchanges/KUCOIN_FUTURES.md"]
     },
     {
       "exchange_id": "gateio",

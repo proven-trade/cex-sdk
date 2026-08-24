@@ -564,7 +564,8 @@ const (
 - KuCoin Classic Spot REST 구현 완료
 - KuCoin Spot public/private WebSocket 구현 완료
 - KuCoin Spot 공통 API 구현 완료
-- KuCoin Futures REST·WebSocket 구현
+- KuCoin Futures REST 구현 완료
+- KuCoin Futures public/private WebSocket 구현
 - Gate.io Spot·Futures 구현
 
 ## 20. 확정 사항과 배포 전 결정 사항
