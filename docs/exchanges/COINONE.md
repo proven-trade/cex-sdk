@@ -99,6 +99,14 @@ private handshake는 매 연결 세대마다 Secret Provider를 다시 조회하
 
 구독 변경과 heartbeat write는 연결별로 직렬화합니다. 한 세션의 handler도 수신 순서대로 호출되므로 느린 처리는 사용자 애플리케이션에서 별도 bounded queue로 분리해야 합니다.
 
+## 공통 Spot API
+
+`NewUnifiedSpot`은 native 클라이언트를 `unified.SpotClient`로 변환합니다. Coinone API가 기준 통화와 대상 통화를 별도 필드로 사용하므로 공통 `BTC/KRW`의 `NativeMarket`은 SDK 표기인 `KRW-BTC`로 합성합니다. 인자 없는 공통 `Markets`는 현재 원화 마켓을 조회합니다.
+
+시장가 매수의 `QuoteAmount`는 `amount`, 시장가 매도의 `Quantity`는 `qty`로 전송합니다. 지정가는 GTC와 post-only를 지원하며 Coinone에 대응 계약이 없는 IOC·FOK는 요청 전에 거절합니다. 미체결 예약가는 공통 계약에 별도 stop 유형이 없으므로 `OrderTypeLimit`로 분류하고 원본 유형은 `Raw`에 보존합니다.
+
+Coinone 주문 상세의 현재 `order` 객체 응답과 이전 평면 응답을 모두 해석합니다. `LIVE`, 부분 체결, 완료, 부분·전체·자동 취소 상태를 공통 주문 상태로 변환합니다.
+
 ## 공식 기준
 
 - [Coinone API 문서](https://docs.coinone.co.kr/)

@@ -228,8 +228,8 @@ func (request OrderBookRequest) Validate() error {
 	if err := request.Market.Validate(); err != nil {
 		return err
 	}
-	if request.Limit < 0 || request.Limit > 30 {
-		return validationError("order book limit must be between 1 and 30 or zero for default")
+	if request.Limit < 0 || request.Limit > 16 {
+		return validationError("order book limit must be between 1 and 16 or zero for default")
 	}
 	return nil
 }

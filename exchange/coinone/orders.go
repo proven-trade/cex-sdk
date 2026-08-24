@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	trade "github.com/proven-trade/proven-trade-sdk"
 	"github.com/proven-trade/proven-trade-sdk/credential"
@@ -57,9 +58,21 @@ func (client *Client) OrderInfo(
 	if err != nil {
 		return OrderDetail{}, err
 	}
-	var result OrderDetail
-	if err := client.decodeResponse(response, commonexchange.OperationRead, &result); err != nil {
+	var envelope struct {
+		Order json.RawMessage `json:"order"`
+	}
+	if err := client.decodeResponse(response, commonexchange.OperationRead, &envelope); err != nil {
 		return OrderDetail{}, err
+	}
+	rawOrder := response.Body
+	if len(envelope.Order) > 0 && string(envelope.Order) != "null" {
+		rawOrder = envelope.Order
+	}
+	var result OrderDetail
+	if err := json.Unmarshal(rawOrder, &result); err != nil {
+		return OrderDetail{}, client.decodeBodyError(
+			response, commonexchange.OperationRead, fmt.Errorf("decode Coinone order detail: %w", err),
+		)
 	}
 	if result.OrderID == "" {
 		return OrderDetail{}, client.decodeBodyError(

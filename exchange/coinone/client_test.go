@@ -115,7 +115,7 @@ func TestClientPublicAndPrivateLifecycle(t *testing.T) {
 			}
 			_, _ = io.WriteString(writer, `{"result":"success","error_code":"0","order_id":"order-1"}`)
 		case "/v2.1/order/detail":
-			_, _ = io.WriteString(writer, `{"result":"success","error_code":"0","order_id":"order-1","user_order_id":"strategy-1","type":"LIMIT","quote_currency":"KRW","target_currency":"BTC","status":"LIVE","side":"BUY","fee":"0","fee_rate":"0.002","average_executed_price":"0","price":"64000000","original_qty":"0.01","executed_qty":"0","remain_qty":"0.01","is_triggered":null}`)
+			_, _ = io.WriteString(writer, `{"result":"success","error_code":"0","order":{"order_id":"order-1","user_order_id":"strategy-1","type":"LIMIT","quote_currency":"KRW","target_currency":"BTC","status":"LIVE","side":"BUY","fee":"0","fee_rate":"0.002","average_executed_price":"0","price":"64000000","original_qty":"0.01","executed_qty":"0","remain_qty":"0.01","is_triggered":null}}`)
 		case "/v2.1/order/cancel":
 			_, _ = io.WriteString(writer, `{"result":"success","error_code":"0","order_id":"order-1","price":"64000000","qty":"0.01","remain_qty":"0.01","side":"BUY","original_qty":"0.01","traded_qty":"0","canceled_qty":"0.01","fee":"0","fee_rate":"0.002","avg_price":"0","canceled_at":1700000001000,"ordered_at":1700000000000}`)
 		case "/v2.1/order/active_orders":

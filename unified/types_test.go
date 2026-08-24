@@ -52,3 +52,15 @@ func TestScopeAndIdentityValidation(t *testing.T) {
 		t.Fatalf("OrderRequest.Validate() error = %v", err)
 	}
 }
+
+func TestOrderBookRequestValidationUsesSharedDepth(t *testing.T) {
+	t.Parallel()
+
+	market := Market{Base: "BTC", Quote: "KRW"}
+	if err := (OrderBookRequest{Market: market, Limit: 16}).Validate(); err != nil {
+		t.Fatalf("OrderBookRequest.Validate() error = %v", err)
+	}
+	if err := (OrderBookRequest{Market: market, Limit: 17}).Validate(); !errors.Is(err, trade.ErrValidation) {
+		t.Fatalf("OrderBookRequest.Validate() error = %v, want validation error", err)
+	}
+}
