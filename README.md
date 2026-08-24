@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket 1차 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -15,7 +15,7 @@
 - [Kraken Spot REST·WebSocket v2](docs/exchanges/KRAKEN.md)
 - [Kraken Futures REST·WebSocket v1](docs/exchanges/KRAKEN_FUTURES.md)
 - [Bithumb Spot REST·WebSocket](docs/exchanges/BITHUMB.md)
-- [Coinone Spot REST](docs/exchanges/COINONE.md)
+- [Coinone Spot REST·WebSocket](docs/exchanges/COINONE.md)
 
 ## 현재 기준
 
@@ -53,7 +53,8 @@
 | Bithumb Spot REST | 공개 시세, 잔고, v1 상세·v2 주문 생성·취소·목록 구현됨 |
 | Bithumb WebSocket | public v1 시세·private v2 주문·자산 stream 구현됨 |
 | Coinone Spot REST | public v2 시세, v2.1 잔고·주문·체결 구현됨 |
-| Coinone WebSocket, Korbit | 예정 |
+| Coinone WebSocket | public 시세·private 주문·자산 stream 구현됨 |
+| Korbit | 예정 |
 
 ## 요청별 EIP 선택
 
@@ -311,7 +312,7 @@ defer session.Close()
 
 세부 계약과 REST·WebSocket v1/v2 endpoint 구분은 [Bithumb Spot 문서](docs/exchanges/BITHUMB.md)를 참고합니다.
 
-## Coinone Spot REST 1차 범위
+## Coinone Spot REST·WebSocket 1차 범위
 
 - 기준 통화별 마켓, 현재가, 호가, 최근 체결, 캔들
 - 통화별 잔고
@@ -321,8 +322,13 @@ defer session.Close()
 - 응답 remaining 헤더를 이용한 로컬 요청 제한 상태 보정
 - 요청별 EIP 선택과 자격증명 route 허용 검사
 - 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
+- public 호가·ticker·체결·캔들 WebSocket
+- private 내 주문·자산 WebSocket
+- DEFAULT·SHORT typed event, 실행 중 구독 변경, 재연결 구독 복구
+- 연결별 EIP 고정, 재연결마다 private handshake 재서명
+- JSON PING/PONG 기반 30분 세션 만료 갱신
 
-세부 인증·주문·요청 제한 계약은 [Coinone Spot REST 문서](docs/exchanges/COINONE.md)를 참고합니다.
+세부 인증·주문·요청 제한·연결 계약은 [Coinone Spot 문서](docs/exchanges/COINONE.md)를 참고합니다.
 
 ## 공통 Spot API
 

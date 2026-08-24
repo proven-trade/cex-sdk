@@ -1,4 +1,4 @@
-# Coinone Spot REST 어댑터
+# Coinone Spot REST·WebSocket 어댑터
 
 구현 기준은 코인원 API v2·v2.1과 REST 기본 주소 `https://api.coinone.co.kr`입니다.
 
@@ -23,6 +23,8 @@ private API를 사용하려면 `credential.Provider`가 반환하는 `credential
 | 주문 생성 | `PlaceOrder` | `POST /v2.1/order` |
 | 주문 상세·취소 | `OrderInfo`, `CancelOrder` | private v2.1 |
 | 주문 목록 | `ActiveOrders`, `CompletedOrders` | private v2.1 |
+| 공개 stream | `ORDERBOOK`, `TICKER`, `TRADE`, `CHART` | public WebSocket |
+| 개인 stream | `MYORDER`, `MYASSET` | private WebSocket v1 |
 
 가격, 수량, 금액, 수수료는 `float64`로 변환하지 않고 `Decimal` 문자열로 보존합니다. 각 항목의 `Raw`에는 해당 응답의 원본 JSON을 보존합니다.
 
@@ -70,9 +72,38 @@ private 일반 API와 주문 API는 별도 bucket입니다. 응답의 `Public-Ra
 
 코인원은 HTTP 200에서도 `result: "error"`와 0이 아닌 `error_code`를 반환할 수 있습니다. SDK는 HTTP 상태와 JSON envelope를 모두 검사하며 인증, 권한·IP, 잔고 부족, 주문 없음, 요청 제한, 거래소 장애를 공통 `trade.APIError`로 분류합니다. `error_code`와 `error_msg` 원문도 보존하지만 인증 헤더와 서명 원문은 오류에 포함하지 않습니다.
 
+## WebSocket
+
+`StreamClient`는 public `wss://stream.coinone.co.kr`과 private `wss://stream.coinone.co.kr/v1/private`를 분리합니다. `PublicStream`과 `PrivateStream`을 생성할 때 선택한 EIP route는 해당 세션의 모든 재연결에서도 고정됩니다.
+
+private handshake는 매 연결 세대마다 Secret Provider를 다시 조회하고 다음 JSON을 새 nonce와 현재 millisecond timestamp로 생성합니다.
+
+```json
+{"access_token":"...","nonce":"...","timestamp":1700000000123}
+```
+
+이 JSON bytes를 REST와 같은 Base64 payload와 HMAC-SHA512 hex 서명으로 만들어 `X-COINONE-PAYLOAD`, `X-COINONE-SIGNATURE` 헤더에 넣습니다. 인증 자격증명과 route 허용 관계는 첫 Secret 조회 전에 검사하며 인증 문제를 뜻하는 close code 4280은 같은 잘못된 인증으로 무한 재연결하지 않습니다.
+
+| 구분 | 지원 채널 |
+|---|---|
+| public | `ORDERBOOK`, `TICKER`, `TRADE`, `CHART` |
+| private | `MYORDER`, `MYASSET` |
+
+- `DEFAULT`와 `SHORT` 형식을 모두 지원하며 `StreamMessage.Decode`는 두 형식을 동일한 typed event로 변환합니다.
+- `Subscribe`와 `Unsubscribe`로 실행 중 구독을 변경할 수 있고, 성공적으로 전송된 현재 구독은 재연결 때 자동 복구합니다.
+- public 채널은 구독 한 건당 거래쌍 하나를 사용합니다. `CHART`는 공식 WebSocket 구간만 허용합니다.
+- `MYORDER`는 topic을 생략해 전체 주문을 받거나 여러 거래쌍을 배열로 지정할 수 있습니다. `MYASSET`은 topic을 받지 않습니다.
+- WebSocket control ping과 별개로 공식 JSON `{"request_type":"PING"}`을 기본 10분마다 보내고 `PONG`을 기다려 30분 세션 만료를 갱신합니다.
+- 코인원 제한은 public IP당 최대 20개, private 계정당 최대 20개 연결입니다. SDK의 개별 세션은 이를 우회하지 않으며 close code 4290을 원본 연결 오류로 전달합니다.
+- `CONNECTED`, `SUBSCRIBED`, `UNSUBSCRIBED`, `PONG`, `ERROR`도 `StreamMessage`로 handler에 전달합니다. 오류 응답의 `error_code`와 `message`를 보존합니다.
+
+구독 변경과 heartbeat write는 연결별로 직렬화합니다. 한 세션의 handler도 수신 순서대로 호출되므로 느린 처리는 사용자 애플리케이션에서 별도 bounded queue로 분리해야 합니다.
+
 ## 공식 기준
 
 - [Coinone API 문서](https://docs.coinone.co.kr/)
 - [Public API 안내](https://docs.coinone.co.kr/docs/about-public-api)
 - [요청 횟수 제한 안내](https://docs.coinone.co.kr/docs/ratelimit-%EC%95%88%EB%82%B4)
 - [오류 코드](https://docs.coinone.co.kr/docs/error-code)
+- [Public WebSocket](https://docs.coinone.co.kr/reference/public-websocket-1)
+- [Private WebSocket](https://docs.coinone.co.kr/reference/private-websocket-1)

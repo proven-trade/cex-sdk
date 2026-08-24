@@ -551,7 +551,7 @@ const (
 - Bithumb Spot REST 구현 완료
 - Bithumb public v1/private v2 WebSocket 구현 완료
 - Coinone Spot REST 구현 완료
-- Coinone Spot WebSocket 구현 예정
+- Coinone public/private WebSocket 구현 완료
 - Korbit Spot REST/WebSocket 구현 예정
 - 지원 매트릭스와 운영 수요 순으로 거래소 추가
 - 어댑터 생성 템플릿 및 문서 자동 생성
