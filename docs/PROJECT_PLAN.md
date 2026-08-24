@@ -71,7 +71,7 @@
 | P1 | Bithumb, Coinone, Korbit | Spot | 국내 거래소 확장 |
 | P2 | KuCoin, Gate.io | Spot, Futures | 수요와 운영 계정 확보 후 |
 
-목록은 고정 문자열이 아니라 `exchange-support.yaml`에서 상태와 기능을 관리하고 문서/테스트 표를 생성하도록 설계한다.
+목록은 `config/exchange-support.yaml`을 기준 정보로 관리하며 `support` Go catalog와 `docs/SUPPORT_MATRIX.md`를 자동 생성한다. 추가 의존성을 피하기 위해 설정 파일은 YAML과 호환되는 JSON 문법을 사용한다.
 
 ### 5.2 기능 단계
 
@@ -554,7 +554,8 @@ const (
 - Coinone public/private WebSocket 구현 완료
 - Korbit Spot REST 구현 완료
 - Korbit public/private WebSocket 구현 완료
-- 지원 매트릭스와 운영 수요 순으로 거래소 추가
+- 지원 매트릭스와 Go capability catalog 자동 생성 완료
+- 운영 수요 순으로 거래소 추가
 - 어댑터 생성 템플릿 및 문서 자동 생성
 - deprecated API 감지 및 변경 알림 프로세스
 

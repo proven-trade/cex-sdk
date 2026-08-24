@@ -7,6 +7,7 @@
 ## 문서
 
 - [프로젝트 기획서](docs/PROJECT_PLAN.md)
+- [거래소 지원 매트릭스](docs/SUPPORT_MATRIX.md)
 - [공통 WebSocket 연결 계층](docs/STREAMS.md)
 - [Binance Spot WebSocket](docs/exchanges/BINANCE_WEBSOCKET.md)
 - [Bybit V5 Spot·Linear REST](docs/exchanges/BYBIT.md)
@@ -26,6 +27,8 @@
 - IP 선택: 클라이언트 기본값과 요청별 `egressRouteId` 재정의
 
 ## 구현 상태
+
+아래 표는 요약입니다. 상품군별 구현·자동 테스트·실계정 smoke 상태의 기준 정보는 [자동 생성 지원 매트릭스](docs/SUPPORT_MATRIX.md)를 확인합니다.
 
 | 영역 | 상태 |
 |---|---|
@@ -114,6 +117,7 @@ private API는 `credential.Descriptor`와 Secret 저장소를 읽는 `credential
 ## 개발 명령
 
 ```bash
+go run ./cmd/supportgen -check
 go test ./...
 go test -race ./...
 go vet ./...
