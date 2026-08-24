@@ -184,6 +184,7 @@ type WalletCoin struct {
 	AvailableToWithdraw   string `json:"availableToWithdraw"`
 	AvailableToBorrow     string `json:"availableToBorrow"`
 	BorrowAmount          string `json:"borrowAmount"`
+	SpotBorrow            string `json:"spotBorrow"`
 	Locked                string `json:"locked"`
 	UnrealisedPnL         string `json:"unrealisedPnl"`
 	CumulativeRealisedPnL string `json:"cumRealisedPnl"`

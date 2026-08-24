@@ -11,7 +11,7 @@
 | P0 | Bitget | Spot | 구현 | 구현 | 구현 | 구현 | 구현 | 대기 | 대기 | [문서](exchanges/BITGET.md) |
 | P0 | Bitget | USDT-M Futures | 구현 | 구현 | 구현 | 해당 없음 | 구현 | 대기 | 대기 | [문서](exchanges/BITGET.md) |
 | P0 | Upbit | Spot | 구현 | 구현 | 구현 | 구현 | 구현 | 대기 | 대기 | [문서](exchanges/UPBIT.md) |
-| P1 | Bybit | Spot | 구현 | 구현 | 구현 | 예정 | 구현 | 대기 | 대기 | [문서](exchanges/BYBIT.md) |
+| P1 | Bybit | Spot | 구현 | 구현 | 구현 | 구현 | 구현 | 대기 | 대기 | [문서](exchanges/BYBIT.md) |
 | P1 | Bybit | Linear Perpetual | 구현 | 구현 | 구현 | 해당 없음 | 구현 | 대기 | 대기 | [문서](exchanges/BYBIT.md) |
 | P1 | OKX | Spot | 구현 | 구현 | 구현 | 예정 | 구현 | 대기 | 대기 | [문서](exchanges/OKX.md) |
 | P1 | OKX | SWAP | 구현 | 구현 | 구현 | 해당 없음 | 구현 | 대기 | 대기 | [문서](exchanges/OKX.md) |
