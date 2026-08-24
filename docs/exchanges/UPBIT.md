@@ -22,7 +22,7 @@ Secret Key는 Base64 디코딩하지 않고 HS512 서명 키로 직접 사용합
 | 계정 | `Accounts` |
 | 주문 | `PlaceOrder`, `OrderInfo`, `CancelOrder`, `OpenOrders`, `ClosedOrders` |
 
-주문 생성은 `limit`, 매수 시장가 `price`, 매도 시장가 `market`을 지원합니다. 업비트 고유 `best` 주문, 주문 가능 정보, 일괄 취소, WebSocket은 아직 포함하지 않습니다.
+주문 생성은 `limit`, 매수 시장가 `price`, 매도 시장가 `market`을 지원합니다. 업비트 고유 `best` 주문, 주문 가능 정보와 일괄 취소는 아직 포함하지 않습니다.
 
 가격, 수량, 금액은 `float64`로 변환하지 않습니다. private 응답은 거래소가 제공한 문자열을 유지하고 공개 시세의 JSON 숫자는 `Decimal` 문자열 타입으로 손실 없이 보존합니다.
 
@@ -59,9 +59,126 @@ SDK는 공개 API를 EIP route별 IP bucket으로, private API를 `AccountID`별
 
 가능하면 고유한 `Identifier`를 주문에 넣고, 불명확한 결과가 나오면 `OrderInfo`로 최종 상태를 확인해야 합니다. 주문 목록을 전체 마켓으로 조회하려면 실수로 조회 범위를 넓히지 않도록 `AllMarkets: true`를 명시해야 합니다.
 
+## WebSocket
+
+업비트 WebSocket endpoint는 다음과 같습니다.
+
+| 연결 | Endpoint | 제한 측정 단위 |
+|---|---|---|
+| public 시세 | `wss://api.upbit.com/websocket/v1` | IP |
+| private Exchange | `wss://api.upbit.com/websocket/v1/private` | 계정 pocket |
+
+`StreamClient`의 모든 연결과 재연결은 세션 생성 시 선택한 EIP route에 고정됩니다.
+
+```go
+streams, err := upbit.NewStreamClient(upbit.StreamClientConfig{
+	Connector:             connector,
+	Credentials:           descriptor,
+	CredentialProvider:    secretProvider,
+	DefaultEgressRouteID: "seoul-a",
+})
+if err != nil {
+	return err
+}
+
+public, err := streams.PublicStream(
+	upbit.StreamRequest{
+		Types: []upbit.StreamDataType{
+			{Type: "ticker", Codes: []string{"KRW-BTC"}},
+			{Type: "trade", Codes: []string{"KRW-BTC"}, OnlyRealtime: true},
+		},
+		Format: upbit.StreamFormatDefault,
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer public.Close()
+
+err = public.Run(ctx, func(ctx context.Context, message upbit.StreamMessage) error {
+	if message.Error != nil {
+		return fmt.Errorf("Upbit stream error: %s", message.Error.Message)
+	}
+	if message.Status != "" {
+		return nil
+	}
+	switch message.Type {
+	case "ticker":
+		var event upbit.StreamTicker
+		if err := message.Decode(&event); err != nil {
+			return err
+		}
+		return handleTicker(event)
+	case "trade":
+		var event upbit.StreamTrade
+		if err := message.Decode(&event); err != nil {
+			return err
+		}
+		return handleTrade(event)
+	default:
+		return nil
+	}
+})
+```
+
+public typed 범위는 다음과 같습니다.
+
+- `ticker`: `StreamTicker`
+- `trade`: `StreamTrade`
+- `orderbook`: `StreamOrderBook`
+- `candle.{unit}`: `StreamCandle`
+
+`OnlySnapshot`과 `OnlyRealtime`은 동시에 지정할 수 없습니다. 응답 형식은 `DEFAULT`, `SIMPLE`, `JSON_LIST`를 지원합니다. typed 구조체는 전체 필드 이름을 사용하는 `DEFAULT` 기준이며, `SIMPLE`은 `Payload`에서 축약 필드 구조체로 직접 decode할 수 있습니다.
+
+private stream은 handshake 요청의 `Authorization` 헤더에 HS512 JWT를 넣습니다.
+
+```go
+private, err := streams.PrivateStream(
+	upbit.StreamRequest{
+		Types: []upbit.StreamDataType{
+			{Type: "myOrder", Codes: []string{"KRW-BTC"}},
+			{Type: "myAsset"},
+		},
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer private.Close()
+```
+
+세션 생성 시 자격증명의 read 권한과 route 허용 목록을 Secret 조회보다 먼저 검사합니다. 실제 연결과 재연결에서는 다음을 매번 새로 수행합니다.
+
+1. Secret Provider에서 Access Key와 Secret Key 조회
+2. 중복되지 않는 nonce 생성
+3. query hash가 없는 WebSocket handshake용 HS512 JWT 생성
+4. `Authorization: Bearer <JWT>` 헤더로 private endpoint 연결
+5. 연결별 새 ticket을 포함한 `myOrder`·`myAsset` 구독 요청 전송
+6. 사용한 자격증명 byte slice 파기
+
+private typed event는 `MyOrderEvent`와 `MyAssetEvent`입니다. 자격증명과 JWT는 상태 이벤트나 decode 오류에 포함하지 않습니다.
+
+### 연결 관리와 요청 제한
+
+업비트는 120초 동안 송수신이 없으면 idle connection을 종료합니다. SDK는 기본 30초마다 WebSocket PING frame을 보내고 10초 안에 PONG을 받지 못하면 같은 route로 재연결합니다.
+
+- 연결 요청: 초당 최대 5회
+- 데이터 요청 메시지: 연결당 초당 최대 5회, 분당 최대 100회
+- 인증 없는 연결 요청: IP 단위
+- 인증 연결 요청: 계정 pocket 단위
+- Origin 헤더가 있는 연결: 별도 10초당 1회 제한
+
+SDK는 브라우저가 아니므로 Origin 헤더를 설정하지 않습니다. 한 세션은 최초 연결 또는 재연결 직후 구독 요청 한 건만 보내며, 구독을 바꾸려면 기존 세션을 종료하고 새 세션을 만듭니다. 여러 세션과 프로세스의 연결 시도 합계는 운영 메트릭에서 감시해야 합니다. `Run` context가 세션 수명을 결정하므로 stream 생성 시 `trade.WithTimeout`은 허용하지 않습니다.
+
 ## 공식 기준 문서
 
 - [Upbit 인증](https://docs.upbit.com/kr/reference/auth)
 - [Upbit 요청 수 제한](https://docs.upbit.com/kr/reference/rate-limits)
+- [Upbit WebSocket 사용 안내](https://docs.upbit.com/kr/reference/websocket-guide)
+- [Upbit WebSocket 요청 형식](https://docs.upbit.com/kr/reference/websocket-request-format)
+- [Upbit 내 주문 WebSocket](https://docs.upbit.com/kr/reference/websocket-myorder)
+- [Upbit 내 자산 WebSocket](https://docs.upbit.com/kr/reference/websocket-myasset)
 - [Upbit 주문 생성](https://docs.upbit.com/kr/reference/new-order)
 - [Upbit order 요청 수 제한 상향](https://docs.upbit.com/kr/changelog/order-rate-limit-update)
