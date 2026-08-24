@@ -1,0 +1,132 @@
+# Kraken Futures REST 어댑터
+
+## 범위
+
+`exchange/kraken/futures`는 Kraken Derivatives REST v3와 Futures Charts v1의 첫 번째 범위를 제공한다.
+
+- Futures 상품 규칙과 전체 ticker
+- 단일 상품의 전체 비누적 L2 호가
+- 최근 100건 공개 체결과 OHLCV 캔들
+- cash, margin, multi-collateral 지갑
+- 열린 포지션, 미체결 주문, 계정 체결
+- 시장가, 지정가, post-only, IOC, FOK 주문 생성
+- 주문 취소와 최근 주문 상태 조회
+- 요청별 EIP route 선택
+
+조건부 주문, 주문 수정, 일괄 주문, 레버리지 설정, 자금 이동과 WebSocket은 후속 범위다. 첫 범위 밖의 주문 종류와 잘못된 수량·가격은 전송 전에 검증 오류로 거부한다.
+
+## 자격증명
+
+`credential.Material`에는 다음 값을 저장한다.
+
+| 필드 | 값 |
+|---|---|
+| `APIKey` | Kraken Futures API key 원문 |
+| `SecretKey` | Kraken Futures가 발급한 Base64 secret 원문 |
+| `Passphrase` | 사용하지 않음 |
+
+조회 key에는 `read`, 주문 key에는 `trade` 상위 권한을 선언한다. 실제 Kraken API key의 General 권한도 조회에는 Read Only 이상, 주문에는 Full Access로 설정해야 한다.
+
+```go
+descriptor := &credential.Descriptor{
+	AccountID:  "kraken-futures-main",
+	Exchange:   model.ExchangeKraken,
+	SecretRef:  "secret/kraken/futures/main",
+	Permissions: []credential.Permission{
+		credential.PermissionRead,
+		credential.PermissionTrade,
+	},
+	AllowedEgressRouteIDs: []transport.EgressRouteID{"seoul-a", "seoul-b"},
+}
+```
+
+private 요청은 파라미터를 URL query로 직렬화하고 body를 비워서 전송한다. `Authent`는 URL 인코딩된 query, `Nonce`, `/api/v3/...` endpoint path를 결합한 SHA-256 digest를 Base64 decode한 secret으로 HMAC-SHA-512 처리한 뒤 Base64로 인코딩한다. 서명 후 query를 수정하지 않는다.
+
+## 클라이언트
+
+```go
+client, err := krakenfutures.New(krakenfutures.Config{
+	Executor:             executor,
+	Credentials:          descriptor,
+	CredentialProvider:   secretProvider,
+	DefaultEgressRouteID: "seoul-a",
+})
+if err != nil {
+	return err
+}
+
+tickers, err := client.Tickers(
+	ctx,
+	krakenfutures.TickersRequest{Symbols: []string{"PI_XBTUSD", "PF_ETHUSD"}},
+	trade.WithEgressRoute("seoul-b"),
+)
+```
+
+모든 가격, 수량, 잔고는 JSON 숫자와 문자열 어느 형식으로 와도 `Decimal` 문자열로 보존한다. 이를 통해 `float64` 변환에서 생기는 주문 정밀도 손실을 피한다.
+
+## 공개 시세
+
+| 메서드 | endpoint | 주의사항 |
+|---|---|---|
+| `Instruments` | `GET /derivatives/api/v3/instruments` | 상품 규칙과 증거금 구간 반환 |
+| `Tickers` | `GET /derivatives/api/v3/tickers` | 전체 상품의 현재 시장 요약 반환 |
+| `OrderBook` | `GET /derivatives/api/v3/orderbook` | 전체 비누적 호가 반환 |
+| `PublicHistory` | `GET /derivatives/api/v3/history` | 최신순 최대 100건, `lastTime`으로 이전 구간 조회 |
+| `Candles` | `GET /api/charts/v1/{tickType}/{symbol}/{resolution}` | `from`과 `to`는 epoch 초, candle `time`은 epoch 밀리초 |
+
+캔들의 `tickType`은 `spot`, `mark`, `trade`이고 지원 구간은 1분부터 1주까지다. 응답의 `MoreCandles`가 참이면 시간 범위를 이동해 다음 데이터를 조회한다.
+
+## 계정과 주문
+
+```go
+reference, err := client.PlaceOrder(
+	ctx,
+	krakenfutures.PlaceOrderRequest{
+		OrderType:     krakenfutures.OrderTypeLimit,
+		Symbol:        "PI_XBTUSD",
+		Side:          krakenfutures.SideBuy,
+		Size:          "1",
+		LimitPrice:    "64000",
+		ClientOrderID: "strategy-1",
+		ReduceOnly:    true,
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+```
+
+`CancelOrder`는 `order_id`와 `cliOrdId` 중 정확히 하나를 받는다. 주문 생성과 취소의 `processBefore`를 지정하면 거래소가 그 시각을 지난 요청을 처리하지 않게 할 수 있다.
+
+`OrderStatus`는 최대 100개의 거래소 주문 ID와 client order ID를 조회한다. 이 endpoint는 공식 계약상 General Full Access가 필요하므로 SDK에서도 `trade` 상위 권한을 요구한다. 열려 있거나 최근 5초 안에 체결·취소된 주문만 반환하므로 장기 이력 조회 용도로 사용하면 안 된다.
+
+주문 생성과 취소의 전송 오류, timeout, 읽을 수 없는 성공 응답은 자동 재시도하지 않고 `UNKNOWN_EXECUTION_STATE`로 반환한다. `ClientOrderID`, `OrderStatus`, `OpenOrders`를 이용해 실제 처리 여부를 먼저 확인해야 한다.
+
+## nonce
+
+private 요청은 limiter 대기가 끝난 다음 Secret을 조회하고 서명한다. 한 `Client`에서 생성하는 millisecond nonce는 시계가 멈추거나 뒤로 이동하고 여러 goroutine이 동시에 호출해도 원자적으로 항상 증가한다.
+
+nonce는 API key 단위다. 같은 API key를 여러 프로세스나 여러 `Client`가 동시에 공유하면 로컬 증가 규칙만으로 전체 순서를 보장할 수 없다. 운영에서는 API key 하나당 장수명 `Client` 하나를 사용하거나 외부 공유 단조 nonce 정책을 적용해야 한다.
+
+## 요청 제한
+
+공개 endpoint는 선택한 route, 즉 EIP별 로컬 pool을 사용한다. 공식 문서가 공개 REST의 단일 공통 수치를 명시하지 않으므로 기본값은 route별 초당 20건이며 `PublicRequestsPerSecond`로 보수적으로 낮출 수 있다.
+
+private derivatives endpoint는 계정별 기본 500 point/10초 pool로 제한한다. 지갑·포지션·미체결 주문·기본 체결 조회는 2 point, `lastFillTime`을 사용한 체결 조회는 25 point, 주문 생성·취소는 10 point, 주문 상태 조회는 1 point를 차감한다. 로컬 limiter는 fixed window 근사이므로 거래소의 실제 제한과 오류 관측을 대체하지 않는다. 계정 등급이나 정책이 다르면 `DerivativesPointLimit`과 `DerivativesWindow`를 조정한다.
+
+private 제한은 EIP를 바꿔도 우회되지 않도록 account ID를 기준으로 공유한다. Secret을 조회하기 전에 API key의 route 허용 목록과 read/trade 권한을 검사한다.
+
+HTTP 429의 `Retry-After`는 공통 limiter에 반영한다. HTTP 200이어도 `result`가 `error`이거나 `error`·`errors`가 존재하면 인증, 권한, 제한, 잔고 부족, 주문 없음, 거래소 장애 범주로 정규화한다.
+
+## 공식 문서
+
+- [Futures REST 인증](https://docs.kraken.com/api/docs/guides/futures-rest/)
+- [상품 목록](https://docs.kraken.com/api/docs/futures-api/trading/get-instruments)
+- [Ticker](https://docs.kraken.com/api/docs/futures-api/trading/get-tickers)
+- [호가](https://docs.kraken.com/api/docs/futures-api/trading/get-orderbook)
+- [공개 체결](https://docs.kraken.com/api/docs/futures-api/trading/get-history)
+- [캔들](https://docs.kraken.com/api/docs/futures-api/charts/candles)
+- [지갑](https://docs.kraken.com/api/docs/futures-api/trading/get-accounts)
+- [포지션](https://docs.kraken.com/api/docs/futures-api/trading/get-open-positions)
+- [주문 생성](https://docs.kraken.com/api/docs/futures-api/trading/send-order)
+- [주문 취소](https://docs.kraken.com/api/docs/futures-api/trading/cancel-order)
+- [주문 상태](https://docs.kraken.com/api/docs/futures-api/trading/get-order-status)
+- [체결 이력](https://docs.kraken.com/api/docs/futures-api/trading/get-fills)

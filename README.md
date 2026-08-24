@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot REST 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST 1차 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -13,10 +13,11 @@
 - [OKX V5 Spot·SWAP REST](docs/exchanges/OKX.md)
 - [Coinbase Advanced Trade Spot](docs/exchanges/COINBASE.md)
 - [Kraken Spot REST](docs/exchanges/KRAKEN.md)
+- [Kraken Futures REST](docs/exchanges/KRAKEN_FUTURES.md)
 
 ## 현재 기준
 
-- 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase
+- 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken
 - 구현 언어: Go
 - 네트워크: 단일 ENI의 여러 secondary private IPv4와 EIP 1:1 연결
 - IP 선택: 클라이언트 기본값과 요청별 `egressRouteId` 재정의
@@ -44,7 +45,8 @@
 | Coinbase Advanced Trade REST | Spot 공개 시세, 계정, 주문·체결 구현됨 |
 | Coinbase Advanced Trade WebSocket | public 시세·private user 주문 stream 구현됨 |
 | Kraken Spot REST | 공개 시세, 계정, 주문·체결 구현됨 |
-| Kraken Futures·WebSocket | 예정 |
+| Kraken Futures REST | 공개 시세·캔들, 지갑, 포지션, 주문·체결 구현됨 |
+| Kraken Spot·Futures WebSocket | 예정 |
 | 나머지 P1 거래소 | 예정 |
 
 ## 요청별 EIP 선택
@@ -267,6 +269,19 @@ defer session.Close()
 - 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
 
 세부 계약과 제한 정책은 [Kraken Spot 문서](docs/exchanges/KRAKEN.md)를 참고합니다.
+
+## Kraken Futures REST 1차 범위
+
+- Futures 상품 규칙, 전체 ticker, 전체 L2 호가, 최근 공개 체결, OHLCV 캔들
+- cash·margin·multi-collateral 지갑, 열린 포지션
+- 시장가·지정가·post-only·IOC·FOK 주문 생성, 취소, 미체결 주문, 최근 주문 상태
+- 체결 이력과 `lastFillTime` 비용 차등 적용
+- URL query 원문과 nonce를 이용한 SHA-256 및 HMAC-SHA-512 `Authent`
+- 단일 클라이언트에서 동시 요청에도 항상 증가하는 millisecond nonce
+- 공개 EIP별 제한과 private 계정별 derivatives point pool 분리
+- 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
+
+세부 계약과 제한 정책은 [Kraken Futures 문서](docs/exchanges/KRAKEN_FUTURES.md)를 참고합니다.
 
 ## 공통 Spot API
 
