@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, 다중 EIP 전송 계층과 Binance Spot, Bitget v3 UTA, Upbit Spot REST 1차 API가 구현되어 있습니다.
+현재 Go 코어, 다중 EIP 전송 계층과 Binance Spot·USDⓈ-M Futures, Bitget v3 UTA, Upbit Spot REST 1차 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -23,10 +23,11 @@
 | private IP별 HTTP 연결 풀과 요청별 EIP 선택 | 구현됨 |
 | 다차원 요청 제한기 | 구현됨 |
 | Binance Spot REST | 공개 시세, 계정, 주문 생성·조회·취소·목록 구현됨 |
+| Binance USDⓈ-M Futures REST | 공개 시세, 계정 V3, 포지션 V3, 주문 구현됨 |
 | Bitget v3 UTA | Spot·USDT-M 공개 시세, 자산, 포지션, 주문 구현됨 |
 | Upbit Spot REST | 공개 시세, 잔고, 주문 생성·조회·취소·목록 구현됨 |
 | 공통 Spot API·적합성 테스트 | Binance·Bitget·Upbit 구현됨 |
-| Binance USDⓈ-M·WebSocket·P1 거래소 | 예정 |
+| WebSocket·P1 거래소 | 예정 |
 
 ## 요청별 EIP 선택
 
@@ -113,6 +114,19 @@ go run ./cmd/egressdiag \
 - 주문 mutation의 불명확한 네트워크 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
 
 현재 지원 범위는 개발 중인 초기 API이며 아직 안정 버전 호환성을 보장하지 않습니다.
+
+## Binance USDⓈ-M Futures 1차 범위
+
+- 서버 시간 보정과 계약 정보
+- 현재가, 호가, 최근 체결, 캔들
+- 계정 V3 자산과 포지션 V3 위험 정보
+- 주문 생성, 조회, 취소, 미체결 목록, 주문 이력
+- 단방향·헤지 모드 `positionSide`, `reduceOnly`, `closePosition`
+- 지정가, 시장가, Stop, Take Profit, Trailing Stop 주문 검증
+- IP 요청 weight와 계정 주문 count 분리
+- HTTP 503 응답 문구별 불명확한 실행 상태 분류
+
+세부 계약과 주의사항은 [Binance USDⓈ-M Futures 문서](docs/exchanges/BINANCE_USDM.md)를 참고합니다.
 
 ## Bitget v3 UTA 1차 범위
 
