@@ -2,17 +2,18 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket 1차 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot REST·WebSocket과 USDⓈ-M Futures REST, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST 1차 API가 구현되어 있습니다.
 
 ## 문서
 
 - [프로젝트 기획서](docs/PROJECT_PLAN.md)
 - [공통 WebSocket 연결 계층](docs/STREAMS.md)
 - [Binance Spot WebSocket](docs/exchanges/BINANCE_WEBSOCKET.md)
+- [Bybit V5 Spot·Linear REST](docs/exchanges/BYBIT.md)
 
 ## 현재 기준
 
-- 1차 거래소: Binance, Bitget, Upbit
+- 구현 거래소: Binance, Bitget, Upbit, Bybit
 - 구현 언어: Go
 - 네트워크: 단일 ENI의 여러 secondary private IPv4와 EIP 1:1 연결
 - IP 선택: 클라이언트 기본값과 요청별 `egressRouteId` 재정의
@@ -33,7 +34,9 @@
 | Binance Spot WebSocket | public market·private user data stream 구현됨 |
 | Bitget v3 UTA WebSocket | Spot·USDT Futures public, UTA private stream 구현됨 |
 | Upbit Spot WebSocket | public 시세·private 내 주문·자산 stream 구현됨 |
-| P1 거래소 | 예정 |
+| Bybit V5 REST | Spot·Linear 공개 시세, 통합 잔고, 포지션, 주문 구현됨 |
+| Bybit V5 WebSocket | 예정 |
+| 나머지 P1 거래소 | 예정 |
 
 ## 요청별 EIP 선택
 
@@ -196,6 +199,18 @@ defer session.Close()
 - 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
 
 세부 계약과 주의사항은 [Upbit Spot 문서](docs/exchanges/UPBIT.md)를 참고합니다.
+
+## Bybit V5 Spot·Linear REST 1차 범위
+
+- 서버 시간 보정과 Spot·Linear 상품 정보
+- 현재가, 호가, 최근 체결, 캔들
+- Unified 계정 잔고와 Linear 포지션
+- 주문 생성, 단건 조회, 취소, 미체결 목록, 주문 이력
+- HMAC SHA-256 서명과 `X-BAPI-*` 인증 헤더
+- route 단위 IP 제한과 계정 단위 private endpoint 제한
+- 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
+
+세부 계약과 주의사항은 [Bybit V5 문서](docs/exchanges/BYBIT.md)를 참고합니다.
 
 ## 공통 Spot API
 
