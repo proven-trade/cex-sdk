@@ -1,4 +1,4 @@
-// Package kucoin은 KuCoin Classic Spot REST·WebSocket 어댑터를 제공한다.
+// Package kucoin은 KuCoin Spot REST와 Classic·Pro WebSocket 어댑터를 제공한다.
 package kucoin
 
 import (

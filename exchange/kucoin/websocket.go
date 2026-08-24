@@ -23,20 +23,22 @@ import (
 )
 
 const (
-	defaultStreamPingInterval   = 15 * time.Second
-	defaultStreamPingTimeout    = 9 * time.Second
-	defaultSubscriptionInterval = 100 * time.Millisecond
-	maximumStreamSubscriptions  = 300
+	DefaultProPublicWebSocketURL = "wss://x-push-spot.kucoin.com"
+	defaultStreamPingInterval    = 15 * time.Second
+	defaultStreamPingTimeout     = 9 * time.Second
+	defaultSubscriptionInterval  = 100 * time.Millisecond
+	maximumStreamSubscriptions   = 300
 )
 
 // ConnectIDSource는 WebSocket handshake마다 고유한 connectId를 생성한다.
 type ConnectIDSource func() (string, error)
 
-// StreamClientConfig는 KuCoin Classic Spot public/private WebSocket 설정이다.
+// StreamClientConfig는 KuCoin Classic·Pro Spot WebSocket 설정이다.
 type StreamClientConfig struct {
 	Connector              corestream.Connector
 	RESTClient             *Client
 	DefaultEgressRouteID   transport.EgressRouteID
+	ProPublicWebSocketURL  string
 	AllowInsecureWebSocket bool
 	Observer               corestream.StateObserver
 	ReconnectPolicy        corestream.ReconnectPolicy
@@ -48,11 +50,12 @@ type StreamClientConfig struct {
 	ConnectIDSource        ConnectIDSource
 }
 
-// StreamClient는 KuCoin Classic Spot public/private WebSocket 세션을 생성한다.
+// StreamClient는 KuCoin Classic·Pro Spot WebSocket 세션을 생성한다.
 type StreamClient struct {
 	connector              corestream.Connector
 	restClient             *Client
 	defaultRouteID         transport.EgressRouteID
+	proPublicURL           string
 	allowInsecureWebSocket bool
 	observer               corestream.StateObserver
 	reconnectPolicy        corestream.ReconnectPolicy
@@ -65,7 +68,7 @@ type StreamClient struct {
 	nextMessageID          atomic.Int64
 }
 
-// NewStreamClient는 KuCoin Classic Spot WebSocket 클라이언트를 생성한다.
+// NewStreamClient는 KuCoin Classic·Pro Spot WebSocket 클라이언트를 생성한다.
 func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 	if config.Connector == nil {
 		return nil, fmt.Errorf("KuCoin stream connector is required")
@@ -76,6 +79,16 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 	defaultRouteID := transport.EgressRouteID(strings.TrimSpace(string(config.DefaultEgressRouteID)))
 	if defaultRouteID == "" {
 		return nil, trade.ErrMissingEgressRoute
+	}
+	if config.ProPublicWebSocketURL == "" {
+		config.ProPublicWebSocketURL = DefaultProPublicWebSocketURL
+	}
+	proPublicURL, err := validateProPublicWebSocketURL(
+		config.ProPublicWebSocketURL,
+		config.AllowInsecureWebSocket,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("invalid KuCoin Pro public WebSocket URL: %w", err)
 	}
 	if config.PingInterval == 0 {
 		config.PingInterval = defaultStreamPingInterval
@@ -95,6 +108,7 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 	}
 	client := &StreamClient{
 		restClient: config.RESTClient, defaultRouteID: defaultRouteID,
+		proPublicURL:           proPublicURL,
 		allowInsecureWebSocket: config.AllowInsecureWebSocket,
 		observer:               config.Observer, reconnectPolicy: config.ReconnectPolicy,
 		backoff: config.Backoff, maxReconnectAttempts: config.MaxReconnectAttempts,
@@ -105,6 +119,18 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 	client.nextMessageID.Store(time.Now().UnixMilli())
 	client.connector = &kucoinConnector{next: config.Connector, nextID: &client.nextMessageID}
 	return client, nil
+}
+
+func validateProPublicWebSocketURL(raw string, allowInsecure bool) (string, error) {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" || parsed.RawQuery != "" {
+		return "", fmt.Errorf("invalid WebSocket URL")
+	}
+	if parsed.Scheme != "wss" && !(allowInsecure && parsed.Scheme == "ws") {
+		return "", fmt.Errorf("WebSocket URL must use WSS")
+	}
+	parsed.Path = strings.TrimSuffix(parsed.Path, "/")
+	return parsed.String(), nil
 }
 
 type pendingStreamCommand struct {

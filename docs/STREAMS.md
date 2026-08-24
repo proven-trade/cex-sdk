@@ -122,4 +122,4 @@ handshake 실패 오류에는 HTTP 상태, `Retry-After`, `X-Request-ID`만 보�
 - 구독 수·연결 수·메시지 제한
 - 자격증명과 route 허용 관계 검증
 
-공통 계층의 자동 재연결만으로 로컬 오더북 정합성이 복구되지는 않습니다. sequence gap이 발생하면 해당 거래소 절차에 따라 REST snapshot을 다시 받고 buffered delta를 재적용해야 합니다.
+공통 계층의 자동 재연결만으로 로컬 오더북 정합성이 복구되지는 않습니다. sequence gap이 발생하면 해당 거래소 절차에 따라 REST snapshot과 buffered delta를 다시 결합하거나, 새 WebSocket snapshot부터 장부를 교체해야 합니다.

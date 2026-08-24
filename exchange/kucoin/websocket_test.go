@@ -566,6 +566,7 @@ func newTestKuCoinStreamClient(
 	var connectID atomic.Int64
 	client, err := NewStreamClient(StreamClientConfig{
 		Connector: connector, RESTClient: restClient, DefaultEgressRouteID: "route-a",
+		ProPublicWebSocketURL:  "ws://pro.example.test",
 		AllowInsecureWebSocket: true, SubscriptionInterval: time.Nanosecond,
 		Backoff: func(int) time.Duration { return 0 },
 		ConnectIDSource: func() (string, error) {

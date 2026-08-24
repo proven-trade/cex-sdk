@@ -579,6 +579,7 @@ const (
 
 - KuCoin Classic Spot REST 구현 완료
 - KuCoin Spot public/private WebSocket 구현 완료
+- KuCoin Pro Spot Increment Best 500 로컬 오더북과 sequence gap·동일 EIP 재연결 복구 구현 완료
 - KuCoin Spot 공통 API 구현 완료
 - KuCoin Futures REST 구현 완료
 - KuCoin Futures public/private WebSocket 구현 완료

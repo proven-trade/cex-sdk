@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot·USDⓈ-M Futures REST·WebSocket, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Classic Spot·Futures REST·WebSocket, Gate.io Spot REST·WebSocket·공통 API와 Futures REST·WebSocket이 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot·USDⓈ-M Futures REST·WebSocket, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Spot·Futures REST·WebSocket, Gate.io Spot REST·WebSocket·공통 API와 Futures REST·WebSocket이 구현되어 있습니다.
 
 ## 문서
 
@@ -20,7 +20,7 @@
 - [Bithumb Spot REST·WebSocket](docs/exchanges/BITHUMB.md)
 - [Coinone Spot REST·WebSocket](docs/exchanges/COINONE.md)
 - [Korbit Spot REST·WebSocket](docs/exchanges/KORBIT.md)
-- [KuCoin Classic Spot REST·WebSocket](docs/exchanges/KUCOIN.md)
+- [KuCoin Spot REST·WebSocket](docs/exchanges/KUCOIN.md)
 - [KuCoin Classic Futures REST·WebSocket](docs/exchanges/KUCOIN_FUTURES.md)
 - [Gate.io API v4 Spot REST·WebSocket](docs/exchanges/GATEIO.md)
 - [Gate.io API v4 Futures REST·WebSocket](docs/exchanges/GATEIO_FUTURES.md)
@@ -70,7 +70,7 @@
 | Korbit Spot REST | 공개 시세·상품 규칙, 잔고, 주문·체결 구현됨 |
 | Korbit WebSocket | public 시세·private 주문·체결·자산 stream·완전 snapshot 로컬 오더북 구현됨 |
 | KuCoin Classic Spot REST | 상품 규칙, 공개 시세, 계정, HF 주문 생성·조회·취소·미체결 목록 구현됨 |
-| KuCoin Classic Spot WebSocket | public 시세·호가·체결, private 주문·잔고 stream 구현됨 |
+| KuCoin Spot WebSocket | Classic public 시세·체결과 private 주문·잔고 stream, Pro Increment Best 500 로컬 오더북 자동 갭 복구 구현됨 |
 | KuCoin Classic Futures REST | 계약 규칙, 공개 시세, 계정·포지션, 주문·체결 구현됨 |
 | KuCoin Classic Futures WebSocket | public 시세·호가·캔들·체결, private 주문·잔고·포지션 stream 구현됨 |
 | Gate.io API v4 Spot REST | 거래쌍 규칙, 공개 시세, 계정, 주문 생성·조회·취소·미체결·체결 구현됨 |
@@ -390,7 +390,7 @@ defer session.Close()
 
 세부 인증·주문·요청 제한·연결 계약은 [Korbit Spot 문서](docs/exchanges/KORBIT.md)를 참고합니다.
 
-## KuCoin Classic Spot REST·WebSocket 1차 범위
+## KuCoin Spot REST·WebSocket 1차 범위
 
 - 전체 거래쌍 규칙, 현재가, 20·100단계 호가, 최근 체결, 캔들
 - Classic 계정 유형별 잔고
@@ -406,8 +406,9 @@ defer session.Close()
 - 실행 중 구독 변경, 실패 응답 반영, 재연결 구독 복구
 - 연결별 EIP 고정과 재연결마다 같은 route를 통한 token 재발급
 - KuCoin JSON ping/pong heartbeat와 서버가 발급한 연결 제한 검증
+- 현행 Pro `obu.SPOT` Increment Best 500 snapshot/delta 로컬 오더북과 sequence gap 시 같은 EIP 자동 재연결
 
-세부 인증·주문·요청 제한·연결 계약은 [KuCoin Classic Spot 문서](docs/exchanges/KUCOIN.md)를 참고합니다.
+세부 인증·주문·요청 제한·연결 계약은 [KuCoin Spot 문서](docs/exchanges/KUCOIN.md)를 참고합니다.
 
 ## KuCoin Classic Futures REST·WebSocket 1차 범위
 

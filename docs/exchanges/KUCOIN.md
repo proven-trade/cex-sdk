@@ -1,6 +1,6 @@
-# KuCoin Classic Spot REST·WebSocket 어댑터
+# KuCoin Spot REST·WebSocket 어댑터
 
-구현 기준은 KuCoin Classic Spot REST·WebSocket API와 REST 기본 주소 `https://api.kucoin.com`입니다. 2026년에 추가된 Unified Trading Account API와 별개인 Classic 계정용 어댑터입니다. `NewUnifiedSpot`은 Classic native API를 프로젝트 공통 Spot 계약으로 변환합니다.
+REST와 계정 WebSocket은 KuCoin Classic Spot API와 기본 주소 `https://api.kucoin.com`을 사용합니다. 공개 로컬 오더북은 현재 권장 Pro WebSocket API의 `wss://x-push-spot.kucoin.com`을 사용합니다. 이 패키지는 2026년에 추가된 Unified Trading Account API와 별개이며, `NewUnifiedSpot`은 Classic native API를 프로젝트 공통 Spot 계약으로 변환합니다.
 
 ## 전제조건
 
@@ -67,7 +67,7 @@ Public 풀은 IP 기준이므로 요청별 EIP가 각각 독립된 bucket을 사
 
 public token 발급은 Public pool에서 10 weight, private token 발급은 Spot pool에서 10 weight를 사용합니다. WebSocket 재연결마다 새 token을 발급하므로 연결 장애가 반복될 때 REST 요청 제한도 함께 소비됩니다.
 
-## WebSocket
+## Classic WebSocket
 
 `StreamClient`는 연결 전에 REST token을 발급하고 KuCoin이 반환한 `instanceServers` 중 사용 가능한 WebSocket endpoint를 선택합니다. production에서는 `wss`만 허용하며 `AllowInsecureWebSocket`은 로컬 테스트에서만 사용해야 합니다.
 
@@ -119,9 +119,55 @@ token REST 요청과 WebSocket handshake는 모두 세션에서 선택한 같은
 
 기본 heartbeat는 15초마다 `{type:"ping"}`을 보내고 9초 안에 `{type:"pong"}`을 기다립니다. 이 값은 token 응답의 `pingInterval`보다 짧고 `pingTimeout`보다 길지 않아야 합니다. 서버가 더 엄격한 값을 반환하면 연결을 시작하지 않고 설정 오류를 반환합니다.
 
-`StreamChannelLevel2`는 `sequenceStart`와 `sequenceEnd`가 포함된 원본 증분 feed입니다. SDK가 로컬 호가장을 자동으로 조립하지는 않습니다. sequence 공백이나 재연결이 발생하면 기존 캐시를 버리고 REST snapshot을 다시 받은 뒤 이어지는 변경만 적용해야 합니다. 20·100단계만 필요하면 `OrderBook` snapshot으로 주기적으로 재조정하고, 전체 호가장이 필요하면 KuCoin의 full order book snapshot 규칙을 별도로 적용해야 합니다.
+Classic `StreamChannelLevel2`는 `sequenceStart`와 `sequenceEnd`가 포함된 원본 증분 feed지만 KuCoin이 2026년 7월 15일 deprecated 처리했습니다. 기존 사용자와 원본 이벤트 decode 호환을 위해 남겨 두되 새 로컬 오더북에는 사용하지 않습니다.
 
 token과 `WebSocketToken.Raw`에는 짧은 수명의 접속 자격이 포함됩니다. 로그, 메트릭 label, 오류 문자열에 저장하지 않아야 합니다. public feed도 재연결 구간에는 이벤트 유실이 가능하며 private 주문·잔고는 연결 복구 뒤 REST 조회로 최종 상태를 재조정해야 합니다.
+
+## Pro 로컬 오더북과 같은 EIP 복구
+
+`ProOrderBookStream`은 token이 필요 없는 Pro public endpoint에 연결하고 Spot `obu` 채널의 `increment@10ms`를 구독합니다. 첫 `snapshot`과 이어지는 `delta`는 최대 500호가를 제공하며, delta 수량은 증감량이 아니라 해당 가격의 새 절대 수량입니다. 수량 `0`은 가격 레벨 삭제를 뜻합니다.
+
+```go
+streamClient, err := kucoin.NewStreamClient(kucoin.StreamClientConfig{
+	Connector:            connector,
+	RESTClient:           restClient,
+	DefaultEgressRouteID: "seoul-a",
+})
+if err != nil {
+	return err
+}
+
+orderBookStream, err := streamClient.ProOrderBookStream(
+	"BTC-USDT",
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+defer orderBookStream.Close()
+
+orderBook, err := kucoin.NewLocalOrderBook(kucoin.LocalOrderBookConfig{
+	Symbol:        "BTC-USDT",
+	EgressRouteID: "seoul-b",
+	ViewDepth:     20,
+})
+if err != nil {
+	return err
+}
+
+return orderBook.Run(ctx, orderBookStream, func(
+	_ context.Context,
+	view kucoin.LocalOrderBookView,
+) error {
+	return consume(view)
+})
+```
+
+snapshot은 `O == C`를 만족해야 합니다. 현재 적용한 마지막 sequence가 `oldC`일 때 새 delta는 `O <= oldC + 1`이고 `C > oldC`여야 하며, `C <= oldC`인 오래된 이벤트는 무시합니다. `O > oldC + 1`인 공백이나 새 연결에서 snapshot보다 먼저 온 delta를 발견하면 장부를 버리고 선택한 같은 EIP route로 재연결해 새 snapshot부터 복구합니다.
+
+`SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 복구를 유발한 sequence 공백 횟수, `Generation`은 WebSocket 연결 세대입니다. `ViewDepth` 기본값은 20이고 최대 500이며, 내부 장부도 Pro 채널 계약에 맞춰 매수·매도 각각 최우선 500호가로 제한합니다. 로컬 오더북과 stream의 symbol 또는 EIP가 다르면 네트워크 연결 전에 거부합니다.
+
+Pro public 연결은 REST token을 발급하지 않으므로 token 요청 제한을 소비하지 않습니다. 연결과 재연결은 세션 생성 시 선택한 route에 고정되며 `ProPublicWebSocketURL`을 바꾸는 설정은 테스트나 KuCoin이 공지한 공식 대체 endpoint 적용에만 사용해야 합니다.
 
 ## 공통 Spot API
 
@@ -167,7 +213,9 @@ KuCoin은 HTTP 200에서도 `code`가 `200000`이 아닌 논리 오류를 반환
 - [KuCoin Public WebSocket Token](https://www.kucoin.com/docs-new/websocket-api/base-info/get-public-token-spot-margin)
 - [KuCoin Private WebSocket Token](https://www.kucoin.com/docs-new/websocket-api/base-info/get-private-token-spot-margin)
 - [KuCoin WebSocket Ticker](https://www.kucoin.com/docs-new/3470063w0)
-- [KuCoin WebSocket Level2](https://www.kucoin.com/docs-new/3470068w0)
+- [KuCoin Pro Increment Best 500 Order Book](https://www.kucoin.com/docs-new/3470221w0)
+- [KuCoin Pro WebSocket Introduction](https://www.kucoin.com/docs-new/websocket-api/base-info/introduction-uta)
+- [KuCoin Classic WebSocket Level2](https://www.kucoin.com/docs-new/3470068w0)
 - [KuCoin WebSocket Order V2](https://www.kucoin.com/docs-new/3470073w0)
 - [KuCoin WebSocket Balance](https://www.kucoin.com/docs-new/3470075w0)
 - [KuCoin Spot Error Codes](https://www.kucoin.com/docs-new/error-code/spot)
