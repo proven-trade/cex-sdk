@@ -323,7 +323,7 @@
       "product_id": "spot",
       "product_name": "Spot",
       "rest": "implemented",
-      "websocket_public": "planned",
+      "websocket_public": "implemented",
       "websocket_private": "planned",
       "unified": "implemented",
       "automated_tests": "implemented",

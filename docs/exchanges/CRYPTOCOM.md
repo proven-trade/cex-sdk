@@ -13,7 +13,7 @@
 
 공식 2026년 변경 로그가 유지되는 현행 Exchange v1만 대상으로 한다. 구형 기본 `book.{instrument_name}` 구독과 100ms full snapshot 구독은 이미 폐기됐으므로 구현하지 않는다. Margin·Derivatives와 고급 조건부 주문은 native 타입이 안정된 뒤 별도 상품 단계로 확장한다.
 
-현재 `exchange/cryptocom`의 공개·private REST, 공통 Spot API와 mock 자동 테스트가 구현되어 있다. WebSocket과 로컬 오더북은 아래 순서대로 진행 중이며 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
+현재 `exchange/cryptocom`의 공개·private REST, 공통 Spot API, public market WebSocket과 mock 자동 테스트가 구현되어 있다. private user WebSocket과 로컬 오더북은 아래 순서대로 진행 중이며 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
 
 ## 구현 범위
 
@@ -138,13 +138,24 @@ private 본문의 `id`, `nonce`, 주문 ID, 시각, 개수와 decimal은 문자�
 
 ### WebSocket
 
-- market의 `ticker`, `trade`, `candlestick`, 명시적 `book.{instrument_name}.{depth}` 구독
+- market의 `ticker`, `trade`, `candlestick`, 명시적 `book.{instrument_name}.{depth}` 구독 구현 완료
 - user의 `public/auth` 후 `user.order`, `user.trade`, `user.balance` 구독
-- `public/heartbeat`의 동일 ID를 `public/respond-heartbeat`로 5초 안에 응답
-- 연결 직후 비례 요청 제한을 피하기 위한 공식 권장 1초 준비 구간
-- market 100회/초, user 150회/초의 연결별 command 제한
-- 동적 구독·해지의 성공 응답 확정과 실패 rollback
-- 재연결마다 같은 EIP 유지, 새 nonce·서명 인증과 승인된 구독 복구
+- `public/heartbeat`의 동일 ID를 `public/respond-heartbeat`로 5초 안에 응답 구현 완료
+- 연결 직후 비례 요청 제한을 피하기 위한 공식 권장 1초 준비 구간 구현 완료
+- market 100회/초 command 제한 구현 완료, user 150회/초는 private 단계에서 구현
+- 동적 구독·해지의 실패 응답 rollback 구현 완료
+- market 재연결마다 같은 EIP 유지와 목표 구독 복구 구현 완료
+
+| 공개 채널 | SDK 채널 | 채널 문자열 |
+|---|---|---|
+| 현재가·최우선 호가 | `StreamChannelTicker` | `ticker.{instrument_name}` |
+| 공개 체결 | `StreamChannelTrades` | `trade.{instrument_name}` |
+| 캔들 | `StreamChannelCandles` | `candlestick.{timeframe}.{instrument_name}` |
+| 호가 | `StreamChannelBook` | `book.{instrument_name}.{10|50}` |
+
+`NewStreamClient`는 production market endpoint를 기본값으로 사용하고 UAT 상수도 별도로 제공한다. `PublicStream` 생성 때 선택한 `egressRouteId`는 모든 재연결에서 유지된다. 구독 command의 ID·nonce·호가 갱신 간격은 문자열로 직렬화하며, ticker wildcard와 폐기된 기본 깊이 book은 거부한다.
+
+호가 구독은 `SNAPSHOT` 또는 `SNAPSHOT_AND_UPDATE`를 명시해야 한다. full snapshot은 현행 500ms만 허용하고, 증분형은 공식 10·100·500ms 값을 지원한다. 이 단계는 원본 snapshot·delta를 typed event로 전달하며 sequence를 결합한 로컬 장부는 다음 단계에서 제공한다.
 
 private user 연결은 API Key whitelist route와 `read` 권한을 연결 전에 검사한다. 주문 command를 WebSocket으로 보내는 기능은 첫 단계에서 제외하고 REST mutation과 user event 조합을 먼저 안정화한다.
 
@@ -159,7 +170,7 @@ private user 연결은 API Key whitelist route와 `read` 권한을 연결 전에
 1. 공개 REST, 오류 정규화, 요청 제한과 mock 테스트 구현 완료
 2. private REST, signer golden vector와 주문 안전 계약 구현 완료
 3. 공통 Spot API와 적합성 테스트 구현 완료
-4. public market WebSocket과 heartbeat·동적 구독
+4. public market WebSocket과 heartbeat·동적 구독 구현 완료
 5. private user WebSocket 인증과 주문·체결·잔고 구독
 6. 10·50단계 로컬 오더북과 sequence gap 복구
 7. UAT·production read-only 및 명시적 소액 주문 smoke
