@@ -289,6 +289,9 @@ type Order struct {
 	CreateTime            Scalar          `json:"create_time"`
 	CreateTimeNS          Scalar          `json:"create_time_ns"`
 	UpdateTime            Scalar          `json:"update_time"`
+	TransactionTime       Scalar          `json:"transaction_time"`
+	TransactionTimeNS     Scalar          `json:"transaction_time_ns"`
+	Reason                string          `json:"reason"`
 	InstrumentName        string          `json:"instrument_name"`
 	FeeInstrumentName     string          `json:"fee_instrument_name"`
 	IsolationID           string          `json:"isolation_id"`
@@ -330,6 +333,7 @@ type AccountTrade struct {
 	IsolationID       string          `json:"isolation_id"`
 	IsolationType     string          `json:"isolation_type"`
 	TransactionTimeNS Scalar          `json:"transact_time_ns"`
+	TransactionTime   Scalar          `json:"transaction_time"`
 	Raw               json.RawMessage `json:"-"`
 }
 

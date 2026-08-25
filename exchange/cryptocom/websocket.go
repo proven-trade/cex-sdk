@@ -14,6 +14,8 @@ import (
 	"time"
 
 	trade "github.com/proven-trade/proven-trade-sdk"
+	"github.com/proven-trade/proven-trade-sdk/credential"
+	"github.com/proven-trade/proven-trade-sdk/model"
 	corestream "github.com/proven-trade/proven-trade-sdk/stream"
 	"github.com/proven-trade/proven-trade-sdk/transport"
 )
@@ -21,19 +23,26 @@ import (
 const (
 	DefaultMarketWebSocketURL            = "wss://stream.crypto.com/exchange/v1/market"
 	DefaultUATMarketWebSocketURL         = "wss://uat-stream.3ona.co/exchange/v1/market"
+	DefaultUserWebSocketURL              = "wss://stream.crypto.com/exchange/v1/user"
+	DefaultUATUserWebSocketURL           = "wss://uat-stream.3ona.co/exchange/v1/user"
 	DefaultStreamConnectionReadyDelay    = time.Second
 	DefaultMarketStreamRequestsPerSecond = 100
+	DefaultUserStreamRequestsPerSecond   = 150
 	maximumCryptoComStreamSubscriptions  = 200
 )
 
-// StreamClientConfig는 Crypto.com 공개 시세 WebSocket 설정이다.
+// StreamClientConfig는 Crypto.com 공개 시세와 private 사용자 WebSocket 설정이다.
 type StreamClientConfig struct {
 	Connector               corestream.Connector
+	Credentials             *credential.Descriptor
+	CredentialProvider      credential.Provider
 	DefaultEgressRouteID    transport.EgressRouteID
 	MarketWebSocketURL      string
+	UserWebSocketURL        string
 	AllowInsecureWebSocket  bool
 	ConnectionReadyDelay    time.Duration
 	MarketRequestsPerSecond int
+	UserRequestsPerSecond   int
 	Now                     func() time.Time
 	Observer                corestream.StateObserver
 	ReconnectPolicy         corestream.ReconnectPolicy
@@ -41,22 +50,26 @@ type StreamClientConfig struct {
 	MaxReconnectAttempts    int
 }
 
-// StreamClient는 Crypto.com 공개 시세 WebSocket 세션을 생성한다.
+// StreamClient는 Crypto.com 공개 시세와 private 사용자 WebSocket 세션을 생성한다.
 type StreamClient struct {
-	connector            corestream.Connector
-	defaultRouteID       transport.EgressRouteID
-	marketURL            string
-	connectionReadyDelay time.Duration
-	commandInterval      time.Duration
-	now                  func() time.Time
-	observer             corestream.StateObserver
-	reconnectPolicy      corestream.ReconnectPolicy
-	backoff              corestream.Backoff
-	maxReconnectAttempts int
-	nextID               atomic.Int64
+	connector             corestream.Connector
+	credentials           *credential.Descriptor
+	credentialProvider    credential.Provider
+	defaultRouteID        transport.EgressRouteID
+	marketURL             string
+	userURL               string
+	connectionReadyDelay  time.Duration
+	marketCommandInterval time.Duration
+	userCommandInterval   time.Duration
+	now                   func() time.Time
+	observer              corestream.StateObserver
+	reconnectPolicy       corestream.ReconnectPolicy
+	backoff               corestream.Backoff
+	maxReconnectAttempts  int
+	nextID                atomic.Int64
 }
 
-// NewStreamClient는 검증된 Crypto.com 공개 시세 WebSocket 클라이언트를 생성한다.
+// NewStreamClient는 검증된 Crypto.com 공개 시세와 private 사용자 WebSocket 클라이언트를 생성한다.
 func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 	if config.Connector == nil {
 		return nil, fmt.Errorf("Crypto.com stream connector is required")
@@ -74,6 +87,15 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid Crypto.com market WebSocket URL: %w", err)
 	}
+	if config.UserWebSocketURL == "" {
+		config.UserWebSocketURL = DefaultUserWebSocketURL
+	}
+	userURL, err := validateCryptoComStreamURL(
+		config.UserWebSocketURL, config.AllowInsecureWebSocket,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("invalid Crypto.com user WebSocket URL: %w", err)
+	}
 	if config.ConnectionReadyDelay == 0 {
 		config.ConnectionReadyDelay = DefaultStreamConnectionReadyDelay
 	}
@@ -87,17 +109,48 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 		config.MarketRequestsPerSecond > DefaultMarketStreamRequestsPerSecond {
 		return nil, fmt.Errorf("Crypto.com market stream quota must be between 1 and 100")
 	}
+	if config.UserRequestsPerSecond == 0 {
+		config.UserRequestsPerSecond = DefaultUserStreamRequestsPerSecond
+	}
+	if config.UserRequestsPerSecond < 1 ||
+		config.UserRequestsPerSecond > DefaultUserStreamRequestsPerSecond {
+		return nil, fmt.Errorf("Crypto.com user stream quota must be between 1 and 150")
+	}
 	if config.MaxReconnectAttempts < 0 {
 		return nil, fmt.Errorf("Crypto.com maximum reconnect attempts cannot be negative")
 	}
 	if config.Now == nil {
 		config.Now = time.Now
 	}
+	var credentialsCopy *credential.Descriptor
+	if config.Credentials != nil {
+		if err := config.Credentials.Validate(); err != nil {
+			return nil, err
+		}
+		if config.Credentials.Exchange != model.ExchangeCryptoCom {
+			return nil, fmt.Errorf("credential exchange must be Crypto.com")
+		}
+		if config.CredentialProvider == nil {
+			return nil, fmt.Errorf("credential provider is required for private Crypto.com stream")
+		}
+		copyValue := *config.Credentials
+		copyValue.Permissions = append([]credential.Permission(nil), config.Credentials.Permissions...)
+		copyValue.AllowedEgressRouteIDs = append(
+			[]transport.EgressRouteID(nil), config.Credentials.AllowedEgressRouteIDs...,
+		)
+		credentialsCopy = &copyValue
+	}
+	if config.Credentials == nil && config.CredentialProvider != nil {
+		return nil, fmt.Errorf("credential descriptor is required with credential provider")
+	}
 	return &StreamClient{
-		connector: config.Connector, defaultRouteID: defaultRouteID, marketURL: marketURL,
-		connectionReadyDelay: config.ConnectionReadyDelay,
-		commandInterval:      time.Second / time.Duration(config.MarketRequestsPerSecond),
-		now:                  config.Now, observer: config.Observer,
+		connector: config.Connector, credentials: credentialsCopy,
+		credentialProvider: config.CredentialProvider,
+		defaultRouteID:     defaultRouteID, marketURL: marketURL, userURL: userURL,
+		connectionReadyDelay:  config.ConnectionReadyDelay,
+		marketCommandInterval: time.Second / time.Duration(config.MarketRequestsPerSecond),
+		userCommandInterval:   time.Second / time.Duration(config.UserRequestsPerSecond),
+		now:                   config.Now, observer: config.Observer,
 		reconnectPolicy: config.ReconnectPolicy, backoff: config.Backoff,
 		maxReconnectAttempts: config.MaxReconnectAttempts,
 	}, nil
@@ -164,6 +217,9 @@ func (public *PublicStream) Run(
 		decoded, err := DecodeStreamMessage(message)
 		if err != nil {
 			return err
+		}
+		if decoded.Private {
+			return fmt.Errorf("Crypto.com market stream received private user data")
 		}
 		if decoded.Heartbeat {
 			if err := public.managed.respondHeartbeat(ctx, decoded.ID); err != nil {
@@ -352,7 +408,7 @@ func (managed *managedCryptoComStream) writeConnection(
 }
 
 func (managed *managedCryptoComStream) waitCommandSlot(ctx context.Context) error {
-	delay := time.Until(managed.lastCommandAt.Add(managed.client.commandInterval))
+	delay := time.Until(managed.lastCommandAt.Add(managed.client.marketCommandInterval))
 	if delay <= 0 {
 		return nil
 	}

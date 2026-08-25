@@ -29,7 +29,7 @@ type streamWireResult struct {
 	Data           json.RawMessage `json:"data"`
 }
 
-// DecodeStreamMessage는 Crypto.com text frame을 명령 응답·heartbeat·시세 데이터로 분류한다.
+// DecodeStreamMessage는 Crypto.com text frame을 명령 응답·heartbeat·시세·사용자 데이터로 분류한다.
 func DecodeStreamMessage(message corestream.Message) (StreamMessage, error) {
 	if message.Type != corestream.MessageText {
 		return StreamMessage{}, fmt.Errorf("unsupported Crypto.com stream frame type %d", message.Type)
@@ -81,7 +81,7 @@ func DecodeStreamMessage(message corestream.Message) (StreamMessage, error) {
 	if len(resultRaw) == 0 || bytes.Equal(resultRaw, []byte("null")) ||
 		bytes.Equal(resultRaw, []byte("{}")) {
 		if wire.Method != "subscribe" && wire.Method != "unsubscribe" &&
-			wire.Method != "public/respond-heartbeat" {
+			wire.Method != "public/respond-heartbeat" && wire.Method != "public/auth" {
 			return StreamMessage{}, fmt.Errorf("unsupported Crypto.com stream method %q", wire.Method)
 		}
 		return result, nil
@@ -97,7 +97,7 @@ func DecodeStreamMessage(message corestream.Message) (StreamMessage, error) {
 		if wireResult.InstrumentName == "" && wireResult.Channel == "" && wireResult.Depth == 0 &&
 			len(bytes.TrimSpace(wireResult.Data)) == 0 &&
 			(wire.Method == "subscribe" || wire.Method == "unsubscribe" ||
-				wire.Method == "public/respond-heartbeat") {
+				wire.Method == "public/respond-heartbeat" || wire.Method == "public/auth") {
 			return result, nil
 		}
 		return StreamMessage{}, fmt.Errorf("Crypto.com stream data subscription is missing")
@@ -107,7 +107,7 @@ func DecodeStreamMessage(message corestream.Message) (StreamMessage, error) {
 		return StreamMessage{}, err
 	}
 	if wire.Method != "subscribe" || wireResult.InstrumentName != instrumentName ||
-		wireResult.Channel != string(channel) {
+		wireResult.Channel != cryptoComStreamChannelName(channel) {
 		return StreamMessage{}, fmt.Errorf("Crypto.com stream data metadata is inconsistent")
 	}
 	resultDepth, err := intFromInteger(wireResult.Depth, "stream book depth")
@@ -130,6 +130,7 @@ func DecodeStreamMessage(message corestream.Message) (StreamMessage, error) {
 	result.Subscription = wireResult.Subscription
 	result.Channel = channel
 	result.Depth = depth
+	result.Private = cryptoComPrivateStreamChannel(channel)
 	result.Data = cloneBytes(dataRaw)
 	return result, nil
 }
@@ -142,6 +143,18 @@ func parseCryptoComStreamSubscription(
 	var instrumentName string
 	depth := 0
 	switch {
+	case len(parts) == 2 && parts[0] == "user" && parts[1] == "order":
+		channel = StreamChannelUserOrders
+	case len(parts) == 3 && parts[0] == "user" && parts[1] == "order":
+		channel = StreamChannelUserOrders
+		instrumentName = parts[2]
+	case len(parts) == 2 && parts[0] == "user" && parts[1] == "trade":
+		channel = StreamChannelUserTrades
+	case len(parts) == 3 && parts[0] == "user" && parts[1] == "trade":
+		channel = StreamChannelUserTrades
+		instrumentName = parts[2]
+	case len(parts) == 2 && parts[0] == "user" && parts[1] == "balance":
+		channel = StreamChannelUserBalances
 	case len(parts) == 2 && parts[0] == string(StreamChannelTicker):
 		channel = StreamChannelTicker
 		instrumentName = parts[1]
@@ -163,8 +176,22 @@ func parseCryptoComStreamSubscription(
 	default:
 		return "", "", 0, fmt.Errorf("unsupported Crypto.com stream subscription %q", value)
 	}
-	if err := validateInstrumentName(instrumentName); err != nil {
-		return "", "", 0, err
+	if instrumentName != "" {
+		if err := validateInstrumentName(instrumentName); err != nil {
+			return "", "", 0, err
+		}
 	}
 	return channel, instrumentName, depth, nil
+}
+
+func cryptoComPrivateStreamChannel(channel StreamChannel) bool {
+	return channel == StreamChannelUserOrders || channel == StreamChannelUserTrades ||
+		channel == StreamChannelUserBalances
+}
+
+func cryptoComStreamChannelName(channel StreamChannel) string {
+	if cryptoComPrivateStreamChannel(channel) {
+		return strings.SplitN(string(channel), ".", 2)[0]
+	}
+	return string(channel)
 }

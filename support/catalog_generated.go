@@ -175,7 +175,7 @@ var catalogData = []ProductSupport{
 	{
 		Exchange: model.ExchangeID("cryptocom"), DisplayName: "Crypto.com", Tier: "P4",
 		Product: ProductID("spot"), ProductName: "Spot",
-		REST: Status("implemented"), WebSocketPublic: Status("implemented"), WebSocketPrivate: Status("planned"),
+		REST: Status("implemented"), WebSocketPublic: Status("implemented"), WebSocketPrivate: Status("implemented"),
 		Unified: Status("implemented"), AutomatedTests: Status("implemented"),
 		LiveReadSmoke: Status("planned"), LiveTradeSmoke: Status("planned"),
 		Docs: []string{"docs/exchanges/CRYPTOCOM.md"},

@@ -620,7 +620,7 @@ const (
 - HMAC SHA-256 재귀 params 정규화, 잔고와 주문 생성·조회·취소·이력 구현 완료
 - 공통 Spot API와 적합성 테스트 구현 완료
 - market WebSocket, heartbeat, 동적 구독과 같은 EIP 재구독 구현 완료
-- user WebSocket 인증과 같은 EIP private 재구독
+- user WebSocket 인증과 같은 EIP private 재구독 구현 완료
 - 명시적 10·50단계 `SNAPSHOT_AND_UPDATE`의 `u`·`pu` 로컬 오더북과 같은 EIP 재구독 복구
 - UAT mock 자동 테스트와 production read-only·명시적 소액 주문 smoke를 분리
 - Margin·Derivatives, 고급 조건부 주문, 자산 이동 실행은 초기 Spot 범위에서 제외

@@ -5,14 +5,17 @@ import (
 	"fmt"
 )
 
-// StreamChannel은 Crypto.com 공개 시세 WebSocket 채널이다.
+// StreamChannel은 Crypto.com 공개 시세와 private 사용자 WebSocket 채널이다.
 type StreamChannel string
 
 const (
-	StreamChannelTicker  StreamChannel = "ticker"
-	StreamChannelTrades  StreamChannel = "trade"
-	StreamChannelCandles StreamChannel = "candlestick"
-	StreamChannelBook    StreamChannel = "book"
+	StreamChannelTicker       StreamChannel = "ticker"
+	StreamChannelTrades       StreamChannel = "trade"
+	StreamChannelCandles      StreamChannel = "candlestick"
+	StreamChannelBook         StreamChannel = "book"
+	StreamChannelUserOrders   StreamChannel = "user.order"
+	StreamChannelUserTrades   StreamChannel = "user.trade"
+	StreamChannelUserBalances StreamChannel = "user.balance"
 )
 
 // StreamBookDepth는 명시적으로 지원하는 Crypto.com 호가 단계 수다.
@@ -40,7 +43,7 @@ const (
 	StreamBookUpdate500Milliseconds StreamBookUpdateFrequency = "500"
 )
 
-// StreamSubscription은 공개 시세 채널과 거래쌍 및 채널별 설정을 정의한다.
+// StreamSubscription은 공개 시세 또는 private 사용자 채널과 거래쌍 및 채널별 설정을 정의한다.
 type StreamSubscription struct {
 	Channel              StreamChannel
 	InstrumentName       string
@@ -50,7 +53,7 @@ type StreamSubscription struct {
 	BookUpdateFrequency  StreamBookUpdateFrequency
 }
 
-// StreamRequest는 연결 직후와 재연결 때 복구할 공개 구독 목록이다.
+// StreamRequest는 연결 직후와 재연결 때 복구할 구독 목록이다.
 type StreamRequest struct {
 	Subscriptions []StreamSubscription
 }
@@ -62,7 +65,7 @@ type StreamError struct {
 	Original string
 }
 
-// StreamMessage는 시세 데이터, 명령 응답 또는 heartbeat 한 건이다.
+// StreamMessage는 시세·사용자 데이터, 명령 응답 또는 heartbeat 한 건이다.
 type StreamMessage struct {
 	ID             string
 	Method         string
@@ -71,13 +74,14 @@ type StreamMessage struct {
 	Subscription   string
 	Channel        StreamChannel
 	Depth          int
+	Private        bool
 	Heartbeat      bool
 	Error          *StreamError
 	Data           json.RawMessage
 	Raw            json.RawMessage
 }
 
-// Decode는 공개 시세 데이터 배열을 지정한 타입으로 변환한다.
+// Decode는 공개 시세 또는 private 사용자 데이터 배열을 지정한 타입으로 변환한다.
 func (message StreamMessage) Decode(target any) error {
 	if target == nil {
 		return fmt.Errorf("Crypto.com stream decode target is nil")
