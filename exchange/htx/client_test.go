@@ -154,12 +154,29 @@ func TestClientPublicMarketDataLifecycle(t *testing.T) {
 		}
 	}
 	timeSnapshot, err := limiter.Snapshot("htx:route:route-b:public:timestamp:1second")
-	if err != nil || timeSnapshot.Used != 3 || timeSnapshot.Rule.Limit != 10 {
+	if err != nil || timeSnapshot.Rule.Limit != 10 || timeSnapshot.Rule.Window != time.Second {
 		t.Fatalf("time limiter snapshot = %+v, error = %v", timeSnapshot, err)
 	}
 	tickerSnapshot, err := limiter.Snapshot("htx:route:route-a:public:ticker:1second")
-	if err != nil || tickerSnapshot.Used != 1 {
+	if err != nil || tickerSnapshot.Rule.Limit != 10 || tickerSnapshot.Rule.Window != time.Second {
 		t.Fatalf("ticker limiter snapshot = %+v, error = %v", tickerSnapshot, err)
+	}
+}
+
+func TestObserveRateLimitRecordsServerUsage(t *testing.T) {
+	t.Parallel()
+
+	const key = "htx:test:public:100years"
+	window := 100 * 365 * 24 * time.Hour
+	limiter, err := ratelimit.New(ratelimit.Rule{Key: key, Limit: 10, Window: window})
+	if err != nil {
+		t.Fatalf("ratelimit.New() error = %v", err)
+	}
+	header := http.Header{"X-Hb-Ratelimit-Requests-Remain": {"7"}}
+	observeRateLimit(limiter, rateLimit{key: key, limit: 10, window: window}, header, time.Now())
+	snapshot, err := limiter.Snapshot(key)
+	if err != nil || snapshot.Used != 3 {
+		t.Fatalf("관측한 요청 제한 상태 = %+v, 오류 = %v", snapshot, err)
 	}
 }
 
