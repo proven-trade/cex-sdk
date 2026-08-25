@@ -72,6 +72,7 @@
 | P2 | KuCoin, Gate.io | Spot, Futures | 수요와 운영 계정 확보 후 |
 | P3 | MEXC | Spot | 네임드 거래소 확대의 첫 대상 |
 | P4 | HTX | Spot | REST·public/private WebSocket과 AWS 전용 호스트 우선 검증 |
+| P4 | Crypto.com | Spot | 현행 Exchange v1, UAT와 분리 market/user WebSocket 검증 |
 
 목록은 `config/exchange-support.yaml`을 기준 정보로 관리하며 `support` Go catalog와 `docs/SUPPORT_MATRIX.md`를 자동 생성한다. 추가 의존성을 피하기 위해 설정 파일은 YAML과 호환되는 JSON 문법을 사용한다.
 
@@ -613,6 +614,16 @@ const (
 - 공식 testnet이 중단되었으므로 mock 자동 테스트와 production read-only·명시적 소액 주문 smoke를 분리
 - HTX 완료 후 공식 API 유지 상태와 운영 수요를 다시 검토해 다음 P4 거래소를 지원 매트릭스에 등록
 
+### Phase 8 — P4 Crypto.com Exchange v1 Spot 확장
+
+- 현행 Exchange v1 공개 REST와 요청별 EIP·메서드별 IP 요청 제한·오류 정규화
+- HMAC SHA-256 재귀 params 정규화, 잔고와 주문 생성·조회·취소·이력
+- 공통 Spot API와 적합성 테스트
+- 분리 market/user WebSocket, heartbeat, user 인증과 같은 EIP 재구독
+- 명시적 10·50단계 `SNAPSHOT_AND_UPDATE`의 `u`·`pu` 로컬 오더북과 같은 EIP 재구독 복구
+- UAT mock 자동 테스트와 production read-only·명시적 소액 주문 smoke를 분리
+- Margin·Derivatives, 고급 조건부 주문, 자산 이동 실행은 초기 Spot 범위에서 제외
+
 ## 20. 확정 사항과 배포 전 결정 사항
 
 다음 항목은 구현 기준으로 확정했다.
@@ -652,6 +663,7 @@ const (
 - [Upbit 인증](https://docs.upbit.com/kr/reference/auth)
 - [MEXC Spot V3 API](https://mexcdevelop.github.io/apidocs/spot_v3_en/)
 - [HTX Spot API](https://huobiapi.github.io/docs/spot/v1/en/)
+- [Crypto.com Exchange API v1](https://exchange-developer.crypto.com/exchange/v1)
 - [Upbit 요청 수 제한](https://docs.upbit.com/kr/reference/rate-limits)
 - [Bybit V5 요청 제한](https://bybit-exchange.github.io/docs/v5/rate-limit)
 - [OKX V5 API](https://www.okx.com/docs-v5/en/)

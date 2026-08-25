@@ -315,6 +315,21 @@
       "live_read_smoke": "planned",
       "live_trade_smoke": "planned",
       "docs": ["docs/exchanges/HTX.md"]
+    },
+    {
+      "exchange_id": "cryptocom",
+      "display_name": "Crypto.com",
+      "tier": "P4",
+      "product_id": "spot",
+      "product_name": "Spot",
+      "rest": "planned",
+      "websocket_public": "planned",
+      "websocket_private": "planned",
+      "unified": "planned",
+      "automated_tests": "planned",
+      "live_read_smoke": "planned",
+      "live_trade_smoke": "planned",
+      "docs": ["docs/exchanges/CRYPTOCOM.md"]
     }
   ]
 }
