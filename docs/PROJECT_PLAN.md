@@ -604,7 +604,7 @@ const (
 
 ### Phase 7 — P4 HTX Spot 확장
 
-- 공식 Spot API의 공개 REST와 요청별 EIP·endpoint별 요청 제한·오류 정규화
+- 공식 Spot API의 공개 REST와 요청별 EIP·endpoint별 요청 제한·오류 정규화 구현 완료
 - HMAC SHA-256 인증, 현물 계정 조회, 주문 생성·조회·취소·목록
 - 공통 Spot API와 적합성 테스트
 - gzip JSON public WebSocket과 v2 private WebSocket

@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot·USDⓈ-M Futures REST·WebSocket, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Spot·Futures REST·WebSocket, Gate.io Spot REST·WebSocket·공통 API와 Futures REST·WebSocket, MEXC Spot REST·Protobuf WebSocket·로컬 오더북·공통 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot·USDⓈ-M Futures REST·WebSocket, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Spot·Futures REST·WebSocket, Gate.io Spot REST·WebSocket·공통 API와 Futures REST·WebSocket, MEXC Spot REST·Protobuf WebSocket·로컬 오더북·공통 API가 구현되어 있습니다. HTX Spot은 공개 REST부터 단계별 구현 중입니다.
 
 ## 문서
 
@@ -25,12 +25,12 @@
 - [Gate.io API v4 Spot REST·WebSocket](docs/exchanges/GATEIO.md)
 - [Gate.io API v4 Futures REST·WebSocket](docs/exchanges/GATEIO_FUTURES.md)
 - [MEXC Spot V3 REST·Protobuf WebSocket](docs/exchanges/MEXC.md)
-- [HTX Spot 구현 계획](docs/exchanges/HTX.md)
+- [HTX Spot REST](docs/exchanges/HTX.md)
 
 ## 현재 기준
 
 - 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io, MEXC Spot REST·WebSocket
-- 다음 구현 대상: HTX Spot REST·WebSocket
+- 구현 진행 중: HTX Spot 공개 REST 완료, private REST·공통 API·WebSocket 예정
 - 구현 언어: Go
 - 네트워크: 단일 ENI의 여러 secondary private IPv4와 EIP 1:1 연결
 - IP 선택: 클라이언트 기본값과 요청별 `egressRouteId` 재정의
@@ -82,6 +82,7 @@
 | Gate.io API v4 Futures REST | 계약 규칙, 공개 시세, 계정·포지션, 주문·체결 구현됨 |
 | Gate.io API v4 Futures WebSocket | public 시세·호가·캔들·체결, private 주문·체결·잔고·포지션 stream·V2 로컬 오더북 자동 갭 복구 구현됨 |
 | MEXC Spot V3 REST·WebSocket·공통 API | 공개 시세, API Key 허용 거래쌍, 계정·주문 REST, public/private Protobuf stream, version 로컬 오더북, 공통 Spot 계약과 요청별 EIP 구현됨 |
+| HTX Spot REST | 서버 시각, 거래쌍 규칙, 단일·전체 ticker, 호가, 체결, 캔들 공개 조회와 요청별 EIP 구현됨 |
 
 ## 요청별 EIP 선택
 

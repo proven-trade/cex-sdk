@@ -20,6 +20,7 @@ const (
 	ExchangeKuCoin   ExchangeID = "kucoin"
 	ExchangeGateIO   ExchangeID = "gateio"
 	ExchangeMEXC     ExchangeID = "mexc"
+	ExchangeHTX      ExchangeID = "htx"
 )
 
 // Valid는 거래소 식별자가 비어 있지 않은지 반환한다.
