@@ -1,4 +1,4 @@
-# HTX Spot REST 어댑터
+# HTX Spot REST·public WebSocket 어댑터
 
 ## 기준
 
@@ -12,7 +12,7 @@
 
 공식 문서는 testnet이 중단되었다고 명시한다. 따라서 mock 서버 기반 자동 테스트를 구현 완료 기준으로 사용하고, 실제 계정과 지정 EIP가 필요한 검증은 지원 매트릭스의 별도 smoke 상태로 관리한다.
 
-현재 `exchange/htx`의 공개·private REST, 공통 Spot API와 mock 자동 테스트가 구현되어 있다. WebSocket과 로컬 오더북은 아래 순서대로 후속 구현한다. 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
+현재 `exchange/htx`의 공개·private REST, public WebSocket, 공통 Spot API와 mock 자동 테스트가 구현되어 있다. private WebSocket과 로컬 오더북은 아래 순서대로 후속 구현한다. 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
 
 ## 구현 범위
 
@@ -144,19 +144,56 @@ order, err := client.PlaceOrder(
 
 ### WebSocket
 
-- gzip JSON public 시세 구독과 서버 ping 응답
-- v2 private 인증과 주문·잔고 구독
-- 재연결 시 같은 EIP 유지와 현재 구독 자동 복구
+- gzip JSON public ticker·집계 호가·BBO·체결·캔들 구독 구현 완료
+- 서버가 보내는 JSON `ping` 값과 같은 `pong` 즉시 응답 구현 완료
+- 연결 중 동적 구독·해지와 거절 응답 rollback 구현 완료
+- 재연결 시 같은 EIP 유지와 현재 구독 자동 복구 구현 완료
+- v2 private 인증과 주문·잔고 구독 예정
 - MBP 증분의 sequence를 검증하는 로컬 오더북과 같은 EIP REST snapshot 복구
+
+일반 시세 endpoint는 `DefaultPublicWebSocketURL`, AWS 최적화 endpoint는 `DefaultAWSPublicWebSocketURL`로 선택한다. 최초 연결과 자동 재연결은 `PublicStream`을 만들 때 정한 route를 계속 사용한다. HTX가 보내는 binary frame은 최대 16 MiB까지 gzip 해제한 뒤 JSON 객체를 검증하며, handler에는 heartbeat·구독 응답·시세 데이터가 수신 순서대로 전달된다.
+
+```go
+streamClient, err := htx.NewStreamClient(htx.StreamClientConfig{
+	Connector:            connector,
+	DefaultEgressRouteID: "seoul-a",
+	PublicWebSocketURL:   htx.DefaultAWSPublicWebSocketURL,
+})
+if err != nil {
+	return err
+}
+
+marketStream, err := streamClient.PublicStream(
+	htx.StreamRequest{Subscriptions: []htx.StreamSubscription{
+		{Channel: htx.StreamChannelTicker, Symbol: "btcusdt"},
+		{Channel: htx.StreamChannelDepth, Symbol: "btcusdt", DepthType: htx.DepthStep0},
+	}},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+
+err = marketStream.Run(ctx, func(_ context.Context, message htx.StreamMessage) error {
+	if message.Channel != htx.StreamChannelTicker {
+		return nil
+	}
+	var ticker htx.StreamTicker
+	return message.Decode(&ticker)
+})
+```
+
+`Subscribe`와 `Unsubscribe`는 실행 중인 연결의 구독 목록을 바꾼다. 서버가 요청을 거절하면 optimistic 상태 변경을 되돌리며, 다음 재연결에는 승인된 현재 목록만 복구한다. `Run`의 context가 연결 수명을 제어하므로 요청별 timeout option은 허용하지 않는다.
 
 ## 구현 순서
 
 1. 공개 REST, 오류 정규화, 요청 제한과 mock 테스트 완료
 2. private REST, signer golden vector와 주문 안전 계약 완료
 3. 공통 Spot API와 적합성 테스트 완료
-4. public/private WebSocket과 gzip·heartbeat 계약
-5. MBP 로컬 오더북과 sequence gap 복구
-6. 실제 계정 read-only 및 명시적 소액 주문 smoke
+4. public WebSocket과 gzip·heartbeat 계약 완료
+5. private WebSocket 인증과 주문·잔고 구독
+6. MBP 로컬 오더북과 sequence gap 복구
+7. 실제 계정 read-only 및 명시적 소액 주문 smoke
 
 각 코드 단계는 전체 formatter, 생성물 검사, 일반·race 테스트, vet, 한글 주석 검사를 통과한 뒤 별도 커밋으로 푸시한다.
 

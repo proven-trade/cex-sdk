@@ -26,7 +26,7 @@
 | P2 | Gate.io | Spot | 구현 | 구현 | 구현 | 구현 | 구현 | 예정 | 예정 | [문서](exchanges/GATEIO.md) |
 | P2 | Gate.io | Futures | 구현 | 구현 | 구현 | 해당 없음 | 구현 | 예정 | 예정 | [문서](exchanges/GATEIO_FUTURES.md) |
 | P3 | MEXC | Spot | 구현 | 구현 | 구현 | 구현 | 구현 | 예정 | 예정 | [문서](exchanges/MEXC.md) |
-| P4 | HTX | Spot | 구현 | 예정 | 예정 | 구현 | 구현 | 예정 | 예정 | [문서](exchanges/HTX.md) |
+| P4 | HTX | Spot | 구현 | 구현 | 예정 | 구현 | 구현 | 예정 | 예정 | [문서](exchanges/HTX.md) |
 
 현재 REST 구현 상품군은 21개이고 계획 상품군은 0개입니다.
 
