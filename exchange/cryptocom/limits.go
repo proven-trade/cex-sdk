@@ -27,3 +27,40 @@ func publicRateLimit(
 	}
 	return []ratelimit.Charge{{Key: key, Units: 1}}, nil
 }
+
+func privateRateLimit(
+	limiter *ratelimit.Limiter,
+	accountID string,
+	method string,
+	orderQuota int,
+	detailQuota int,
+	historyQuota int,
+	otherQuota int,
+) ([]ratelimit.Charge, error) {
+	if strings.TrimSpace(accountID) == "" || strings.TrimSpace(method) == "" {
+		return nil, fmt.Errorf("invalid Crypto.com private rate limit")
+	}
+	limit := otherQuota
+	window := 100 * time.Millisecond
+	switch method {
+	case "create-order", "cancel-order", "cancel-all-orders":
+		limit = orderQuota
+	case "get-order-detail":
+		limit = detailQuota
+	case "get-trades", "get-order-history":
+		limit = historyQuota
+		window = time.Second
+	}
+	if limit < 1 {
+		return nil, fmt.Errorf("invalid Crypto.com private rate limit quota")
+	}
+	windowName := "100milliseconds"
+	if window == time.Second {
+		windowName = "1second"
+	}
+	key := fmt.Sprintf("cryptocom:account:%s:private:%s:%s", accountID, method, windowName)
+	if err := limiter.SetRule(ratelimit.Rule{Key: key, Limit: limit, Window: window}); err != nil {
+		return nil, err
+	}
+	return []ratelimit.Charge{{Key: key, Units: 1}}, nil
+}

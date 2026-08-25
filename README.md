@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot·USDⓈ-M Futures REST·WebSocket, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Spot·Futures REST·WebSocket, Gate.io Spot REST·WebSocket·공통 API와 Futures REST·WebSocket, MEXC Spot REST·Protobuf WebSocket·로컬 오더북·공통 API, HTX Spot REST·WebSocket·로컬 오더북·공통 API, Crypto.com Exchange v1 Spot 공개 REST가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot·USDⓈ-M Futures REST·WebSocket, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Spot·Futures REST·WebSocket, Gate.io Spot REST·WebSocket·공통 API와 Futures REST·WebSocket, MEXC Spot REST·Protobuf WebSocket·로컬 오더북·공통 API, HTX Spot REST·WebSocket·로컬 오더북·공통 API, Crypto.com Exchange v1 Spot REST가 구현되어 있습니다.
 
 ## 문서
 
@@ -30,8 +30,8 @@
 
 ## 현재 기준
 
-- 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io, MEXC, HTX, Crypto.com 공개 REST
-- 다음 구현 대상: Crypto.com Exchange v1 Spot private REST
+- 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io, MEXC, HTX, Crypto.com REST
+- 다음 구현 대상: Crypto.com Exchange v1 공통 Spot API
 - 구현 언어: Go
 - 네트워크: 단일 ENI의 여러 secondary private IPv4와 EIP 1:1 연결
 - IP 선택: 클라이언트 기본값과 요청별 `egressRouteId` 재정의
@@ -87,6 +87,7 @@
 | HTX Spot public WebSocket | gzip JSON ticker·호가·BBO·체결·캔들, 서버 ping 응답, 동적 구독과 같은 EIP 재연결 복구 구현됨 |
 | HTX Spot private WebSocket | v2 HMAC 인증·재인증, 주문·체결·계정 stream, plain JSON ping 응답, 요청 제한과 같은 EIP 구독 복구 구현됨 |
 | HTX Spot MBP 로컬 오더북 | `/feed` 5·20·150단계 refresh·증분 정렬, sequence gap 재동기화와 같은 EIP 복구 구현됨 |
+| Crypto.com Exchange v1 Spot REST | 공개 시세, 계정 잔고, 주문 생성·조회·취소, 미체결·주문·체결 이력과 요청별 EIP 구현됨 |
 
 ## 요청별 EIP 선택
 

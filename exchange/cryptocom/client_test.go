@@ -253,6 +253,13 @@ func TestRequestValidation(t *testing.T) {
 		{name: "trade range", err: (TradesRequest{InstrumentName: "BTC_USDT", Start: &now, End: &now}).validate()},
 		{name: "candle timeframe", err: (CandlesRequest{InstrumentName: "BTC_USDT", Timeframe: "3m"}).validate()},
 		{name: "candle count", err: (CandlesRequest{InstrumentName: "BTC_USDT", Timeframe: Candle1Minute, Count: -1}).validate()},
+		{name: "limit price", err: (PlaceOrderRequest{InstrumentName: "BTC_USDT", Side: OrderSideBuy, Type: OrderTypeLimit, Quantity: "1", ClientOrderID: "id"}).validate()},
+		{name: "market buy quantity", err: (PlaceOrderRequest{InstrumentName: "BTC_USDT", Side: OrderSideBuy, Type: OrderTypeMarket, Quantity: "1", ClientOrderID: "id"}).validate()},
+		{name: "market sell notional", err: (PlaceOrderRequest{InstrumentName: "BTC_USDT", Side: OrderSideSell, Type: OrderTypeMarket, Notional: "1", ClientOrderID: "id"}).validate()},
+		{name: "post only IOC", err: (PlaceOrderRequest{InstrumentName: "BTC_USDT", Side: OrderSideBuy, Type: OrderTypeLimit, Price: "1", Quantity: "1", ClientOrderID: "id", TimeInForce: TimeInForceImmediateOrCancel, PostOnly: true}).validate()},
+		{name: "client order ID", err: (PlaceOrderRequest{InstrumentName: "BTC_USDT", Side: OrderSideBuy, Type: OrderTypeLimit, Price: "1", Quantity: "1", ClientOrderID: strings.Repeat("a", 37)}).validate()},
+		{name: "order identity", err: (OrderInfoRequest{OrderID: "1", ClientOrderID: "id"}).validate()},
+		{name: "history limit", err: (OrderHistoryRequest{Limit: 101}).validate()},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -260,6 +267,33 @@ func TestRequestValidation(t *testing.T) {
 				t.Fatalf("validation error = %v", test.err)
 			}
 		})
+	}
+}
+
+func TestPrivateOrderParameterSemantics(t *testing.T) {
+	t.Parallel()
+	marketBuy := PlaceOrderRequest{
+		InstrumentName: "BTC_USDT", Side: OrderSideBuy, Type: OrderTypeMarket,
+		Notional: "100", ClientOrderID: "market-buy",
+	}
+	if err := marketBuy.validate(); err != nil {
+		t.Fatalf("market buy validation error = %v", err)
+	}
+	buyParams := marketBuy.params()
+	if buyParams["notional"] != "100" || buyParams["quantity"] != nil ||
+		buyParams["price"] != nil || buyParams["time_in_force"] != nil {
+		t.Fatalf("market buy params = %v", buyParams)
+	}
+	marketSell := PlaceOrderRequest{
+		InstrumentName: "BTC_USDT", Side: OrderSideSell, Type: OrderTypeMarket,
+		Quantity: "0.1", ClientOrderID: "market-sell",
+	}
+	if err := marketSell.validate(); err != nil {
+		t.Fatalf("market sell validation error = %v", err)
+	}
+	sellParams := marketSell.params()
+	if sellParams["quantity"] != "0.1" || sellParams["notional"] != nil {
+		t.Fatalf("market sell params = %v", sellParams)
 	}
 }
 

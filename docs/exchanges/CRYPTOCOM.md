@@ -13,7 +13,7 @@
 
 공식 2026년 변경 로그가 유지되는 현행 Exchange v1만 대상으로 한다. 구형 기본 `book.{instrument_name}` 구독과 100ms full snapshot 구독은 이미 폐기됐으므로 구현하지 않는다. Margin·Derivatives와 고급 조건부 주문은 native 타입이 안정된 뒤 별도 상품 단계로 확장한다.
 
-현재 `exchange/cryptocom`의 공개 REST와 mock 자동 테스트가 구현되어 있다. private REST, 공통 Spot API, WebSocket과 로컬 오더북은 아래 순서대로 진행 중이며 지원 매트릭스의 REST 상태는 private 범위까지 끝난 뒤 구현으로 전환한다.
+현재 `exchange/cryptocom`의 공개·private REST와 mock 자동 테스트가 구현되어 있다. 공통 Spot API, WebSocket과 로컬 오더북은 아래 순서대로 진행 중이며 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
 
 ## 구현 범위
 
@@ -60,18 +60,69 @@ book, err := client.OrderBook(
 
 ### private REST
 
-- `private/user-balance`의 통화별 가용·예약 잔고
-- `private/create-order`의 Spot LIMIT·MARKET, GTC·IOC·FOK와 POST_ONLY
-- `private/get-order-detail`, `private/cancel-order`
-- `private/get-open-orders`, `private/get-order-history`, `private/get-trades`
-- API Key IP whitelist와 SDK credential route 허용 목록의 사전 일치 검사
-- 전송 불명확 mutation을 `UNKNOWN_EXECUTION_STATE`로 분류하고 자동 재전송 금지
+- `private/user-balance`의 통화별 가용·예약 잔고 구현 완료
+- `private/create-order`의 Spot LIMIT·MARKET, GTC·IOC·FOK와 POST_ONLY 구현 완료
+- `private/get-order-detail`, `private/cancel-order` 구현 완료
+- `private/get-open-orders`, `private/get-order-history`, `private/get-trades` 구현 완료
+- API Key IP whitelist와 SDK credential route 허용 목록의 사전 일치 검사 구현 완료
+- 전송 불명확 mutation을 `UNKNOWN_EXECUTION_STATE`로 분류하고 자동 재전송 금지 구현 완료
 
 private 요청은 `method + id + api_key + paramsString + nonce`를 Secret Key로 HMAC SHA-256하고 소문자 hex 서명을 만든다. `paramsString`은 객체 key를 재귀적으로 정렬하고 배열 순서를 유지해 연결한다. signer golden vector는 중첩 객체·배열·빈 params·decimal 문자열을 포함하며, 서명 뒤 payload를 변경하지 않는다.
 
 공식 제한 단위를 그대로 분리한다. 주문 생성·취소는 메서드별 API Key 기준 15회/100ms, 주문 상세는 30회/100ms, 체결·주문 이력은 각각 1회/초, 나머지 private 메서드는 각각 3회/100ms다. 허용 route와 `read`·`trade` 권한을 Secret 조회 전에 확인하고 사용한 민감 byte slice는 즉시 덮어쓴다.
 
 주문 응답은 matching engine의 최종 승인이 아니라 비동기 접수다. `client_oid`를 필수 안전 식별자로 사용하고 주문 상세 또는 `user.order`로 `PENDING` 이후의 `ACTIVE`·`FILLED`·`CANCELED`·`REJECTED` 상태를 확인한다. 취소도 접수 응답만으로 최종 취소로 단정하지 않는다.
+
+| 영역 | 메서드 | API |
+|---|---|---|
+| 계정 잔고 | `Balance` | `POST private/user-balance` |
+| 주문 생성 | `PlaceOrder` | `POST private/create-order` |
+| 주문 상세 | `OrderInfo` | `POST private/get-order-detail` |
+| 주문 취소 | `CancelOrder` | `POST private/cancel-order` |
+| 미체결 주문 | `OpenOrders` | `POST private/get-open-orders` |
+| 종료 주문 이력 | `OrderHistory` | `POST private/get-order-history` |
+| 계정 체결 이력 | `AccountTrades` | `POST private/get-trades` |
+
+```go
+client, err := cryptocom.New(cryptocom.Config{
+	Executor: executor,
+	Credentials: &credential.Descriptor{
+		AccountID: "cryptocom-main",
+		Exchange: model.ExchangeCryptoCom,
+		SecretRef: "secret/cryptocom-main",
+		Permissions: []credential.Permission{
+			credential.PermissionRead,
+			credential.PermissionTrade,
+		},
+		AllowedEgressRouteIDs: []transport.EgressRouteID{"seoul-a", "seoul-b"},
+	},
+	CredentialProvider:   provider,
+	DefaultEgressRouteID: "seoul-a",
+})
+if err != nil {
+	return err
+}
+
+receipt, err := client.PlaceOrder(
+	ctx,
+	cryptocom.PlaceOrderRequest{
+		InstrumentName: "BTC_USDT",
+		Side: cryptocom.OrderSideBuy,
+		Type: cryptocom.OrderTypeLimit,
+		Price: "50000",
+		Quantity: "0.0001",
+		ClientOrderID: "strategy-20260825-1",
+		PostOnly: true,
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+```
+
+Spot MARKET 매수는 base 수량이 아니라 quote 지출액을 `Notional`로 받고, MARKET 매도와 LIMIT은 base `Quantity`를 받는다. MARKET은 가격·time-in-force·post-only를 거부한다. LIMIT의 POST_ONLY는 `GOOD_TILL_CANCEL` 또는 생략만 허용하며, `ClientOrderID`는 모든 주문에서 36바이트 이내 필수다.
+
+private 본문의 `id`, `nonce`, 주문 ID, 시각, 개수와 decimal은 문자열로 직렬화한다. `ParamsString`과 `Sign`은 중첩 객체를 재귀적으로 정렬하고 배열 순서를 유지하며, 숫자형 params를 거부해 서명값과 전송 JSON이 달라지는 일을 막는다. 요청 제한 대기 뒤에만 Secret을 조회하고 사용한 key·secret과 요청 body byte slice를 덮어쓴다.
+
+주문 생성·취소의 전송 오류, HTTP 5xx·`40801`·`50001`, 성공 응답 손상은 자동 재시도하지 않고 `UNKNOWN_EXECUTION_STATE`로 반환한다. 명시적인 `306`은 잔고 부족, 주문 조회·취소의 `212`는 주문 없음으로 분류한다. HTTP 429와 `Retry-After`는 계정·메서드별 private limiter에도 반영한다.
 
 ### 공통 Spot API
 
@@ -101,8 +152,8 @@ private user 연결은 API Key whitelist route와 `read` 권한을 연결 전에
 
 ## 구현 순서
 
-1. 공개 REST, 오류 정규화, 요청 제한과 mock 테스트
-2. private REST, signer golden vector와 주문 안전 계약
+1. 공개 REST, 오류 정규화, 요청 제한과 mock 테스트 구현 완료
+2. private REST, signer golden vector와 주문 안전 계약 구현 완료
 3. 공통 Spot API와 적합성 테스트
 4. public market WebSocket과 heartbeat·동적 구독
 5. private user WebSocket 인증과 주문·체결·잔고 구독

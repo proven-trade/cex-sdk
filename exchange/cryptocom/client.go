@@ -11,38 +11,59 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	trade "github.com/proven-trade/proven-trade-sdk"
+	"github.com/proven-trade/proven-trade-sdk/credential"
 	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
 	"github.com/proven-trade/proven-trade-sdk/model"
 	"github.com/proven-trade/proven-trade-sdk/transport"
 )
 
 const (
-	DefaultBaseURL                 = "https://api.crypto.com/exchange/v1"
-	DefaultUATBaseURL              = "https://uat-api.3ona.co/exchange/v1"
-	DefaultRequestTimeout          = 10 * time.Second
-	DefaultPublicRequestsPerSecond = 100
+	DefaultBaseURL                                = "https://api.crypto.com/exchange/v1"
+	DefaultUATBaseURL                             = "https://uat-api.3ona.co/exchange/v1"
+	DefaultRequestTimeout                         = 10 * time.Second
+	DefaultPublicRequestsPerSecond                = 100
+	DefaultOrderRequestsPer100Milliseconds        = 15
+	DefaultOrderDetailRequestsPer100Milliseconds  = 30
+	DefaultHistoryRequestsPerSecond               = 1
+	DefaultOtherPrivateRequestsPer100Milliseconds = 3
 )
 
 // Config는 Crypto.com Exchange v1 Spot 공개 REST 클라이언트 설정이다.
 type Config struct {
-	Executor                *commonexchange.Executor
-	DefaultEgressRouteID    transport.EgressRouteID
-	BaseURL                 string
-	AllowInsecureHTTP       bool
-	RequestTimeout          time.Duration
-	PublicRequestsPerSecond int
+	Executor                               *commonexchange.Executor
+	Credentials                            *credential.Descriptor
+	CredentialProvider                     credential.Provider
+	DefaultEgressRouteID                   transport.EgressRouteID
+	BaseURL                                string
+	AllowInsecureHTTP                      bool
+	RequestTimeout                         time.Duration
+	PublicRequestsPerSecond                int
+	OrderRequestsPer100Milliseconds        int
+	OrderDetailRequestsPer100Milliseconds  int
+	HistoryRequestsPerSecond               int
+	OtherPrivateRequestsPer100Milliseconds int
+	Now                                    func() time.Time
 }
 
 // Client는 Crypto.com Exchange v1 Spot REST API를 요청별 EIP 선택과 함께 제공한다.
 type Client struct {
-	executor                *commonexchange.Executor
-	defaultEgressRouteID    transport.EgressRouteID
-	baseURL                 *url.URL
-	requestTimeout          time.Duration
-	publicRequestsPerSecond int
+	executor                               *commonexchange.Executor
+	credentials                            *credential.Descriptor
+	credentialProvider                     credential.Provider
+	defaultEgressRouteID                   transport.EgressRouteID
+	baseURL                                *url.URL
+	requestTimeout                         time.Duration
+	publicRequestsPerSecond                int
+	orderRequestsPer100Milliseconds        int
+	orderDetailRequestsPer100Milliseconds  int
+	historyRequestsPerSecond               int
+	otherPrivateRequestsPer100Milliseconds int
+	now                                    func() time.Time
+	requestID                              atomic.Int64
 }
 
 // New는 검증된 Crypto.com Exchange v1 Spot REST 클라이언트를 생성한다.
@@ -87,11 +108,66 @@ func New(config Config) (*Client, error) {
 		config.PublicRequestsPerSecond > DefaultPublicRequestsPerSecond {
 		return nil, fmt.Errorf("Crypto.com public request quota must be between 1 and 100")
 	}
-	return &Client{
+	if config.OrderRequestsPer100Milliseconds == 0 {
+		config.OrderRequestsPer100Milliseconds = DefaultOrderRequestsPer100Milliseconds
+	}
+	if config.OrderDetailRequestsPer100Milliseconds == 0 {
+		config.OrderDetailRequestsPer100Milliseconds = DefaultOrderDetailRequestsPer100Milliseconds
+	}
+	if config.HistoryRequestsPerSecond == 0 {
+		config.HistoryRequestsPerSecond = DefaultHistoryRequestsPerSecond
+	}
+	if config.OtherPrivateRequestsPer100Milliseconds == 0 {
+		config.OtherPrivateRequestsPer100Milliseconds = DefaultOtherPrivateRequestsPer100Milliseconds
+	}
+	if config.OrderRequestsPer100Milliseconds < 1 ||
+		config.OrderRequestsPer100Milliseconds > DefaultOrderRequestsPer100Milliseconds ||
+		config.OrderDetailRequestsPer100Milliseconds < 1 ||
+		config.OrderDetailRequestsPer100Milliseconds > DefaultOrderDetailRequestsPer100Milliseconds ||
+		config.HistoryRequestsPerSecond < 1 ||
+		config.HistoryRequestsPerSecond > DefaultHistoryRequestsPerSecond ||
+		config.OtherPrivateRequestsPer100Milliseconds < 1 ||
+		config.OtherPrivateRequestsPer100Milliseconds > DefaultOtherPrivateRequestsPer100Milliseconds {
+		return nil, fmt.Errorf("Crypto.com private request quotas exceed official limits")
+	}
+	if config.Now == nil {
+		config.Now = time.Now
+	}
+
+	var credentialsCopy *credential.Descriptor
+	if config.Credentials != nil {
+		if err := config.Credentials.Validate(); err != nil {
+			return nil, err
+		}
+		if config.Credentials.Exchange != model.ExchangeCryptoCom {
+			return nil, fmt.Errorf("credential exchange must be Crypto.com")
+		}
+		if config.CredentialProvider == nil {
+			return nil, fmt.Errorf("credential provider is required for private Crypto.com requests")
+		}
+		copyValue := *config.Credentials
+		copyValue.Permissions = append([]credential.Permission(nil), config.Credentials.Permissions...)
+		copyValue.AllowedEgressRouteIDs = append(
+			[]transport.EgressRouteID(nil), config.Credentials.AllowedEgressRouteIDs...,
+		)
+		credentialsCopy = &copyValue
+	}
+	if config.Credentials == nil && config.CredentialProvider != nil {
+		return nil, fmt.Errorf("credential descriptor is required with credential provider")
+	}
+
+	client := &Client{
 		executor: config.Executor, defaultEgressRouteID: defaultRouteID,
 		baseURL: parsedBaseURL, requestTimeout: config.RequestTimeout,
 		publicRequestsPerSecond: config.PublicRequestsPerSecond,
-	}, nil
+		credentials:             credentialsCopy, credentialProvider: config.CredentialProvider,
+		orderRequestsPer100Milliseconds:        config.OrderRequestsPer100Milliseconds,
+		orderDetailRequestsPer100Milliseconds:  config.OrderDetailRequestsPer100Milliseconds,
+		historyRequestsPerSecond:               config.HistoryRequestsPerSecond,
+		otherPrivateRequestsPer100Milliseconds: config.OtherPrivateRequestsPer100Milliseconds,
+		now:                                    config.Now,
+	}
+	return client, nil
 }
 
 func (client *Client) executePublic(

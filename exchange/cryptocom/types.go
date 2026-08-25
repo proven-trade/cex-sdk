@@ -186,6 +186,153 @@ type Candle struct {
 	Raw       json.RawMessage `json:"-"`
 }
 
+// UserBalance는 계정 위험 요약과 통화별 담보 잔고 목록이다.
+type UserBalance struct {
+	Accounts []BalanceAccount
+	Raw      json.RawMessage
+}
+
+// BalanceAccount는 계정 전체 잔고·증거금 요약과 통화별 잔고다.
+type BalanceAccount struct {
+	InstrumentName             string            `json:"instrument_name"`
+	TotalAvailableBalance      Decimal           `json:"total_available_balance"`
+	TotalMarginBalance         Decimal           `json:"total_margin_balance"`
+	TotalInitialMargin         Decimal           `json:"total_initial_margin"`
+	TotalMaintenanceMargin     Decimal           `json:"total_maintenance_margin"`
+	TotalPositionCost          Decimal           `json:"total_position_cost"`
+	TotalCashBalance           Decimal           `json:"total_cash_balance"`
+	TotalCollateralValue       Decimal           `json:"total_collateral_value"`
+	TotalSessionUnrealizedPnL  Decimal           `json:"total_session_unrealized_pnl"`
+	TotalSessionRealizedPnL    Decimal           `json:"total_session_realized_pnl"`
+	IsLiquidating              bool              `json:"is_liquidating"`
+	TotalEffectiveLeverage     Decimal           `json:"total_effective_leverage"`
+	PositionLimit              Decimal           `json:"position_limit"`
+	UsedPositionLimit          Decimal           `json:"used_position_limit"`
+	TotalIsolatedCashBalance   Decimal           `json:"total_isolated_cash_balance"`
+	TotalPositionInitialMargin Decimal           `json:"total_position_im"`
+	TotalHaircut               Decimal           `json:"total_haircut"`
+	TotalRiskExposure          Decimal           `json:"total_risk_exposure"`
+	TotalBorrow                Decimal           `json:"total_borrow"`
+	MarginScore                Decimal           `json:"margin_score"`
+	HasRisk                    bool              `json:"has_risk"`
+	Terminatable               bool              `json:"terminatable"`
+	PositionBalances           []PositionBalance `json:"position_balances"`
+	IsolatedPositions          []BalanceAccount  `json:"isolated_positions"`
+	IsolationID                string            `json:"isolation_id"`
+	Leverage                   Decimal           `json:"leverage"`
+	IsolationType              string            `json:"isolation_type"`
+	Raw                        json.RawMessage   `json:"-"`
+}
+
+// PositionBalance는 한 통화의 수량·가치·예약 수량과 담보 상태다.
+type PositionBalance struct {
+	InstrumentName     string          `json:"instrument_name"`
+	Quantity           Decimal         `json:"quantity"`
+	MarketValue        Decimal         `json:"market_value"`
+	CollateralEligible bool            `json:"collateral_eligible"`
+	Haircut            Decimal         `json:"haircut"`
+	CollateralAmount   Decimal         `json:"collateral_amount"`
+	MaximumWithdrawal  Decimal         `json:"max_withdrawal_balance"`
+	ReservedQuantity   Decimal         `json:"reserved_qty"`
+	HourlyInterestRate Decimal         `json:"hourly_interest_rate"`
+	Raw                json.RawMessage `json:"-"`
+}
+
+// OrderReceipt는 비동기 주문 접수 식별자와 원본 응답이다.
+type OrderReceipt struct {
+	OrderID       Scalar          `json:"order_id"`
+	ClientOrderID string          `json:"client_oid"`
+	Raw           json.RawMessage `json:"-"`
+}
+
+// CancelAcknowledgement는 비동기 취소 접수 식별자와 원본 응답이다.
+type CancelAcknowledgement struct {
+	OrderID       Scalar          `json:"order_id"`
+	ClientOrderID string          `json:"client_oid"`
+	Raw           json.RawMessage `json:"-"`
+}
+
+// OrderStatus는 Crypto.com 주문 수명주기 상태다.
+type OrderStatus string
+
+const (
+	OrderStatusPending  OrderStatus = "PENDING"
+	OrderStatusNew      OrderStatus = "NEW"
+	OrderStatusActive   OrderStatus = "ACTIVE"
+	OrderStatusFilled   OrderStatus = "FILLED"
+	OrderStatusCanceled OrderStatus = "CANCELED"
+	OrderStatusExpired  OrderStatus = "EXPIRED"
+	OrderStatusRejected OrderStatus = "REJECTED"
+)
+
+// Order는 Crypto.com Spot 주문의 현재 상태와 누적 체결 정보다.
+type Order struct {
+	AccountID             string          `json:"account_id"`
+	OrderID               Scalar          `json:"order_id"`
+	ClientOrderID         string          `json:"client_oid"`
+	Type                  OrderType       `json:"order_type"`
+	TimeInForce           TimeInForce     `json:"time_in_force"`
+	Side                  OrderSide       `json:"side"`
+	ExecutionInstructions []string        `json:"exec_inst"`
+	Quantity              Decimal         `json:"quantity"`
+	LimitPrice            Decimal         `json:"limit_price"`
+	OrderValue            Decimal         `json:"order_value"`
+	MakerFeeRate          Decimal         `json:"maker_fee_rate"`
+	TakerFeeRate          Decimal         `json:"taker_fee_rate"`
+	AveragePrice          Decimal         `json:"avg_price"`
+	CumulativeQuantity    Decimal         `json:"cumulative_quantity"`
+	CumulativeValue       Decimal         `json:"cumulative_value"`
+	CumulativeFee         Decimal         `json:"cumulative_fee"`
+	Status                OrderStatus     `json:"status"`
+	UpdateUserID          string          `json:"update_user_id"`
+	OrderDate             string          `json:"order_date"`
+	CreateTime            Scalar          `json:"create_time"`
+	CreateTimeNS          Scalar          `json:"create_time_ns"`
+	UpdateTime            Scalar          `json:"update_time"`
+	InstrumentName        string          `json:"instrument_name"`
+	FeeInstrumentName     string          `json:"fee_instrument_name"`
+	IsolationID           string          `json:"isolation_id"`
+	IsolationType         string          `json:"isolation_type"`
+	Leverage              Decimal         `json:"leverage"`
+	IsolatedMarginAmount  Decimal         `json:"isolated_margin_amount"`
+	Raw                   json.RawMessage `json:"-"`
+}
+
+// TakerSide는 계정 체결이 maker인지 taker인지 나타낸다.
+type TakerSide string
+
+const (
+	TakerSideMaker TakerSide = "MAKER"
+	TakerSideTaker TakerSide = "TAKER"
+)
+
+// AccountTrade는 계정 주문에서 발생한 체결과 수수료 정보다.
+type AccountTrade struct {
+	AccountID         string          `json:"account_id"`
+	EventDate         string          `json:"event_date"`
+	JournalType       string          `json:"journal_type"`
+	TradedQuantity    Decimal         `json:"traded_quantity"`
+	TradedPrice       Decimal         `json:"traded_price"`
+	Fees              Decimal         `json:"fees"`
+	FeeCredits        Decimal         `json:"fee_credits"`
+	OrderID           Scalar          `json:"order_id"`
+	TradeID           Scalar          `json:"trade_id"`
+	TradeMatchID      Scalar          `json:"trade_match_id"`
+	ClientOrderID     string          `json:"client_oid"`
+	TakerSide         TakerSide       `json:"taker_side"`
+	Side              OrderSide       `json:"side"`
+	InstrumentName    string          `json:"instrument_name"`
+	FeeInstrumentName string          `json:"fee_instrument_name"`
+	CreateTime        Scalar          `json:"create_time"`
+	CreateTimeNS      Scalar          `json:"create_time_ns"`
+	MatchCount        Integer         `json:"match_count"`
+	MatchIndex        Integer         `json:"match_index"`
+	IsolationID       string          `json:"isolation_id"`
+	IsolationType     string          `json:"isolation_type"`
+	TransactionTimeNS Scalar          `json:"transact_time_ns"`
+	Raw               json.RawMessage `json:"-"`
+}
+
 func optionalScalarText(raw json.RawMessage) (string, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
