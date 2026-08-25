@@ -241,7 +241,7 @@ sequence gap, WebSocket 연결 세대 변경 또는 refresh 정렬 실패가 발
 4. public WebSocket과 gzip·heartbeat 계약 완료
 5. private WebSocket 인증과 주문·체결·잔고 구독 완료
 6. MBP 로컬 오더북과 sequence gap 복구 완료
-7. 실제 계정 read-only 및 명시적 소액 주문 smoke
+7. 공통 live smoke CLI 연결 완료, 실제 계정 read-only 및 명시적 소액 주문 실행 대기
 
 각 코드 단계는 전체 formatter, 생성물 검사, 일반·race 테스트, vet, 한글 주석 검사를 통과한 뒤 별도 커밋으로 푸시한다.
 

@@ -22,7 +22,7 @@ EIP 검사를 통과하려면 route에 `ExpectedPublicIP`가 반드시 설정돼
 
 ## 사용 예시
 
-CLI는 Binance, Bitget, Upbit, Bybit, OKX, Coinbase Advanced, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io, MEXC와 Crypto.com의 공통 Spot 어댑터를 선택할 수 있습니다. 먼저 [public 예제 설정](../examples/live-smoke/public.example.json)을 복사해 실제 EC2 private IP와 연결된 EIP로 바꿉니다.
+CLI는 Binance, Bitget, Upbit, Bybit, OKX, Coinbase Advanced, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io, MEXC, HTX와 Crypto.com의 공통 Spot 어댑터를 선택할 수 있습니다. 먼저 [public 예제 설정](../examples/live-smoke/public.example.json)을 복사해 실제 EC2 private IP와 연결된 EIP로 바꿉니다.
 
 ```bash
 go run ./cmd/livesmoke -config ./live-smoke.json
