@@ -229,6 +229,115 @@ type BookTicker struct {
 	Raw         json.RawMessage `json:"-"`
 }
 
+// Side는 Spot 주문과 체결의 매수 또는 매도 방향이다.
+type Side string
+
+const (
+	SideBuy  Side = "BUY"
+	SideSell Side = "SELL"
+)
+
+// OrderType은 Spot 주문의 가격·체결 정책이다.
+type OrderType string
+
+const (
+	OrderTypeLimit             OrderType = "LIMIT"
+	OrderTypeMarket            OrderType = "MARKET"
+	OrderTypeLimitMaker        OrderType = "LIMIT_MAKER"
+	OrderTypeImmediateOrCancel OrderType = "IMMEDIATE_OR_CANCEL"
+	OrderTypeFillOrKill        OrderType = "FILL_OR_KILL"
+)
+
+// OrderStatus는 MEXC Spot 주문의 수명주기 상태다.
+type OrderStatus string
+
+const (
+	OrderStatusNew               OrderStatus = "NEW"
+	OrderStatusFilled            OrderStatus = "FILLED"
+	OrderStatusPartiallyFilled   OrderStatus = "PARTIALLY_FILLED"
+	OrderStatusCanceled          OrderStatus = "CANCELED"
+	OrderStatusPartiallyCanceled OrderStatus = "PARTIALLY_CANCELED"
+)
+
+// Balance는 자산별 사용 가능·잠금 Spot 잔고다.
+type Balance struct {
+	Asset  string          `json:"asset"`
+	Free   string          `json:"free"`
+	Locked string          `json:"locked"`
+	Raw    json.RawMessage `json:"-"`
+}
+
+// Account는 현재 Spot 계정 권한과 자산별 잔고다.
+type Account struct {
+	CanTrade    bool
+	CanWithdraw bool
+	CanDeposit  bool
+	UpdateTime  Scalar
+	AccountType string
+	Balances    []Balance
+	Permissions []string
+	Raw         json.RawMessage
+}
+
+// OrderReference는 신규 Spot 주문 접수 결과다.
+type OrderReference struct {
+	Symbol        string          `json:"symbol"`
+	OrderID       Scalar          `json:"orderId"`
+	OrderListID   Scalar          `json:"orderListId"`
+	ClientOrderID string          `json:"clientOrderId"`
+	Price         string          `json:"price"`
+	Quantity      string          `json:"origQty"`
+	Type          OrderType       `json:"type"`
+	Side          Side            `json:"side"`
+	TransactTime  int64           `json:"transactTime"`
+	Raw           json.RawMessage `json:"-"`
+}
+
+// Order는 Spot 주문 상태와 누적 체결 수량·금액이다.
+type Order struct {
+	Symbol                     string          `json:"symbol"`
+	OriginalClientOrderID      Scalar          `json:"origClientOrderId"`
+	OrderID                    Scalar          `json:"orderId"`
+	OrderListID                Scalar          `json:"orderListId"`
+	ClientOrderID              Scalar          `json:"clientOrderId"`
+	Price                      string          `json:"price"`
+	OriginalQuantity           string          `json:"origQty"`
+	ExecutedQuantity           string          `json:"executedQty"`
+	CumulativeQuoteQuantity    string          `json:"cummulativeQuoteQty"`
+	Status                     OrderStatus     `json:"status"`
+	TimeInForce                string          `json:"timeInForce"`
+	Type                       OrderType       `json:"type"`
+	Side                       Side            `json:"side"`
+	StopPrice                  string          `json:"stopPrice"`
+	IcebergQuantity            string          `json:"icebergQty"`
+	CreatedAt                  int64           `json:"time"`
+	UpdatedAt                  int64           `json:"updateTime"`
+	Working                    bool            `json:"isWorking"`
+	OriginalQuoteOrderQuantity string          `json:"origQuoteOrderQty"`
+	Raw                        json.RawMessage `json:"-"`
+}
+
+// AccountTrade는 계정의 Spot 체결 한 건과 수수료 정보다.
+type AccountTrade struct {
+	Symbol          string          `json:"symbol"`
+	ID              Scalar          `json:"id"`
+	OrderID         Scalar          `json:"orderId"`
+	OrderListID     Scalar          `json:"orderListId"`
+	Price           string          `json:"price"`
+	Quantity        string          `json:"qty"`
+	QuoteQuantity   string          `json:"quoteQty"`
+	Commission      string          `json:"commission"`
+	CommissionAsset string          `json:"commissionAsset"`
+	Time            int64           `json:"time"`
+	Buyer           bool            `json:"isBuyer"`
+	BuyerMaker      bool            `json:"isBuyerMaker"`
+	Maker           bool            `json:"isMaker"`
+	BestMatch       bool            `json:"isBestMatch"`
+	SelfTrade       bool            `json:"isSelfTrade"`
+	ClientOrderID   Scalar          `json:"clientOrderId"`
+	Raw             json.RawMessage `json:"-"`
+}
+
 func decimalText(raw json.RawMessage) (string, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {

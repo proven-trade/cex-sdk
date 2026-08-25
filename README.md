@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot·USDⓈ-M Futures REST·WebSocket, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Spot·Futures REST·WebSocket, Gate.io Spot REST·WebSocket·공통 API와 Futures REST·WebSocket이 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot·USDⓈ-M Futures REST·WebSocket, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Spot·Futures REST·WebSocket, Gate.io Spot REST·WebSocket·공통 API와 Futures REST·WebSocket, MEXC Spot 공개·private REST가 구현되어 있습니다.
 
 ## 문서
 
@@ -28,7 +28,7 @@
 
 ## 현재 기준
 
-- 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io, MEXC 공개 Spot REST
+- 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io, MEXC Spot REST
 - 구현 언어: Go
 - 네트워크: 단일 ENI의 여러 secondary private IPv4와 EIP 1:1 연결
 - IP 선택: 클라이언트 기본값과 요청별 `egressRouteId` 재정의
@@ -79,7 +79,7 @@
 | Gate.io 공통 Spot API | 공통 마켓·시세·잔고·주문 계약과 적합성 테스트 구현됨 |
 | Gate.io API v4 Futures REST | 계약 규칙, 공개 시세, 계정·포지션, 주문·체결 구현됨 |
 | Gate.io API v4 Futures WebSocket | public 시세·호가·캔들·체결, private 주문·체결·잔고·포지션 stream·V2 로컬 오더북 자동 갭 복구 구현됨 |
-| MEXC Spot V3 REST | 서버 시각, 기본 API 거래쌍, 상품 규칙, 호가·체결·캔들·ticker 공개 조회와 요청별 EIP 구현됨; private REST는 예정 |
+| MEXC Spot V3 REST | 공개 시세, API Key 허용 거래쌍, 계정·잔고, 주문 생성·조회·취소·목록·체결과 요청별 EIP 구현됨 |
 
 ## 요청별 EIP 선택
 
@@ -472,7 +472,7 @@ defer session.Close()
 
 세부 계약은 [Gate.io API v4 Futures 문서](docs/exchanges/GATEIO_FUTURES.md)를 참고합니다.
 
-## MEXC Spot V3 공개 REST 1차 범위
+## MEXC Spot V3 REST 1차 범위
 
 - 서버 시각과 API 기본 허용 거래쌍
 - 전체·단일·복수 거래쌍 규칙과 주문 정밀도
@@ -482,8 +482,13 @@ defer session.Close()
 - 요청별 EIP 선택과 route별 독립 limiter
 - 숫자·문자열·`null`이 혼재하는 식별자 원형과 응답 `Raw` 보존
 - HTTP 상태와 MEXC code 기반 공통 오류 정규화
+- HMAC-SHA256 소문자 hex private 서명과 API Key 허용 EIP 사전 검사
+- API Key 허용 거래쌍, 계정·잔고, 주문 생성·상세·취소·미체결·이력·계정 체결
+- UID별 주문 5회/초, 취소·읽기 50회/초, 계정 2회/초의 보수적 제한
+- 필수 사용자 주문 ID와 시장가 매수·매도 수량 의미 검증
+- 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
 
-private 인증·잔고·주문, Unified, protobuf WebSocket은 다음 단계 범위입니다. 세부 계약은 [MEXC Spot V3 문서](docs/exchanges/MEXC.md)를 참고합니다.
+Unified와 protobuf WebSocket은 다음 단계 범위입니다. 세부 계약은 [MEXC Spot V3 문서](docs/exchanges/MEXC.md)를 참고합니다.
 
 ## 공통 Spot API
 
