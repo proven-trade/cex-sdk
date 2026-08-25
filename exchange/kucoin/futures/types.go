@@ -1,4 +1,4 @@
-// Package futures는 KuCoin Classic Futures REST 어댑터를 제공한다.
+// Package futures는 KuCoin Futures REST와 Classic·Pro WebSocket 어댑터를 제공한다.
 package futures
 
 import (

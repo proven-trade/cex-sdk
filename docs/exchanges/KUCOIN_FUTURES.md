@@ -1,6 +1,6 @@
-# KuCoin Classic Futures REST·WebSocket 어댑터
+# KuCoin Futures REST·WebSocket 어댑터
 
-구현 기준은 KuCoin Classic Futures REST·WebSocket API와 REST 기본 주소 `https://api-futures.kucoin.com`입니다. Go 패키지는 `exchange/kucoin/futures`이며, Spot용 `exchange/kucoin`과 독립된 native API를 제공합니다.
+REST·private stream과 기존 raw public stream은 KuCoin Classic Futures API 및 REST 기본 주소 `https://api-futures.kucoin.com`을 기준으로 구현합니다. sequence가 검증된 로컬 오더북은 현행 Pro Futures `obu.FUTURES` API와 `wss://x-push-futures.kucoin.com`을 사용합니다. Go 패키지는 `exchange/kucoin/futures`이며, Spot용 `exchange/kucoin`과 독립된 native API를 제공합니다.
 
 ## 전제조건
 
@@ -83,11 +83,11 @@ VIP 0 기준 기본 로컬 quota는 각 30초 구간의 Public 2,000 weight와 F
 
 Public 풀은 IP 기준이므로 요청별 EIP가 각각 독립된 bucket을 사용합니다. Futures private 풀은 UID 기준이므로 EIP를 바꿔도 quota가 늘어나지 않습니다. 다중 EIP는 public 처리량 분산과 API Key IP 허용 목록·장애 격리를 위한 기능이며 private 제한 우회 용도가 아닙니다.
 
-public token 발급은 Public pool에서 10 weight, private token 발급은 Futures pool에서 10 weight를 사용합니다. WebSocket 재연결마다 새 token을 발급하므로 연결 장애가 반복될 때 REST 요청 제한도 함께 소비됩니다.
+Classic public token 발급은 Public pool에서 10 weight, private token 발급은 Futures pool에서 10 weight를 사용합니다. Classic WebSocket 재연결마다 새 token을 발급하므로 연결 장애가 반복될 때 REST 요청 제한도 함께 소비됩니다. Pro public 로컬 오더북 연결은 REST token을 사용하지 않습니다.
 
 ## WebSocket
 
-`StreamClient`는 연결 전에 Futures REST token을 발급하고 KuCoin이 반환한 `instanceServers` 중 사용 가능한 WebSocket endpoint를 선택합니다. production에서는 `wss`만 허용하며 `AllowInsecureWebSocket`은 로컬 테스트에서만 사용해야 합니다.
+Classic `PublicStream`·`PrivateStream`은 연결 전에 Futures REST token을 발급하고 KuCoin이 반환한 `instanceServers` 중 사용 가능한 WebSocket endpoint를 선택합니다. production에서는 `wss`만 허용하며 `AllowInsecureWebSocket`은 로컬 테스트에서만 사용해야 합니다.
 
 | 구분 | `StreamChannel` | KuCoin topic |
 |---|---|---|
@@ -142,7 +142,50 @@ token REST 요청과 WebSocket handshake는 모두 세션에서 선택한 같은
 
 기본 heartbeat는 15초마다 `{type:"ping"}`을 보내고 9초 안에 같은 ID의 `{type:"pong"}`을 기다립니다. 이 값은 token 응답의 `pingInterval`보다 짧고 `pingTimeout`보다 길지 않아야 합니다. 서버가 더 엄격한 값을 반환하면 연결을 시작하지 않고 설정 오류를 반환합니다.
 
-`StreamChannelLevel2`는 단일 `sequence`가 포함된 원본 증분 feed입니다. SDK가 로컬 호가장을 자동으로 조립하지는 않습니다. 먼저 이벤트를 임시 저장한 다음 별도 전체 호가 REST snapshot을 기준으로 연속 sequence만 적용해야 합니다. sequence 공백이나 재연결이 발생하면 기존 캐시를 버리고 snapshot부터 다시 조정해야 합니다. 5·50단계 snapshot channel은 전체 호가 복구용이 아닙니다.
+Classic `StreamChannelLevel2`는 단일 `sequence`가 포함된 원본 증분 feed입니다. SDK가 이 Classic feed로 로컬 호가장을 자동 조립하지는 않습니다. Classic 증분 호가 API는 2026-07-15 폐기 대상으로 공지되었으므로 신규 로컬 오더북은 다음 Pro API를 사용해야 합니다. 기존 Classic 채널은 raw stream 호환을 위해 유지합니다.
+
+## Pro 로컬 오더북과 같은 EIP 복구
+
+`ProOrderBookStream`은 REST token 없이 현행 Pro public endpoint에 직접 연결하고 `obu.FUTURES`, `increment@10ms`를 구독합니다. 서버가 보내는 최초 snapshot으로 상위 500단계 장부를 만들고 이후 delta의 절대 수량을 적용합니다. 수량 `0`은 해당 가격을 삭제합니다.
+
+```go
+streamClient, err := futures.NewStreamClient(futures.StreamClientConfig{
+	Connector:            connector,
+	RESTClient:           client,
+	DefaultEgressRouteID: "seoul-a",
+})
+if err != nil {
+	return err
+}
+
+orderBookStream, err := streamClient.ProOrderBookStream(
+	"XBTUSDTM",
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+
+book, err := futures.NewLocalOrderBook(futures.LocalOrderBookConfig{
+	Symbol:        "XBTUSDTM",
+	EgressRouteID: "seoul-b",
+	ViewDepth:     20,
+})
+if err != nil {
+	return err
+}
+
+return book.Run(ctx, orderBookStream, func(_ context.Context, view futures.LocalOrderBookView) error {
+	consume(view)
+	return nil
+})
+```
+
+snapshot은 `O == C`여야 합니다. 현재 마지막 sequence가 `lastC`일 때 `C <= lastC`인 오래된 delta는 무시하고, `O <= lastC+1`이면서 `C > lastC`인 delta만 적용합니다. `O > lastC+1`이면 gap으로 판정하여 기존 장부를 버리고 같은 EIP route로 즉시 재연결한 뒤 새 snapshot부터 복구합니다. 재연결 직후 snapshot보다 delta가 먼저 와도 불완전한 장부를 공개하지 않고 다시 연결합니다.
+
+내부 장부는 매수·매도 각각 최우선 500단계로 제한합니다. `ViewDepth`는 1~500이며 기본값은 20입니다. `Generation`은 WebSocket 연결 세대, `SynchronizationID`는 받아들인 snapshot 세대, `GapCount`는 감지한 gap 누계를 나타냅니다. stream과 로컬 오더북의 symbol·EIP route가 다르면 네트워크 연결 전에 거절합니다.
+
+Pro 재연결은 최초 선택한 route를 바꾸지 않으며 Classic token REST 호출을 발생시키지 않습니다. `StreamClientConfig.ProPublicWebSocketURL`은 기본적으로 공식 production endpoint를 사용하고 테스트용 `ws` 주소는 `AllowInsecureWebSocket`을 명시한 경우에만 허용합니다.
 
 token과 `WebSocketToken.Raw`에는 짧은 수명의 접속 자격이 포함됩니다. 로그, 메트릭 label, 오류 문자열에 저장하지 않아야 합니다. public feed도 재연결 구간에는 이벤트 유실이 가능하며 private 주문·잔고·포지션은 연결 복구 뒤 REST 조회로 최종 상태를 재조정해야 합니다.
 
@@ -175,6 +218,7 @@ KuCoin은 HTTP 200에서도 `code`가 `200000`이 아닌 논리 오류를 반환
 - [KuCoin Futures Private WebSocket Token](https://www.kucoin.com/docs-new/websocket-api/base-info/get-private-token-futures)
 - [KuCoin Futures Ticker V2](https://www.kucoin.com/docs-new/3470080w0)
 - [KuCoin Futures Incremental Order Book](https://www.kucoin.com/docs-new/3470164w0)
+- [KuCoin Pro Futures Increment Best 500](https://www.kucoin.com/docs-new/3470221w0)
 - [KuCoin Futures Klines](https://www.kucoin.com/docs-new/3470086w0)
 - [KuCoin Futures Orders](https://www.kucoin.com/docs-new/3470090w0)
 - [KuCoin Futures Balance](https://www.kucoin.com/docs-new/3470092w0)

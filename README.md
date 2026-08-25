@@ -21,7 +21,7 @@
 - [Coinone Spot REST·WebSocket](docs/exchanges/COINONE.md)
 - [Korbit Spot REST·WebSocket](docs/exchanges/KORBIT.md)
 - [KuCoin Spot REST·WebSocket](docs/exchanges/KUCOIN.md)
-- [KuCoin Classic Futures REST·WebSocket](docs/exchanges/KUCOIN_FUTURES.md)
+- [KuCoin Futures REST·WebSocket](docs/exchanges/KUCOIN_FUTURES.md)
 - [Gate.io API v4 Spot REST·WebSocket](docs/exchanges/GATEIO.md)
 - [Gate.io API v4 Futures REST·WebSocket](docs/exchanges/GATEIO_FUTURES.md)
 
@@ -72,7 +72,7 @@
 | KuCoin Classic Spot REST | 상품 규칙, 공개 시세, 계정, HF 주문 생성·조회·취소·미체결 목록 구현됨 |
 | KuCoin Spot WebSocket | Classic public 시세·체결과 private 주문·잔고 stream, Pro Increment Best 500 로컬 오더북 자동 갭 복구 구현됨 |
 | KuCoin Classic Futures REST | 계약 규칙, 공개 시세, 계정·포지션, 주문·체결 구현됨 |
-| KuCoin Classic Futures WebSocket | public 시세·호가·캔들·체결, private 주문·잔고·포지션 stream 구현됨 |
+| KuCoin Futures WebSocket | Classic public 시세·호가·캔들·체결과 private 주문·잔고·포지션 stream, Pro Increment Best 500 로컬 오더북 자동 갭 복구 구현됨 |
 | Gate.io API v4 Spot REST | 거래쌍 규칙, 공개 시세, 계정, 주문 생성·조회·취소·미체결·체결 구현됨 |
 | Gate.io API v4 Spot WebSocket | public 시세·호가·체결, private 주문·체결·잔고 stream·V2 로컬 오더북 자동 갭 복구 구현됨 |
 | Gate.io 공통 Spot API | 공통 마켓·시세·잔고·주문 계약과 적합성 테스트 구현됨 |
@@ -410,7 +410,7 @@ defer session.Close()
 
 세부 인증·주문·요청 제한·연결 계약은 [KuCoin Spot 문서](docs/exchanges/KUCOIN.md)를 참고합니다.
 
-## KuCoin Classic Futures REST·WebSocket 1차 범위
+## KuCoin Futures REST·WebSocket 1차 범위
 
 - 전체·단일 계약 규칙, 현재가, 20·100단계 호가, 최근 체결, 캔들
 - 결제 통화별 계정 요약과 열린 포지션
@@ -426,8 +426,9 @@ defer session.Close()
 - 실행 중 구독 변경, 실패 응답 반영, 재연결 구독 복구
 - 연결별 EIP 고정과 재연결마다 같은 route를 통한 token 재발급
 - KuCoin JSON ping/pong heartbeat와 서버가 발급한 연결 제한 검증
+- 현행 Pro `obu.FUTURES` Increment Best 500 snapshot/delta 로컬 오더북과 sequence gap 시 같은 EIP 자동 재연결
 
-세부 인증·주문·요청 제한 계약은 [KuCoin Classic Futures 문서](docs/exchanges/KUCOIN_FUTURES.md)를 참고합니다.
+세부 인증·주문·요청 제한·연결 계약은 [KuCoin Futures 문서](docs/exchanges/KUCOIN_FUTURES.md)를 참고합니다.
 
 ## Gate.io API v4 Spot REST·WebSocket·공통 API 범위
 
