@@ -1,6 +1,6 @@
-# MEXC Spot V3 REST·Protobuf WebSocket·공통 어댑터
+# MEXC Spot V3 REST·Protobuf WebSocket·로컬 오더북·공통 어댑터
 
-Go 패키지는 `exchange/mexc`이며 현행 Spot V3 REST 기본 주소 `https://api.mexc.com`과 WebSocket 주소 `wss://wbs-api.mexc.com/ws`를 사용합니다. 공개 시세, signed 계정·주문 REST, public/private Protobuf WebSocket과 `unified.SpotClient` 공통 API를 구현했습니다.
+Go 패키지는 `exchange/mexc`이며 현행 Spot V3 REST 기본 주소 `https://api.mexc.com`과 WebSocket 주소 `wss://wbs-api.mexc.com/ws`를 사용합니다. 공개 시세, signed 계정·주문 REST, public/private Protobuf WebSocket, version 연속성 기반 로컬 오더북과 `unified.SpotClient` 공통 API를 구현했습니다.
 
 MEXC는 별도 sandbox를 제공하지 않으므로 자동 테스트는 로컬 mock 거래소만 사용합니다. 실제 API 호출은 읽기 요청도 production 환경으로 향한다는 점을 운영 절차에서 구분해야 합니다.
 
@@ -152,7 +152,56 @@ SDK는 기본 30분마다 같은 EIP로 `PUT /api/v3/userDataStream?listenKey=..
 
 listenKey 생성은 응답 유실 시 서버에서 키가 만들어졌는지 알 수 없는 mutation입니다. 전송 오류·5xx·성공 응답 파싱 실패는 `UNKNOWN_EXECUTION_STATE`로 반환하고 자동 재시도하지 않아 키를 무제한 생성하지 않습니다. MEXC의 24시간 연결 상한은 자동 재연결로 처리하며 실제 계정 운영 smoke는 아직 대기 상태입니다.
 
-증분 호가의 `FromVersion`·`ToVersion`과 REST `lastUpdateId`를 결합한 로컬 오더북·version 갭 복구는 다음 별도 단계에서 추가합니다.
+## 로컬 오더북
+
+`NewLocalOrderBook`은 먼저 WebSocket diff depth를 수신해 제한된 개수만큼 버퍼링하고, 같은 `EgressRouteID`로 `GET /api/v3/depth` snapshot을 요청합니다. 기본 snapshot은 공식 최대치인 5000단계이며 기본 공개 view는 상위 20단계입니다. `SnapshotLimit`, `MaxBufferedEvents`, `ViewDepth`, snapshot timeout과 재시도 간격은 설정으로 조정할 수 있습니다.
+
+```go
+depth, err := mexc.DiffDepthStream("BTCUSDT", mexc.StreamUpdate100Millis)
+if err != nil {
+	return err
+}
+
+public, err := streamClient.PublicStream(
+	mexc.StreamRequest{Subscriptions: []mexc.StreamSubscription{depth}},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+
+book, err := mexc.NewLocalOrderBook(mexc.LocalOrderBookConfig{
+	RESTClient:      client,
+	Symbol:          "BTCUSDT",
+	EgressRouteID:   "seoul-b",
+	UpdateInterval:  mexc.StreamUpdate100Millis,
+	SnapshotLimit:   5000,
+	ViewDepth:       20,
+})
+if err != nil {
+	return err
+}
+
+err = book.Run(ctx, public, func(_ context.Context, view mexc.LocalOrderBookView) error {
+	consumeBook(view)
+	return nil
+})
+```
+
+동기화 순서는 공식 MEXC 절차를 따릅니다.
+
+1. diff depth를 먼저 연결하고 이벤트를 버퍼링합니다.
+2. 같은 EIP에서 REST snapshot을 조회합니다.
+3. `toVersion < lastUpdateId`인 오래된 이벤트를 버립니다.
+4. 첫 관련 이벤트가 `fromVersion <= lastUpdateId <= toVersion`을 만족해야 snapshot과 연결합니다.
+5. 이후 모든 이벤트는 `fromVersion == 이전 toVersion + 1`이어야 합니다.
+6. 중복·역행·전방 갭이나 WebSocket 재연결을 발견하면 현재 장부를 버리고 같은 route의 새 snapshot으로 재동기화합니다.
+
+호가 수량은 delta가 아니라 해당 가격의 절대 수량이며 0이면 가격 단계를 삭제합니다. 가격은 `big.Rat`로 비교해 `100`과 `100.0`을 같은 단계로 취급하지만 공개 view에는 마지막으로 받은 문자열 정밀도를 보존합니다. 잘못된 decimal, 중복 canonical 가격, 잘못된 version·전송 시각은 장부를 공개하지 않고 validation 오류로 종료합니다. 동기화 버퍼가 `MaxBufferedEvents`를 넘으면 `ErrDepthBufferOverflow`를 반환합니다.
+
+REST snapshot 단계 수에는 상한이 있으므로 최초 snapshot 밖에서 수량이 바뀌지 않은 가격은 증분 stream에 나타나지 않을 수 있습니다. 따라서 제한된 snapshot으로 만든 로컬 장부는 실제 전체 장부와 일부 다를 수 있으며, 운영에서는 기본 5000단계를 유지하고 필요한 상위 view만 잘라 쓰는 구성을 권장합니다.
+
+`Run`은 REST와 WebSocket route가 다르거나 `UpdateInterval`까지 정확히 일치하는 diff depth 구독이 없으면 네트워크를 사용하기 전에 거절합니다. `SynchronizationID`는 성공한 동기화마다 증가하고 `GapCount`는 감지한 version 불연속 수를 보존합니다. `LastVersion`, wrapper 생성·전송 시각과 마지막 주문 생성 시각은 각 view에 함께 전달되며, 거래소가 선택 시각을 생략하면 해당 값은 0입니다.
 
 ## 공통 Spot API
 
@@ -227,7 +276,7 @@ EIP를 바꿔도 UID bucket은 공유됩니다. 다중 EIP 기능은 정상적�
 
 `DefaultSymbols`와 `SelfSymbols`는 공식 문서 예시의 성공 code `200`과 production에서 사용하는 `0`을 모두 허용합니다. 다른 nonzero code, HTTP 오류, JSON 파싱 실패는 `trade.APIError`로 변환합니다. 인증·권한·잔고·주문 없음·요청 제한·거래소 장애 코드를 공통 category로 분류하고 MEXC 원본 code·message와 요청 ID를 함께 보존합니다.
 
-자동 테스트는 HMAC 서명과 실제 query 일치, 요청별 route 선택, route·권한 사전 검사, Secret 덮어쓰기, IP·UID 요청 제한, 주문 검증, 원본 JSON 보존, 오류 분류와 mutation 불명확 상태를 검증합니다. WebSocket 테스트는 공식 Protobuf field 번호별 공개·private 이벤트 해석, 잘못된 wire type·UTF-8 거절, JSON 제어 응답, listenKey 수명주기, JSON PING, 구독 rollback, 동일 EIP 재연결과 race 안전성을 검증합니다. 공통 적합성 테스트는 마켓·시세·잔고·주문 변환, 3분봉 합성, 전체 미체결 5개 묶음과 EIP 전달을 검증합니다. 실제 MEXC 계정과 지정 EIP를 이용한 읽기·주문 smoke는 아직 대기 상태입니다.
+자동 테스트는 HMAC 서명과 실제 query 일치, 요청별 route 선택, route·권한 사전 검사, Secret 덮어쓰기, IP·UID 요청 제한, 주문 검증, 원본 JSON 보존, 오류 분류와 mutation 불명확 상태를 검증합니다. WebSocket 테스트는 공식 Protobuf field 번호별 공개·private 이벤트 해석, 잘못된 wire type·UTF-8 거절, JSON 제어 응답, listenKey 수명주기, JSON PING, 구독 rollback, 동일 EIP 재연결과 race 안전성을 검증합니다. 로컬 오더북 테스트는 공식 snapshot bridge 경계, 엄격한 다음 version, 중복·역행·전방 갭, snapshot 실패·불일치 재시도, 재연결 세대, 버퍼 상한과 동일 EIP REST·WebSocket 통합을 검증합니다. 공통 적합성 테스트는 마켓·시세·잔고·주문 변환, 3분봉 합성, 전체 미체결 5개 묶음과 EIP 전달을 검증합니다. 실제 MEXC 계정과 지정 EIP를 이용한 읽기·주문 smoke는 아직 대기 상태입니다.
 
 ## 공식 기준
 

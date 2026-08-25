@@ -599,7 +599,7 @@ const (
 - MEXC Spot private REST·주문 안전 계약 구현 완료
 - MEXC Spot 공통 API와 적합성 테스트 구현 완료
 - MEXC Spot protobuf public/private WebSocket 구현 완료
-- MEXC Spot REST snapshot·증분 version 로컬 오더북 구현
+- MEXC Spot REST snapshot·증분 version 로컬 오더북 구현 완료
 - 운영 수요·거래량·API 안정성을 기준으로 다음 거래소 확장
 
 ## 20. 확정 사항과 배포 전 결정 사항

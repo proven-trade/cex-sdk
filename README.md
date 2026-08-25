@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot·USDⓈ-M Futures REST·WebSocket, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Spot·Futures REST·WebSocket, Gate.io Spot REST·WebSocket·공통 API와 Futures REST·WebSocket, MEXC Spot REST·Protobuf WebSocket·공통 API가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot·USDⓈ-M Futures REST·WebSocket, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Spot·Futures REST·WebSocket, Gate.io Spot REST·WebSocket·공통 API와 Futures REST·WebSocket, MEXC Spot REST·Protobuf WebSocket·로컬 오더북·공통 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -79,7 +79,7 @@
 | Gate.io 공통 Spot API | 공통 마켓·시세·잔고·주문 계약과 적합성 테스트 구현됨 |
 | Gate.io API v4 Futures REST | 계약 규칙, 공개 시세, 계정·포지션, 주문·체결 구현됨 |
 | Gate.io API v4 Futures WebSocket | public 시세·호가·캔들·체결, private 주문·체결·잔고·포지션 stream·V2 로컬 오더북 자동 갭 복구 구현됨 |
-| MEXC Spot V3 REST·WebSocket·공통 API | 공개 시세, API Key 허용 거래쌍, 계정·주문 REST, public/private Protobuf stream, 공통 Spot 계약과 요청별 EIP 구현됨 |
+| MEXC Spot V3 REST·WebSocket·공통 API | 공개 시세, API Key 허용 거래쌍, 계정·주문 REST, public/private Protobuf stream, version 로컬 오더북, 공통 Spot 계약과 요청별 EIP 구현됨 |
 
 ## 요청별 EIP 선택
 
@@ -493,8 +493,9 @@ defer session.Close()
 - private 잔고·체결·주문 Protobuf WebSocket과 API Key 전용 listenKey REST 수명주기
 - 연결별 EIP 고정, JSON PING, 실행 중 구독 변경·실패 rollback과 재연결 구독 복구
 - listenKey 발급·30분 갱신·WebSocket 재연결을 동일 EIP route로 강제
+- REST 최대 5000단계 snapshot과 diff version 범위 결합, 정확한 연속성 검사와 동일 EIP 갭 복구
 
-로컬 오더북의 REST snapshot·증분 version 갭 복구는 다음 단계 범위입니다. 세부 계약은 [MEXC Spot V3 문서](docs/exchanges/MEXC.md)를 참고합니다.
+세부 계약은 [MEXC Spot V3 문서](docs/exchanges/MEXC.md)를 참고합니다.
 
 ## 공통 Spot API
 
