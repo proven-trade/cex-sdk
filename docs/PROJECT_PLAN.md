@@ -597,7 +597,7 @@ const (
 
 - MEXC Spot V3 공개 REST와 요청별 EIP·endpoint별 요청 제한·오류 정규화 구현 완료
 - MEXC Spot private REST·주문 안전 계약 구현 완료
-- MEXC Spot 공통 API와 적합성 테스트 구현
+- MEXC Spot 공통 API와 적합성 테스트 구현 완료
 - MEXC Spot protobuf public/private WebSocket과 로컬 오더북 구현
 - 운영 수요·거래량·API 안정성을 기준으로 다음 거래소 확장
 

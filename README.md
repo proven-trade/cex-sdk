@@ -2,7 +2,7 @@
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 요청별로 지정한 AWS Elastic IP를 통해 통신할 수 있게 하는 SDK 프로젝트입니다.
 
-현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot·USDⓈ-M Futures REST·WebSocket, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Spot·Futures REST·WebSocket, Gate.io Spot REST·WebSocket·공통 API와 Futures REST·WebSocket, MEXC Spot 공개·private REST가 구현되어 있습니다.
+현재 Go 코어, REST·WebSocket 다중 EIP 전송 계층, Binance Spot·USDⓈ-M Futures REST·WebSocket, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Spot·Futures REST·WebSocket, Gate.io Spot REST·WebSocket·공통 API와 Futures REST·WebSocket, MEXC Spot 공개·private REST·공통 API가 구현되어 있습니다.
 
 ## 문서
 
@@ -47,7 +47,7 @@
 | Binance USDⓈ-M Futures WebSocket | 분리 public·market 시세, listenKey private stream·로컬 오더북 자동 `pu` 갭 복구 구현됨 |
 | Bitget v3 UTA | Spot·USDT-M 공개 시세, 자산, 포지션, 주문 구현됨 |
 | Upbit Spot REST | 공개 시세, 잔고, 주문 생성·조회·취소·목록 구현됨 |
-| 공통 Spot API·적합성 테스트 | Binance·Bitget·Upbit·Bybit·OKX·Coinbase·Kraken·Bithumb·Coinone·Korbit·KuCoin·Gate.io 구현됨 |
+| 공통 Spot API·적합성 테스트 | Binance·Bitget·Upbit·Bybit·OKX·Coinbase·Kraken·Bithumb·Coinone·Korbit·KuCoin·Gate.io·MEXC 구현됨 |
 | Spot live smoke CLI | 12개 Spot 어댑터의 지정 EIP·공개 조회·선택적 잔고 JSON 증적 구현됨 |
 | Spot 주문 smoke 안전 계약 | post-only·금액 상한·EIP/호가 선검사·취소 정리 구현됨 |
 | 공통 WebSocket 연결 계층 | route 고정, 재연결, 재구독 훅, heartbeat 구현됨 |
@@ -79,7 +79,7 @@
 | Gate.io 공통 Spot API | 공통 마켓·시세·잔고·주문 계약과 적합성 테스트 구현됨 |
 | Gate.io API v4 Futures REST | 계약 규칙, 공개 시세, 계정·포지션, 주문·체결 구현됨 |
 | Gate.io API v4 Futures WebSocket | public 시세·호가·캔들·체결, private 주문·체결·잔고·포지션 stream·V2 로컬 오더북 자동 갭 복구 구현됨 |
-| MEXC Spot V3 REST | 공개 시세, API Key 허용 거래쌍, 계정·잔고, 주문 생성·조회·취소·목록·체결과 요청별 EIP 구현됨 |
+| MEXC Spot V3 REST·공통 API | 공개 시세, API Key 허용 거래쌍, 계정·잔고, 주문 생성·조회·취소·목록·체결, 공통 Spot 계약과 요청별 EIP 구현됨 |
 
 ## 요청별 EIP 선택
 
@@ -487,12 +487,14 @@ defer session.Close()
 - UID별 주문 5회/초, 취소·읽기 50회/초, 계정 2회/초의 보수적 제한
 - 필수 사용자 주문 ID와 시장가 매수·매도 수량 의미 검증
 - 주문 mutation의 불명확한 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
+- 공통 마켓·시세·잔고·주문 계약, 적합성 테스트와 요청별 EIP 전달
+- 공통 3분봉 합성, 최대 5개 허용 심볼 묶음의 전체 미체결 조회
 
-Unified와 protobuf WebSocket은 다음 단계 범위입니다. 세부 계약은 [MEXC Spot V3 문서](docs/exchanges/MEXC.md)를 참고합니다.
+Protobuf WebSocket은 다음 단계 범위입니다. 세부 계약은 [MEXC Spot V3 문서](docs/exchanges/MEXC.md)를 참고합니다.
 
 ## 공통 Spot API
 
-`unified.SpotClient`는 Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io에 같은 메서드 계약을 제공합니다. 마켓은 거래소 문자열 대신 `Base`와 `Quote`로 지정하며, 요청별 EIP 옵션은 native API와 동일하게 전달합니다.
+`unified.SpotClient`는 Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io, MEXC에 같은 메서드 계약을 제공합니다. 마켓은 거래소 문자열 대신 `Base`와 `Quote`로 지정하며, 요청별 EIP 옵션은 native API와 동일하게 전달합니다.
 
 ```go
 spot, err := upbit.NewUnifiedSpot(client)

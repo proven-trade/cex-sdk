@@ -1,6 +1,6 @@
-# MEXC Spot V3 REST 어댑터
+# MEXC Spot V3 REST·공통 어댑터
 
-Go 패키지는 `exchange/mexc`이며 현행 Spot V3 기본 주소 `https://api.mexc.com`을 사용합니다. 공개 시세와 signed 계정·주문 REST를 구현했습니다. 공통 Spot API와 protobuf WebSocket은 후속 단계에서 추가합니다.
+Go 패키지는 `exchange/mexc`이며 현행 Spot V3 기본 주소 `https://api.mexc.com`을 사용합니다. 공개 시세, signed 계정·주문 REST와 `unified.SpotClient` 공통 API를 구현했습니다. Protobuf WebSocket은 후속 단계에서 추가합니다.
 
 MEXC는 별도 sandbox를 제공하지 않으므로 자동 테스트는 로컬 mock 거래소만 사용합니다. 실제 API 호출은 읽기 요청도 production 환경으로 향한다는 점을 운영 절차에서 구분해야 합니다.
 
@@ -57,7 +57,7 @@ if err != nil {
 | 주문 생성 | `PlaceOrder` | `POST /api/v3/order` | 10 |
 | 주문 상세 | `OrderInfo` | `GET /api/v3/order` | 10 |
 | 주문 취소 | `CancelOrder` | `DELETE /api/v3/order` | 10 |
-| 미체결 주문 | `OpenOrders` | `GET /api/v3/openOrders` | 10 |
+| 단일·최대 5개 미체결 주문 | `OpenOrders` | `GET /api/v3/openOrders` | 10 |
 | 전체 주문 이력 | `AllOrders` | `GET /api/v3/allOrders` | 10 |
 | 계정 체결 | `MyTrades` | `GET /api/v3/myTrades` | 10 |
 
@@ -66,6 +66,14 @@ if err != nil {
 `OrderBookRequest.Limit`은 생략하거나 1~5000, 체결·캔들 조회의 `Limit`은 생략하거나 1~1000입니다. 합산 체결의 `Start`와 `End`는 함께 지정해야 합니다. 캔들은 `1m`, `5m`, `15m`, `30m`, `60m`, `4h`, `1d`, `1W`, `1M`을 지원하고 시각은 Unix millisecond query로 변환합니다.
 
 Private 표의 weight는 endpoint 본문과 2025년 공식 제한표가 충돌하는 항목에서 더 보수적인 값인 10을 사용합니다. `AllOrders`는 최대 1000건과 7일 범위, `MyTrades`는 최대 100건과 31일 범위를 로컬에서 검증합니다.
+
+## 공통 Spot API
+
+`NewUnifiedSpot`은 마켓, 최근가, 호가, 공개 체결, 캔들, 잔고, 주문 생성·조회·취소·미체결 목록을 `unified.SpotClient`로 제공합니다. 공통 `BTC/USDT`는 MEXC `BTCUSDT`로 변환하며 모든 요청 옵션을 native 호출까지 전달합니다. 구분자 없는 응답 심볼은 임의로 분해하지 않고 `ExchangeInfo`의 base/quote와 원문 심볼이 정확히 일치하는지 검증합니다.
+
+공통 3분봉은 같은 EIP에서 1분봉을 요청한 뒤 epoch 기준 3개씩 합성하며 OHLC와 기준 통화 거래량의 decimal 문자열 정밀도를 유지합니다. 지정가 GTC·IOC·FOK·post-only는 각각 `LIMIT`·`IMMEDIATE_OR_CANCEL`·`FILL_OR_KILL`·`LIMIT_MAKER`로 변환합니다. 공통 주문에서 `ClientOrderID`를 생략하면 `proven-`과 암호학적 난수 hex로 구성된 31자 ID를 생성합니다.
+
+전체 미체결은 `SelfSymbols`의 API Key 허용 거래쌍을 `ExchangeInfo`와 대조한 뒤 최대 5개씩 묶어 조회합니다. 중복·알 수 없는 심볼이나 요청 묶음 밖의 주문이 응답되면 결과를 반환하지 않습니다. 허용 거래쌍이 많으면 여러 private 요청과 UID quota를 소비하므로 호출자가 `AllMarkets: true`를 명시한 경우에만 실행됩니다.
 
 ## 인증과 서명
 
@@ -132,7 +140,7 @@ EIP를 바꿔도 UID bucket은 공유됩니다. 다중 EIP 기능은 정상적�
 
 `DefaultSymbols`와 `SelfSymbols`는 공식 문서 예시의 성공 code `200`과 production에서 사용하는 `0`을 모두 허용합니다. 다른 nonzero code, HTTP 오류, JSON 파싱 실패는 `trade.APIError`로 변환합니다. 인증·권한·잔고·주문 없음·요청 제한·거래소 장애 코드를 공통 category로 분류하고 MEXC 원본 code·message와 요청 ID를 함께 보존합니다.
 
-자동 테스트는 HMAC 서명과 실제 query 일치, 요청별 route 선택, route·권한 사전 검사, Secret 덮어쓰기, IP·UID 요청 제한, 주문 검증, 원본 JSON 보존, 오류 분류와 mutation 불명확 상태를 검증합니다. 실제 MEXC 계정과 지정 EIP를 이용한 읽기·주문 smoke는 아직 대기 상태입니다.
+자동 테스트는 HMAC 서명과 실제 query 일치, 요청별 route 선택, route·권한 사전 검사, Secret 덮어쓰기, IP·UID 요청 제한, 주문 검증, 원본 JSON 보존, 오류 분류와 mutation 불명확 상태를 검증합니다. 공통 적합성 테스트는 마켓·시세·잔고·주문 변환, 3분봉 합성, 전체 미체결 5개 묶음과 EIP 전달을 검증합니다. 실제 MEXC 계정과 지정 EIP를 이용한 읽기·주문 smoke는 아직 대기 상태입니다.
 
 ## 공식 기준
 

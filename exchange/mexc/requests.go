@@ -95,8 +95,11 @@ type CancelOrderRequest struct {
 	ClientOrderID string
 }
 
-// OpenOrdersRequest는 단일 거래쌍의 현재 미체결 주문 조회 조건이다.
-type OpenOrdersRequest struct{ Symbol string }
+// OpenOrdersRequest는 단일 또는 최대 다섯 거래쌍의 현재 미체결 주문 조회 조건이다.
+type OpenOrdersRequest struct {
+	Symbol  string
+	Symbols []string
+}
 
 // AllOrdersRequest는 최대 7일 범위의 전체 주문 이력 조회 조건이다.
 type AllOrdersRequest struct {
@@ -325,10 +328,37 @@ func (request CancelOrderRequest) values() url.Values {
 	return values
 }
 
-func (request OpenOrdersRequest) validate() error { return validateSymbol(request.Symbol) }
+func (request OpenOrdersRequest) validate() error {
+	if request.Symbol != "" && len(request.Symbols) > 0 {
+		return validationError("open orders accepts symbol or symbols, not both")
+	}
+	if request.Symbol != "" {
+		return validateSymbol(request.Symbol)
+	}
+	if len(request.Symbols) == 0 || len(request.Symbols) > 5 {
+		return validationError("open orders symbols must contain between 1 and 5 items")
+	}
+	seen := make(map[string]struct{}, len(request.Symbols))
+	for _, symbol := range request.Symbols {
+		if err := validateSymbol(symbol); err != nil {
+			return err
+		}
+		if _, exists := seen[symbol]; exists {
+			return validationError("open orders symbols contain a duplicate")
+		}
+		seen[symbol] = struct{}{}
+	}
+	return nil
+}
 
 func (request OpenOrdersRequest) values() url.Values {
-	return url.Values{"symbol": {request.Symbol}}
+	values := make(url.Values)
+	if request.Symbol != "" {
+		values.Set("symbol", request.Symbol)
+	} else {
+		values.Set("symbol", strings.Join(request.Symbols, ","))
+	}
+	return values
 }
 
 func (request AllOrdersRequest) validate() error {
