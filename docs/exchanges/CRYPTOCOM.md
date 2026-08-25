@@ -13,19 +13,50 @@
 
 공식 2026년 변경 로그가 유지되는 현행 Exchange v1만 대상으로 한다. 구형 기본 `book.{instrument_name}` 구독과 100ms full snapshot 구독은 이미 폐기됐으므로 구현하지 않는다. Margin·Derivatives와 고급 조건부 주문은 native 타입이 안정된 뒤 별도 상품 단계로 확장한다.
 
+현재 `exchange/cryptocom`의 공개 REST와 mock 자동 테스트가 구현되어 있다. private REST, 공통 Spot API, WebSocket과 로컬 오더북은 아래 순서대로 진행 중이며 지원 매트릭스의 REST 상태는 private 범위까지 끝난 뒤 구현으로 전환한다.
+
 ## 구현 범위
 
 ### 공개 REST
 
-- `public/get-instruments`의 Spot 상품, 거래 가능 상태, 가격·수량 tick 규칙
-- `public/get-ticker`의 단일·전체 ticker
-- `public/get-book`의 최대 50단계 호가 snapshot
-- `public/get-trades`의 최근 체결
-- `public/get-candlestick`의 공식 timeframe 캔들
-- 요청별 `egressRouteId`와 route별 독립 HTTP 연결 풀
-- public 메서드별 IP 기준 100회/초 제한과 HTTP 429·`42901` 보정
+- `public/get-instruments`의 상품·거래 가능 상태·가격·수량 tick 규칙 구현 완료
+- `public/get-tickers`의 단일·전체 ticker 구현 완료
+- `public/get-book`의 최대 50단계 호가 snapshot 구현 완료
+- `public/get-trades`의 최근 체결 구현 완료
+- `public/get-candlestick`의 공식 timeframe 캔들 구현 완료
+- 요청별 `egressRouteId`와 route별 독립 HTTP 연결 풀 구현 완료
+- public 메서드별 IP 기준 100회/초 제한과 HTTP 429·`42901` 보정 구현 완료
 
 공식 공통 규격은 숫자 필드를 문자열로 보내도록 요구한다. 가격·수량·금액은 decimal 원문을 보존하고, 식별자·millisecond·nanosecond 시각은 JSON 문자열과 숫자를 모두 안전하게 해석하되 범위를 넘는 값을 `float64`로 변환하지 않는다.
+
+| 영역 | 메서드 | API |
+|---|---|---|
+| 상품 규칙 | `Instruments` | `GET public/get-instruments` |
+| 단일 ticker | `Ticker` | `GET public/get-tickers?instrument_name=...` |
+| 전체 ticker | `Tickers` | `GET public/get-tickers` |
+| 호가 snapshot | `OrderBook` | `GET public/get-book` |
+| 최근 체결 | `RecentTrades` | `GET public/get-trades` |
+| 캔들 | `Candles` | `GET public/get-candlestick` |
+
+기본 endpoint는 `DefaultBaseURL`, UAT endpoint는 `DefaultUATBaseURL`로 제공한다. `Ticker`·호가·체결·캔들은 대문자 underscore 형식의 Spot `instrument_name`을 입력받고, 호가 depth는 1~50만 허용한다. 캔들은 공식 `1m`·`5m`·`15m`·`30m`·`1h`·`2h`·`4h`·`12h`·`1D`·`7D`·`14D`·`1M`을 상수로 제공한다.
+
+```go
+client, err := cryptocom.New(cryptocom.Config{
+	Executor:             executor,
+	DefaultEgressRouteID: "seoul-a",
+})
+if err != nil {
+	return err
+}
+
+book, err := client.OrderBook(
+	ctx,
+	cryptocom.OrderBookRequest{InstrumentName: "BTC_USDT", Depth: 50},
+	trade.WithEgressRoute("seoul-b"),
+)
+```
+
+공개 제한은 `(route, method)`별 기본 100회/초 bucket으로 분리하고 더 낮은 값만 설정할 수 있다. HTTP 429의 `Retry-After`는 선택한 route와 메서드 bucket을 차단한다. `40001`, `40101`, `40801`, `42901`, `50001`은 공통 validation·authentication·exchange unavailable·rate limited 오류로 변환하고, 오류의 `original`은 요청 원문이나 민감 값이 포함될 수 있으므로 보존하지 않는다.
 
 ### private REST
 

@@ -616,7 +616,7 @@ const (
 
 ### Phase 8 — P4 Crypto.com Exchange v1 Spot 확장
 
-- 현행 Exchange v1 공개 REST와 요청별 EIP·메서드별 IP 요청 제한·오류 정규화
+- 현행 Exchange v1 공개 REST와 요청별 EIP·메서드별 IP 요청 제한·오류 정규화 구현 완료
 - HMAC SHA-256 재귀 params 정규화, 잔고와 주문 생성·조회·취소·이력
 - 공통 Spot API와 적합성 테스트
 - 분리 market/user WebSocket, heartbeat, user 인증과 같은 EIP 재구독
