@@ -13,7 +13,7 @@
 
 공식 2026년 변경 로그가 유지되는 현행 Exchange v1만 대상으로 한다. 구형 기본 `book.{instrument_name}` 구독과 100ms full snapshot 구독은 이미 폐기됐으므로 구현하지 않는다. Margin·Derivatives와 고급 조건부 주문은 native 타입이 안정된 뒤 별도 상품 단계로 확장한다.
 
-현재 `exchange/cryptocom`의 공개·private REST, 공통 Spot API, public market·private user WebSocket과 mock 자동 테스트가 구현되어 있다. 로컬 오더북은 아래 순서대로 진행 중이며 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
+현재 `exchange/cryptocom`의 공개·private REST, 공통 Spot API, public market·private user WebSocket, 로컬 오더북과 mock 자동 테스트가 구현되어 있다. 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
 
 ## 구현 범위
 
@@ -161,7 +161,7 @@ private 본문의 `id`, `nonce`, 주문 ID, 시각, 개수와 decimal은 문자�
 
 `NewStreamClient`는 production market·user endpoint를 기본값으로 사용하고 UAT 상수도 별도로 제공한다. `PublicStream`·`PrivateStream` 생성 때 선택한 `egressRouteId`는 모든 재연결에서 유지된다. 구독 command의 ID·nonce·호가 갱신 간격은 문자열로 직렬화하며, ticker wildcard와 폐기된 기본 깊이 book은 거부한다.
 
-호가 구독은 `SNAPSHOT` 또는 `SNAPSHOT_AND_UPDATE`를 명시해야 한다. full snapshot은 현행 500ms만 허용하고, 증분형은 공식 10·100·500ms 값을 지원한다. 이 단계는 원본 snapshot·delta를 typed event로 전달하며 sequence를 결합한 로컬 장부는 다음 단계에서 제공한다.
+호가 구독은 `SNAPSHOT` 또는 `SNAPSHOT_AND_UPDATE`를 명시해야 한다. full snapshot은 현행 500ms만 허용하고, 증분형은 공식 10·100·500ms 값을 지원한다. 원본 snapshot·delta를 typed event로 전달하며 `LocalOrderBook`이 검증된 로컬 장부 view를 제공한다.
 
 private user 연결은 API Key whitelist route와 `read` 권한을 Secret 조회 전에 검사한다. Secret은 연결·재연결 인증 시점마다 Provider에서 조회하고 서명 직후 민감 byte slice를 덮어쓴다. 인증 성공 뒤 목표 구독을 복구하며 인증 실패는 자동 재연결하지 않는다. 주문 command를 WebSocket으로 보내는 기능은 첫 단계에서 제외하고 REST mutation과 user event 조합을 먼저 안정화한다.
 
@@ -193,9 +193,35 @@ private, err := streamClient.PrivateStream(
 
 ### 로컬 오더북
 
-현행 명시적 10·50단계 `SNAPSHOT_AND_UPDATE`를 사용한다. 최초 `book` full snapshot의 `u`를 기준으로 `book.update`의 `pu`가 직전 `u`와 같은지 검사하고, 수량 0은 해당 가격을 삭제한다. 서버가 큰 delta 대신 full snapshot을 보내면 기존 장부를 원자적으로 교체한다.
+현행 명시적 10·50단계 `SNAPSHOT_AND_UPDATE`를 사용하도록 구현 완료했다. 최초 `book` full snapshot의 `u`를 기준으로 `book.update`의 `pu`가 직전 `u`와 같은지 검사하고, 수량 0은 해당 가격을 삭제한다. 서버가 큰 delta 대신 full snapshot을 보내면 기존 장부를 원자적으로 교체한다.
 
 `pu` gap, update ID 역행, snapshot 이전 delta 또는 연결 세대 변경이 발생하면 불완전한 view를 공개하지 않고 같은 EIP route로 재구독해 새 full snapshot부터 복구한다. 공식 REST book에는 WebSocket `u`와 연결할 sequence가 없으므로 임의로 결합하지 않는다. 빈 delta heartbeat도 유효한 `u`·`pu` 연결로 처리한다.
+
+```go
+book, err := cryptocom.NewLocalOrderBook(cryptocom.LocalOrderBookConfig{
+	InstrumentName: "BTC_USDT",
+	Depth: cryptocom.StreamBookDepth10,
+	UpdateFrequency: cryptocom.StreamBookUpdate100Milliseconds,
+	EgressRouteID: "seoul-b",
+})
+if err != nil {
+	return err
+}
+
+public, err := streamClient.PublicStream(
+	cryptocom.StreamRequest{Subscriptions: []cryptocom.StreamSubscription{
+		book.Subscription(),
+	}},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+
+err = book.Run(ctx, public, func(_ context.Context, view cryptocom.LocalOrderBookView) error {
+	return consume(view)
+})
+```
 
 ## 구현 순서
 
@@ -204,7 +230,7 @@ private, err := streamClient.PrivateStream(
 3. 공통 Spot API와 적합성 테스트 구현 완료
 4. public market WebSocket과 heartbeat·동적 구독 구현 완료
 5. private user WebSocket 인증과 주문·체결·잔고 구독 구현 완료
-6. 10·50단계 로컬 오더북과 sequence gap 복구
+6. 10·50단계 로컬 오더북과 sequence gap 복구 구현 완료
 7. UAT·production read-only 및 명시적 소액 주문 smoke
 
 각 단계는 Go formatter, 생성물 검사, 일반·race 테스트, vet, 한글 주석 검사를 통과한 뒤 별도 커밋으로 푸시한다.
