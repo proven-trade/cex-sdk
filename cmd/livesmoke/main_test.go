@@ -299,15 +299,17 @@ func TestExampleConfigurationsRemainValid(t *testing.T) {
 		value, exists := values[name]
 		return value, exists
 	}
-	for _, path := range []string{
-		"../../examples/live-smoke/public.example.json",
-		"../../examples/live-smoke/private-read.example.json",
-	} {
+	tests := map[string]transport.EgressRouteID{
+		"../../examples/live-smoke/public.example.json":       "seoul-b",
+		"../../examples/live-smoke/public-vultr.example.json": "vultr-b",
+		"../../examples/live-smoke/private-read.example.json": "seoul-b",
+	}
+	for path, expectedRouteID := range tests {
 		config, err := readConfig(path, lookup)
 		if err != nil {
 			t.Fatalf("readConfig(%q) error = %v", path, err)
 		}
-		if config.exchange != model.ExchangeBinance || config.routeID != "seoul-b" {
+		if config.exchange != model.ExchangeBinance || config.routeID != expectedRouteID {
 			t.Fatalf("readConfig(%q) = %+v", path, config)
 		}
 	}

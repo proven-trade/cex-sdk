@@ -43,19 +43,19 @@ POST 주문의 JSON 필드와 해시 입력은 하나의 ordered parameter에서
 
 `NonceSource`와 `Now`는 결정적인 테스트를 위한 주입 지점입니다. 운영에서는 기본 암호학적 난수 nonce와 시스템 시계를 사용해야 합니다.
 
-## 요청 제한과 EIP
+## 요청 제한과 송신 경로
 
 SDK 기본 로컬 제한은 공식 안내의 공개 150회/초, private 140회/초, 주문 관련 API 10회/초입니다.
 
 | bucket | 기본 제한 | 범위 |
 |---|---:|---|
-| `bithumb:route:<route>:public:1second` | 150회/초 | 선택한 EIP route |
+| `bithumb:route:<route>:public:1second` | 150회/초 | 선택한 송신 경로 |
 | `bithumb:account:<account>:private:1second` | 140회/초 | 빗썸 계정 |
 | `bithumb:account:<account>:order:1second` | 10회/초 | 빗썸 계정의 주문 API |
 
 주문 관련 private 요청은 private bucket과 order bucket을 동시에 소비합니다. 제한값은 `Config`의 `PublicRequestsPerSecond`, `PrivateRequestsPerSecond`, `OrderRequestsPerSecond`로 더 보수적으로 조정할 수 있습니다.
 
-여러 EIP를 사용해도 계정 단위 제한은 늘어나지 않습니다. route 선택은 API Key IP 허용 목록 준수와 네트워크 격리를 위한 기능이며 거래소 제한 우회 용도가 아닙니다.
+여러 공인 송신 IP를 사용해도 계정 단위 제한은 늘어나지 않습니다. route 선택은 API Key IP 허용 목록 준수와 네트워크 격리를 위한 기능이며 거래소 제한 우회 용도가 아닙니다.
 
 ## 주문 안전 계약
 
@@ -106,7 +106,7 @@ defer public.Close()
 
 public DEFAULT 응답은 `StreamTicker`, `StreamTrade`, `StreamOrderBook`으로 decode할 수 있습니다. private v2 DEFAULT 응답은 의미가 분리된 `MyOrderEvent`의 `order_*`, `trade_*`, 누적 체결·수수료·취소 필드와 `MyAssetEvent`의 자산 목록으로 제공합니다. `SIMPLE` 형식도 envelope를 분류하지만 축약 필드는 `StreamMessage.Payload`에서 사용자 구조체로 decode해야 합니다.
 
-private 연결은 REST와 같은 HS256 JWT를 `Authorization` handshake 헤더에 넣되 query hash는 포함하지 않습니다. 모든 연결과 재연결은 세션에서 선택한 EIP route에 고정되며, 재연결마다 다음 작업을 새로 수행합니다.
+private 연결은 REST와 같은 HS256 JWT를 `Authorization` handshake 헤더에 넣되 query hash는 포함하지 않습니다. 모든 연결과 재연결은 세션에서 선택한 송신 경로에 고정되며, 재연결마다 다음 작업을 새로 수행합니다.
 
 1. Secret Provider에서 Access Key와 Secret Key 조회
 2. 새 nonce와 Unix millisecond timestamp로 JWT 생성
@@ -161,14 +161,14 @@ err = book.Run(ctx, public, func(ctx context.Context, view bithumb.LocalOrderBoo
 - typed 구조체가 전체 필드명을 사용하므로 `DEFAULT` 응답 형식만 허용합니다.
 - 각 이벤트를 완전한 snapshot으로 취급해 이전 가격 단계를 병합하지 않고 통째로 교체합니다.
 - 모아보기 `level` 기본값은 1이며 수신한 실제 값을 `LocalOrderBookView.Level`에 보존합니다.
-- 네트워크 재연결 시 같은 EIP와 새 ticket으로 다시 구독하며 다음 snapshot부터 `Generation`이 증가한 view를 제공합니다.
+- 네트워크 재연결 시 같은 송신 경로와 새 ticket으로 다시 구독하며 다음 snapshot부터 `Generation`이 증가한 view를 제공합니다.
 - sequence가 없으므로 탐지할 수 없는 gap count를 만들지 않습니다. `SnapshotID`, `Generation`, `Timestamp`, `StreamType`으로 수신과 재연결을 관측합니다.
 
 ## 공통 Spot API
 
 `NewUnifiedSpot`은 native 클라이언트를 `unified.SpotClient`로 변환합니다. 공통 `BTC/KRW` 마켓은 Bithumb의 `KRW-BTC`로 변환하며, 시장가 매수의 `QuoteAmount`는 `order_type=price`의 `price`, 시장가 매도의 `Quantity`는 `order_type=market`의 `volume`으로 전송합니다.
 
-미체결 주문은 v2 `next_key` cursor가 끝날 때까지 조회하며 모든 페이지에 같은 요청별 EIP를 전달합니다. Bithumb v1 주문 상세의 `uuid`와 v2 주문 생성·목록·취소의 `order_id` 차이는 공통 `Order.ID`로 정규화합니다.
+미체결 주문은 v2 `next_key` cursor가 끝날 때까지 조회하며 모든 페이지에 같은 요청별 송신 경로를 전달합니다. Bithumb v1 주문 상세의 `uuid`와 v2 주문 생성·목록·취소의 `order_id` 차이는 공통 `Order.ID`로 정규화합니다.
 
 ## 현재 제외 범위
 

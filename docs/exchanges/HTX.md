@@ -10,7 +10,7 @@
 - 계정·주문 WebSocket: `wss://api.huobi.pro/ws/v2`
 - 상품: Spot
 
-공식 문서는 testnet이 중단되었다고 명시한다. 따라서 mock 서버 기반 자동 테스트를 구현 완료 기준으로 사용하고, 실제 계정과 지정 EIP가 필요한 검증은 지원 매트릭스의 별도 smoke 상태로 관리한다.
+공식 문서는 testnet이 중단되었다고 명시한다. 따라서 mock 서버 기반 자동 테스트를 구현 완료 기준으로 사용하고, 실제 계정과 지정 송신 경로가 필요한 검증은 지원 매트릭스의 별도 smoke 상태로 관리한다.
 
 현재 `exchange/htx`의 공개·private REST, public/private WebSocket, MBP 로컬 오더북, 공통 Spot API와 mock 자동 테스트가 구현되어 있다. 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
 
@@ -58,7 +58,7 @@ book, err := client.OrderBook(
 )
 ```
 
-기본 route와 요청별 route 재정의는 공통 전송 계층의 서로 다른 private IP 연결 풀을 사용한다. `BaseURL`에는 공식 AWS 최적화 호스트도 지정할 수 있고, 이후 private 서명은 실제 설정한 요청 호스트를 기준으로 계산한다.
+기본 route와 요청별 route 재정의는 공통 전송 계층의 서로 다른 local source IP 연결 풀을 사용한다. `BaseURL`에는 공식 AWS 최적화 호스트도 지정할 수 있고, 이후 private 서명은 실제 설정한 요청 호스트를 기준으로 계산한다.
 
 ## 공개 요청 제한과 오류
 
@@ -87,7 +87,7 @@ book, err := client.OrderBook(
 | 계정 체결 이력 | `MatchResults` | `GET /v1/order/matchresults` |
 | 주문별 체결 | `OrderMatches` | `GET /v1/order/orders/{order-id}/matchresults` |
 
-### 인증과 EIP 허용 목록
+### 인증과 송신 경로 허용 목록
 
 private 요청은 `AccessKeyId`, `SignatureMethod=HmacSHA256`, `SignatureVersion=2`, UTC `Timestamp`를 쿼리에 넣는다. HTTP 메서드, 실제 요청 호스트, 경로, 키 순서로 정렬하고 공백을 `%20`으로 인코딩한 쿼리를 줄바꿈으로 결합한 뒤 Secret Key로 HMAC SHA-256하고 표준 Base64 서명을 만든다. POST 주문 인자는 JSON body에 남기며 인증 쿼리와 섞지 않는다.
 
@@ -119,7 +119,7 @@ order, err := client.PlaceOrder(
 )
 ```
 
-`CredentialProvider`는 요청 제한 대기가 끝난 뒤 요청을 만드는 시점에만 호출된다. 허용 route와 `read`·`trade` 권한 검사를 먼저 수행하고 사용이 끝난 key·secret byte slice는 덮어쓴다. HTX는 API Key 하나에 최대 20개 IP 또는 네트워크를 연결할 수 있으므로, 실제 송신 EIP를 거래소 키 허용 목록과 `AllowedEgressRouteIDs` 양쪽에 일치시켜야 한다.
+`CredentialProvider`는 요청 제한 대기가 끝난 뒤 요청을 만드는 시점에만 호출된다. 허용 route와 `read`·`trade` 권한 검사를 먼저 수행하고 사용이 끝난 key·secret byte slice는 덮어쓴다. HTX는 API Key 하나에 최대 20개 IP 또는 네트워크를 연결할 수 있으므로, 실제 공인 송신 IP를 거래소 키 허용 목록과 `AllowedEgressRouteIDs` 양쪽에 일치시켜야 한다.
 
 ### 주문 안전 계약과 요청 제한
 
@@ -133,7 +133,7 @@ order, err := client.PlaceOrder(
 
 - `Base`와 `Quote`를 HTX 소문자 결합 심볼로 변환 구현 완료
 - 상품 규칙, ticker, order book, 공개 체결, candle, 잔고, 주문 계약 정규화 구현 완료
-- 공통 읽기·주문 적합성 테스트와 요청별 EIP 전달 검증 완료
+- 공통 읽기·주문 적합성 테스트와 요청별 송신 경로 전달 검증 완료
 - 거래소 원본 상태와 응답은 민감 정보를 제외하고 보존
 
 `NewUnifiedSpot`은 native `Client`를 `unified.SpotClient`로 감싼다. HTX 호가의 5·10·20단계 제약 안에서 공통 요청 깊이만 반환하고, 공개 체결 묶음은 시간 순서를 유지한 단일 목록으로 펼친다. HTX에 없는 3분봉은 1분봉 세 개를 epoch 경계로 합성하며 초 단위 open time을 공통 millisecond 시각으로 바꾼다.
@@ -147,7 +147,7 @@ order, err := client.PlaceOrder(
 - gzip JSON public ticker·집계 호가·BBO·체결·캔들 구독 구현 완료
 - 서버가 보내는 JSON `ping` 값과 같은 `pong` 즉시 응답 구현 완료
 - 연결 중 동적 구독·해지와 거절 응답 rollback 구현 완료
-- 재연결 시 같은 EIP 유지와 현재 구독 자동 복구 구현 완료
+- 재연결 시 같은 송신 경로 유지와 현재 구독 자동 복구 구현 완료
 - v2 `2.1` HMAC 인증·재인증과 주문·체결·계정 구독 구현 완료
 - MBP 증분의 sequence를 검증하는 로컬 오더북과 같은 `/feed` 연결의 refresh 재동기화 구현 완료
 
@@ -231,7 +231,7 @@ err = book.Run(ctx, mbpStream, func(_ context.Context, view htx.LocalOrderBookVi
 
 로컬 장부는 공식 순서대로 증분을 먼저 버퍼링하고 같은 WebSocket에 `req` refresh를 보낸다. refresh의 `seqNum`과 첫 적용 증분의 `prevSeqNum`을 맞춘 뒤, 이후 모든 증분의 `prevSeqNum`이 현재 `seqNum`과 같은지 검사한다. refresh가 현재 버퍼보다 앞서면 연결되는 다음 증분을 기다리고 그전에는 view를 공개하지 않는다. 변경 수량은 증감량이 아닌 새 절대 수량이며 0이면 해당 가격을 삭제한다. 하나의 이벤트에 포함된 양쪽 변경을 모두 적용한 뒤에만 view를 공개한다.
 
-sequence gap, WebSocket 연결 세대 변경 또는 refresh 정렬 실패가 발생하면 불완전한 장부를 공개하지 않고 같은 EIP의 `/feed` 연결에서 refresh를 다시 요청한다. `RequestSnapshot`은 공식 연결당 pull 제한에 맞춰 `req` 사이를 최소 100ms로 직렬화한다. `SynchronizationID`는 성공한 동기화 횟수, `GapCount`는 감지한 증분 공백 누계, `Generation`은 WebSocket 연결 세대를 나타낸다. 기본 증분 버퍼는 4096개이고 기본 view 깊이는 `min(20, MBPDepth)`다. stream과 장부의 symbol·depth·EIP route가 다르면 네트워크 작업 전에 거부한다.
+sequence gap, WebSocket 연결 세대 변경 또는 refresh 정렬 실패가 발생하면 불완전한 장부를 공개하지 않고 같은 송신 경로의 `/feed` 연결에서 refresh를 다시 요청한다. `RequestSnapshot`은 공식 연결당 pull 제한에 맞춰 `req` 사이를 최소 100ms로 직렬화한다. `SynchronizationID`는 성공한 동기화 횟수, `GapCount`는 감지한 증분 공백 누계, `Generation`은 WebSocket 연결 세대를 나타낸다. 기본 증분 버퍼는 4096개이고 기본 view 깊이는 `min(20, MBPDepth)`다. stream과 장부의 symbol·depth·송신 경로가 다르면 네트워크 작업 전에 거부한다.
 
 ## 구현 순서
 
@@ -248,7 +248,7 @@ sequence gap, WebSocket 연결 세대 변경 또는 refresh 정렬 실패가 발
 ## 운영 제약
 
 - API Key는 공식 정책이 허용하는 IP에 바인딩한다.
-- SDK의 여러 EIP 경로는 제한 우회가 아니라 키 허용 목록 분리와 가용성 목적으로만 사용한다.
+- SDK의 여러 공인 송신 IP 경로는 제한 우회가 아니라 키 허용 목록 분리와 가용성 목적으로만 사용한다.
 - 지역 제한을 우회하는 endpoint나 프록시 기능은 제공하지 않는다.
 - AWS 호스트 사용 여부는 endpoint 설정으로 명시하며, 서명에는 실제 요청 호스트를 사용한다.
 - 입출금 실행은 프로젝트 비목표이므로 구현하지 않는다.

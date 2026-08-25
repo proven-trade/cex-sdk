@@ -11,17 +11,17 @@
 - 연결 상태와 세대 번호 관측
 - 선택적 ping과 읽기 크기 제한
 
-이미 수립된 WebSocket 연결의 송신 EIP는 바꿀 수 없습니다. 다른 EIP를 사용하려면 기존 세션을 종료하고 새 route로 새 세션을 생성해야 합니다.
+이미 수립된 WebSocket 연결의 송신 원본 IP는 바꿀 수 없습니다. 다른 송신 경로를 사용하려면 기존 세션을 종료하고 새 route로 새 세션을 생성해야 합니다.
 
 ## 연결 생성
 
-REST에서 사용하는 `transport.Registry`가 WebSocket handshake에도 같은 private IP 바인딩을 제공합니다.
+REST에서 사용하는 `transport.Registry`가 WebSocket handshake에도 같은 local source IP 바인딩을 제공합니다.
 
 ```go
 registry, err := transport.NewRegistry([]transport.EgressRoute{
 	{
 		ID:               "seoul-a",
-		LocalPrivateIP:   net.ParseIP("10.0.10.21"),
+		LocalSourceIP:    net.ParseIP("10.0.10.21"),
 		ExpectedPublicIP: net.ParseIP("203.0.113.10"),
 	},
 })

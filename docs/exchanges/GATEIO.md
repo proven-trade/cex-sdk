@@ -11,7 +11,7 @@ private API를 사용하려면 `credential.Provider`가 반환하는 `credential
 | `APIKey` | API Key |
 | `SecretKey` | API Secret 원문 |
 
-`credential.Descriptor.AccountID`에는 Gate.io UID 요청 제한을 공유하는 계정의 안정적인 식별자를 넣어야 합니다. 자격증명의 `AllowedEgressRouteIDs` 밖에 있는 route는 Secret 조회 전에 차단됩니다. API Key의 IP 허용 목록에는 허용할 route에 연결된 EIP를 모두 등록해야 합니다.
+`credential.Descriptor.AccountID`에는 Gate.io UID 요청 제한을 공유하는 계정의 안정적인 식별자를 넣어야 합니다. 자격증명의 `AllowedEgressRouteIDs` 밖에 있는 route는 Secret 조회 전에 차단됩니다. API Key의 IP 허용 목록에는 허용할 route에 연결된 공인 송신 IP를 모두 등록해야 합니다.
 
 ```go
 client, err := gateio.New(gateio.Config{
@@ -56,7 +56,7 @@ ticker, err := client.Ticker(ctx, "BTC_USDT", trade.WithEgressRoute("seoul-b"))
 
 ## 공통 Spot API
 
-`NewUnifiedSpot`으로 생성한 어댑터는 `unified.SpotClient`의 마켓, 현재가, 호가, 최근 체결, 캔들, 잔고, 주문 생성·조회·취소·미체결 목록을 구현합니다. 공통 `BTC/USDT`는 Gate.io의 `BTC_USDT`로 변환하며 모든 메서드의 요청별 EIP 옵션을 native API까지 전달합니다.
+`NewUnifiedSpot`으로 생성한 어댑터는 `unified.SpotClient`의 마켓, 현재가, 호가, 최근 체결, 캔들, 잔고, 주문 생성·조회·취소·미체결 목록을 구현합니다. 공통 `BTC/USDT`는 Gate.io의 `BTC_USDT`로 변환하며 모든 메서드의 요청별 송신 경로 옵션을 native API까지 전달합니다.
 
 시장가 매수의 `QuoteAmount`는 Gate.io `amount`의 견적 통화 금액으로, 시장가 매도의 `Quantity`는 기준 통화 수량으로 전달합니다. `ClientOrderID`를 생략하면 Gate.io 규칙에 맞는 `t-proven-` 접두사의 암호학적 난수 ID를 생성합니다. 지정가의 공통 PostOnly는 Gate.io POC로 변환하고, 시간 정책을 생략하면 GTC를 적용합니다. 주문 조회와 취소는 거래소 주문 ID뿐 아니라 `t-` 사용자 주문 ID도 지원합니다.
 
@@ -132,7 +132,7 @@ public 캔들은 REST와 달리 10초부터 7일까지의 공식 구간만 허�
 
 private 서명 원문은 `channel=<channel>&event=<subscribe 또는 unsubscribe>&time=<Unix second>`이고 HMAC-SHA-512 소문자 hex를 `auth.SIGN`에 넣습니다. API Key는 `auth.KEY`, 인증 방식은 `api_key`입니다. 구독 시각과 서버 시각 차이는 60초 이하여야 하므로 인스턴스의 시각 동기화가 필요합니다.
 
-연결은 선택한 EIP route에 수명주기 동안 고정됩니다. 재연결하면 같은 route로 새 handshake를 수행하고 현재 구독을 새 시각으로 다시 서명해 복구합니다. 실행 중 `Subscribe`와 `Unsubscribe`를 사용할 수 있으며, 서버가 오류 응답을 보낸 변경은 로컬 복구 목록에서 되돌립니다. 기본 heartbeat는 30초마다 WebSocket protocol ping을 보내고 10초 안에 pong을 기다립니다. Gate.io의 연결 제한은 IP당 300개이며 여러 프로세스·클라이언트의 합산 연결 수는 SDK 밖에서도 관리해야 합니다.
+연결은 선택한 송신 경로에 수명주기 동안 고정됩니다. 재연결하면 같은 route로 새 handshake를 수행하고 현재 구독을 새 시각으로 다시 서명해 복구합니다. 실행 중 `Subscribe`와 `Unsubscribe`를 사용할 수 있으며, 서버가 오류 응답을 보낸 변경은 로컬 복구 목록에서 되돌립니다. 기본 heartbeat는 30초마다 WebSocket protocol ping을 보내고 10초 안에 pong을 기다립니다. Gate.io의 연결 제한은 IP당 300개이며 여러 프로세스·클라이언트의 합산 연결 수는 SDK 밖에서도 관리해야 합니다.
 
 `StreamChannelOrderBookUpdate`는 기존 원본 증분 채널입니다. 수량은 증감량이 아니라 해당 가격의 절대 수량이며 0이면 가격 단계를 삭제해야 합니다. 이 원본 채널을 직접 조립하려면 연결 뒤 이벤트를 임시 저장하고 `OrderBook`의 `with_id=true` snapshot과 결합해야 합니다.
 
@@ -172,28 +172,28 @@ return orderBook.Run(ctx, public, func(
 })
 ```
 
-`full=true` snapshot은 기존 장부 전체를 교체하며 서버가 같은 세션에서 snapshot을 여러 번 보내도 모두 새 동기화 지점으로 적용합니다. 증분 이벤트는 `U`가 현재 `UpdateID + 1`과 정확히 같을 때만 적용하고 장부 ID를 `u`로 전진시킵니다. 불연속 ID, 중복·겹침 이벤트, 새 연결에서 snapshot보다 먼저 도착한 증분을 발견하면 장부를 버리고 선택한 같은 EIP route로 재연결해 새 snapshot부터 복구합니다.
+`full=true` snapshot은 기존 장부 전체를 교체하며 서버가 같은 세션에서 snapshot을 여러 번 보내도 모두 새 동기화 지점으로 적용합니다. 증분 이벤트는 `U`가 현재 `UpdateID + 1`과 정확히 같을 때만 적용하고 장부 ID를 `u`로 전진시킵니다. 불연속 ID, 중복·겹침 이벤트, 새 연결에서 snapshot보다 먼저 도착한 증분을 발견하면 장부를 버리고 선택한 같은 송신 경로로 재연결해 새 snapshot부터 복구합니다.
 
-`SynchronizationID`는 적용한 전체 snapshot 횟수, `GapCount`는 복구를 유발한 불연속 횟수, `Generation`은 WebSocket 연결 세대입니다. `ViewDepth` 기본값은 20이고 구독 깊이를 넘을 수 없으며 내부 장부도 선택한 50 또는 400단계로 제한합니다. public stream에 같은 거래쌍·깊이의 V2 구독이 없거나 EIP route가 다르면 네트워크 연결 전에 거부합니다.
+`SynchronizationID`는 적용한 전체 snapshot 횟수, `GapCount`는 복구를 유발한 불연속 횟수, `Generation`은 WebSocket 연결 세대입니다. `ViewDepth` 기본값은 20이고 구독 깊이를 넘을 수 없으며 내부 장부도 선택한 50 또는 400단계로 제한합니다. public stream에 같은 거래쌍·깊이의 V2 구독이 없거나 송신 경로가 다르면 네트워크 연결 전에 거부합니다.
 
 Gate.io는 2026년 3월부터 테스트넷에서 최초 snapshot을 구독 응답보다 먼저 보낼 수 있다고 공지했습니다. SDK는 구독 성공 응답을 기다리지 않고 유효한 snapshot을 즉시 적용하므로 두 메시지 순서에 의존하지 않습니다.
 
 JSON endpoint만 지원하며 Gate.io SBE binary push는 현재 범위에 포함하지 않습니다. public 이벤트 유실과 private 재연결 구간은 REST 조회로 최종 상태를 재조정해야 합니다. 시스템의 `spot.system` upgrade 알림을 받으면 연결 종료를 기다리지 말고 운영 계층에서 새 세션으로 교체하는 것이 안전합니다.
 
-## 요청 제한과 EIP
+## 요청 제한과 송신 경로
 
 기본 로컬 quota는 현재 공식 기본 제한을 따릅니다.
 
 | bucket | 기본 제한 | 범위 |
 |---|---:|---|
-| `gateio:route:<route>:public:<endpoint>:10seconds` | 200회/10초 | 선택한 EIP route와 공개 endpoint |
+| `gateio:route:<route>:public:<endpoint>:10seconds` | 200회/10초 | 선택한 송신 경로와 공개 endpoint |
 | `gateio:account:<account>:private:<endpoint>:10seconds` | 200회/10초 | UID와 private endpoint |
 | `gateio:account:<account>:spot-order:<market>:1second` | 10회/초 | UID와 거래쌍의 주문 생성 |
 | `gateio:account:<account>:spot-cancel:1second` | 200회/초 | UID의 주문 취소 |
 
 `X-Gate-RateLimit-Limit`과 `X-Gate-RateLimit-Requests-Remain`이 로컬 설정과 일치하면 관측 사용량을 반영합니다. remaining이 0이고 `X-Gate-RateLimit-Reset-Timestamp`가 미래 시각이면 해당 bucket을 reset까지 막습니다. 계정 등급이나 운영 정책이 다르면 `Config`의 `PublicQuota`, `PrivateQuota`, `OrderQuota`, `CancelQuota`를 더 보수적인 값으로 재정의할 수 있습니다.
 
-Public endpoint는 IP와 endpoint 기준이므로 요청별 EIP가 각각 독립된 bucket을 사용합니다. Private, 주문, 취소 제한은 UID 기준이므로 EIP를 바꿔도 quota가 늘어나지 않습니다. 다중 EIP는 공개 처리량 분산, API Key IP 허용 목록, 장애 격리를 위한 기능이며 거래소 제한 우회 용도가 아닙니다.
+Public endpoint는 IP와 endpoint 기준이므로 요청별 송신 경로가 각각 독립된 bucket을 사용합니다. Private, 주문, 취소 제한은 UID 기준이므로 송신 경로를 바꿔도 quota가 늘어나지 않습니다. 다중 송신 IP는 공개 처리량 분산, API Key IP 허용 목록, 장애 격리를 위한 기능이며 거래소 제한 우회 용도가 아닙니다.
 
 ## 주문 안전 계약
 
@@ -213,7 +213,7 @@ Gate.io의 비정상 응답은 일반적으로 비-2xx 상태와 `label`, `messa
 
 ## 운영 검증
 
-자동 테스트는 REST 서명 원문·본문·query 일치, 요청별 route 선택, route 허용 목록 사전 검사, Secret 덮어쓰기, 요청 제한 분리, 오류 분류, mutation 불명확 상태를 검증합니다. WebSocket은 public 재연결·재구독, private 명령 서명, typed event decode, 동적 구독 실패 rollback과 V2 snapshot 선도착·update ID 공백·동일 EIP 복구를 검증합니다. 실제 Gate.io 계정과 지정 EIP를 이용한 읽기·주문·장시간 stream smoke는 아직 대기 상태입니다.
+자동 테스트는 REST 서명 원문·본문·query 일치, 요청별 route 선택, route 허용 목록 사전 검사, Secret 덮어쓰기, 요청 제한 분리, 오류 분류, mutation 불명확 상태를 검증합니다. WebSocket은 public 재연결·재구독, private 명령 서명, typed event decode, 동적 구독 실패 rollback과 V2 snapshot 선도착·update ID 공백·동일 송신 경로 복구를 검증합니다. 실제 Gate.io 계정과 지정 송신 경로를 이용한 읽기·주문·장시간 stream smoke는 아직 대기 상태입니다.
 
 ## 공식 기준
 

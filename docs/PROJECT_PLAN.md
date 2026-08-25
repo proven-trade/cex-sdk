@@ -1,8 +1,8 @@
 # Proven Trade SDK 프로젝트 기획서
 
 - 상태: 구현 진행 중
-- 작성일: 2026-08-24
-- 대상: 중앙화 거래소 REST/WebSocket SDK 및 AWS 다중 EIP 송신 제어
+- 작성일: 2026-08-25
+- 대상: 중앙화 거래소 REST/WebSocket SDK 및 공급자 중립 다중 송신 IP 제어
 - 기준 거래소: Binance, Bitget, Upbit
 - 구현 언어: Go
 
@@ -16,8 +16,8 @@
 
 - 거래소를 추가할 때 전략 코드가 함께 변경된다.
 - 같은 주문 개념이 거래소마다 다르게 해석되어 금액 또는 수량 오류가 생긴다.
-- API Key의 IP 허용 목록과 실제 송신 EIP가 어긋날 수 있다.
-- HTTP keep-alive 연결이 재사용되면서 요청에 지정한 EIP와 실제 EIP가 달라질 수 있다.
+- API Key의 IP 허용 목록과 실제 공인 송신 IP가 어긋날 수 있다.
+- HTTP keep-alive 연결이 재사용되면서 요청에 지정한 경로와 실제 공인 송신 IP가 달라질 수 있다.
 - 거래소별 IP/계정/UID 단위 요청 제한을 하나의 전역 제한기로 처리하기 어렵다.
 - 주문 요청 타임아웃 시 재시도로 중복 주문이 생성될 수 있다.
 
@@ -27,15 +27,15 @@
 
 1. 공통 API만 익히면 여러 거래소의 시세 조회, 계정 조회, 현물/파생 주문을 사용할 수 있게 한다.
 2. 공통 모델이 표현하지 못하는 기능은 거래소 전용 API로 손실 없이 제공한다.
-3. 클라이언트 기본 EIP와 요청별 EIP 재정의를 모두 지원한다.
-4. 인증 정보별로 허용된 EIP만 사용하게 하여 IP 허용 목록 사고를 사전에 차단한다.
+3. 클라이언트 기본 송신 경로와 요청별 경로 재정의를 모두 지원한다.
+4. 인증 정보별로 허용된 공인 송신 IP 경로만 사용하게 하여 IP 허용 목록 사고를 사전에 차단한다.
 5. 요청 제한, 재시도, 시간 동기화, 관측성, 오류 분류를 SDK 공통 계층에서 처리한다.
 6. 새 거래소 어댑터가 기존 거래소 구현을 건드리지 않고 추가되게 한다.
 
 ### 3.2 성공 지표
 
 - P0 거래소 공통 기능 적합성 테스트 100% 통과
-- 요청별로 선택한 `egressRouteId`와 외부에서 관측한 EIP가 100% 일치
+- 요청별로 선택한 `egressRouteId`의 `expectedPublicIp`와 외부 관측 IP가 100% 일치
 - 주문 생성의 불명확한 결과(타임아웃 등)에 대한 자동 중복 주문 0건
 - API Key, Secret, Passphrase, 서명 원문이 로그에 노출되는 사례 0건
 - 거래소별 요청 제한 위반으로 인한 예방 가능한 IP 차단 0건
@@ -49,7 +49,7 @@
 - OMS, 포트폴리오 회계, PnL 원장, 세금 계산
 - 입출금 실행 기능. 조회는 가능하지만 실행 권한은 별도 보안 검토 후 추가한다.
 - 거래소 화면의 모든 기능을 억지로 하나의 공통 모델로 추상화하는 것
-- 여러 EIP를 이용해 거래소 요청 제한 또는 이용 정책을 우회하는 기능
+- 여러 공인 송신 IP를 이용해 거래소 요청 제한 또는 이용 정책을 우회하는 기능
 - 브라우저용 SDK. Secret을 다루므로 서버 런타임만 지원한다.
 - 마이크로초 단위 초저지연/FIX 트레이딩
 
@@ -71,7 +71,7 @@
 | P1 | Bithumb, Coinone, Korbit | Spot | 국내 거래소 확장 |
 | P2 | KuCoin, Gate.io | Spot, Futures | 수요와 운영 계정 확보 후 |
 | P3 | MEXC | Spot | 네임드 거래소 확대의 첫 대상 |
-| P4 | HTX | Spot | REST·public/private WebSocket과 AWS 전용 호스트 우선 검증 |
+| P4 | HTX | Spot | REST·public/private WebSocket과 HTX 공식 AWS 최적화 endpoint 검증 |
 | P4 | Crypto.com | Spot | 현행 Exchange v1, UAT와 분리 market/user WebSocket 검증 |
 
 목록은 `config/exchange-support.yaml`을 기준 정보로 관리하며 `support` Go catalog와 `docs/SUPPORT_MATRIX.md`를 자동 생성한다. 추가 의존성을 피하기 위해 설정 파일은 YAML과 호환되는 JSON 문법을 사용한다.
@@ -86,7 +86,7 @@
 | 파생상품 | P0 기본 주문/포지션 | 레버리지, 마진/포지션 모드 | 옵션 |
 | WebSocket | P0 시세 및 개인 주문/체결 | P1 확장 | 로컬 오더북 빌더 |
 | 자산 이동 | 조회만 | 내부 이체 검토 | 입출금은 별도 승인 |
-| 다중 EIP | REST 요청별 선택 | WebSocket 연결별 선택/상태관리 | 장애 조치 정책 확장 |
+| 다중 송신 IP | REST 요청별 선택 | WebSocket 연결별 선택/상태관리 | 장애 조치 정책 확장 |
 
 ## 6. 핵심 설계 원칙
 
@@ -106,10 +106,10 @@
 
 ### 6.3 네트워크 경로도 API 계약의 일부
 
-- `egressRouteId`는 단순 로그 태그가 아니라 실제 소켓의 local private IP를 결정한다.
+- `egressRouteId`는 단순 로그 태그가 아니라 실제 소켓의 `localSourceIp`를 결정한다.
 - 인증 정보는 `allowedEgressRouteIds`를 가져야 한다.
-- 존재하지 않거나 OS에 할당되지 않은 private IP는 요청 전 즉시 실패한다.
-- 연결 풀은 최소한 `(origin, localPrivateIp, protocol)` 단위로 분리한다.
+- 존재하지 않거나 OS에 할당되지 않은 source IP는 요청 전 즉시 실패한다.
+- 연결 풀은 최소한 `(origin, localSourceIp, protocol)` 단위로 분리한다.
 
 ### 6.4 안전한 실패
 
@@ -128,10 +128,10 @@ flowchart LR
     D --> E[Rate Limit Scheduler]
     E --> F[Exchange Serializer and Signer]
     F --> G[Transport Pool Registry]
-    G --> H1[Pool: private IP A]
-    G --> H2[Pool: private IP B]
-    H1 --> I1[EIP A via Internet Gateway]
-    H2 --> I2[EIP B via Internet Gateway]
+    G --> H1[Pool: local source IP A]
+    G --> H2[Pool: local source IP B]
+    H1 --> I1[NAT 또는 직접 공인 IP 경로 A]
+    H2 --> I2[NAT 또는 직접 공인 IP 경로 B]
     I1 --> J[Exchange API]
     I2 --> J
     J --> K[Decoder and Error Normalizer]
@@ -145,7 +145,7 @@ flowchart LR
 3. 거래소/IP/계정/엔드포인트 기준 요청 제한 슬롯 확보
 4. 쿼리와 본문을 최종 직렬화
 5. 최종 직렬화 결과에 서명
-6. 선택한 private IP 전용 연결 풀로 전송
+6. 선택한 local source IP 전용 연결 풀로 전송
 7. 응답 헤더의 요청 제한 상태 갱신
 8. 거래소 오류를 공통 오류와 원본 오류로 변환
 9. 민감 정보를 제거한 관측 이벤트 기록
@@ -178,7 +178,7 @@ proven-trade-sdk/
 ├── examples/
 │   ├── market-data/
 │   ├── order-lifecycle/
-│   └── multi-eip/
+│   └── multi-egress/
 ├── config/
 │   └── exchange-support.yaml
 ├── docs/
@@ -186,8 +186,7 @@ proven-trade-sdk/
 │   ├── api/
 │   ├── exchanges/
 │   └── runbooks/
-└── infra/
-    └── aws/                  # 네트워크 구성 예제. 실제 계정 값은 포함하지 않음
+└── infra/                    # 공급자별 네트워크 구성 예제. 실제 계정 값은 포함하지 않음
 ```
 
 거래소 구현은 각각 독립된 Go package로 분리한다. 코어가 개별 거래소 package를 역으로 참조하지 않게 하여 import cycle을 방지하고, 사용자가 필요한 어댑터만 import할 수 있게 한다.
@@ -212,13 +211,13 @@ sdk, err := trade.New(trade.Config{
 	Credentials: secretProvider,
 	EgressRoutes: []transport.EgressRoute{
 		{
-			ID:               "seoul-eip-a",
-			LocalPrivateIP:   net.ParseIP("10.0.10.21"),
+			ID:               "seoul-a",
+			LocalSourceIP:    net.ParseIP("10.0.10.21"),
 			ExpectedPublicIP: net.ParseIP("203.0.113.10"),
 		},
 		{
-			ID:               "seoul-eip-b",
-			LocalPrivateIP:   net.ParseIP("10.0.10.22"),
+			ID:               "seoul-b",
+			LocalSourceIP:    net.ParseIP("203.0.113.11"),
 			ExpectedPublicIP: net.ParseIP("203.0.113.11"),
 		},
 	},
@@ -230,7 +229,7 @@ defer sdk.Close()
 
 upbitClient, err := upbit.New(sdk, trade.ExchangeOptions{
 	AccountID:            "upbit-main",
-	DefaultEgressRouteID: "seoul-eip-a",
+	DefaultEgressRouteID: "seoul-a",
 })
 if err != nil {
 	return err
@@ -239,7 +238,7 @@ if err != nil {
 ticker, err := upbitClient.Unified().Market().GetTicker(
 	ctx,
 	market.GetTickerRequest{Symbol: "BTC/KRW"},
-	trade.WithEgressRoute("seoul-eip-b"),
+	trade.WithEgressRoute("seoul-b"),
 	trade.WithTimeout(3*time.Second),
 )
 if err != nil {
@@ -256,7 +255,7 @@ createdOrder, err := upbitClient.Unified().Orders().Create(
 		Price:         "100000000",
 		ClientOrderID: "strategy-a-20260824-000001",
 	},
-	trade.WithEgressRoute("seoul-eip-a"),
+	trade.WithEgressRoute("seoul-a"),
 )
 if err != nil {
 	return err
@@ -293,63 +292,102 @@ type CredentialDescriptor struct {
 - 캐시 시간과 갱신 실패 정책을 명시한다.
 - 출금 권한이 있는 키는 초기 버전에서 거부하거나 별도 opt-in을 요구한다.
 
-## 10. AWS 다중 EIP 설계
+## 10. 공급자 중립 다중 송신 IP 설계
 
-### 10.1 권장 구성
+### 10.1 추상화 경계
 
-한 개의 primary ENI에 여러 secondary private IPv4를 할당하고, 각 private IPv4에 EIP를 하나씩 연결한다.
+SDK는 AWS EIP나 Vultr 추가 IPv4 같은 공급자 리소스를 생성·연결하지 않는다. `EgressRoute`는 논리적인 `ID`, OS에 실제 할당된 `LocalSourceIP`, 외부에서 보여야 할 `ExpectedPublicIP`만 가진다. 프로비저닝과 게스트 OS 네트워크 설정은 IaC와 배포 계층이 담당한다.
+
+| 토폴로지 | `LocalSourceIP` | `ExpectedPublicIP` |
+|---|---|---|
+| 사설 IP를 공인 IP로 변환 | OS에 할당된 사설 IPv4 | NAT 이후 공인 IPv4 |
+| 공인 IP 직접 할당 | OS에 할당된 공인 IPv4 | 같은 공인 IPv4 |
+
+### 10.2 AWS secondary private IPv4와 EIP
+
+한 개의 primary ENI에 여러 secondary private IPv4를 할당하고, 각 private IPv4에 EIP를 하나씩 연결할 수 있다.
 
 ```text
 EC2 eth0 / ENI
 ├── 10.0.10.20 (primary private IP)
 ├── 10.0.10.21 (secondary) <-> EIP A
-├── 10.0.10.22 (secondary) <-> EIP B
-└── 10.0.10.23 (secondary) <-> EIP C
+└── 10.0.10.22 (secondary) <-> EIP B
 ```
 
-SDK는 `10.0.10.21` 같은 private IP에 소켓을 bind한다. EIP는 EC2 운영체제의 로컬 주소가 아니므로 EIP에 직접 bind하지 않는다. 인터넷 게이트웨이가 private IP와 연결된 EIP 사이에서 1:1 변환한다.
+SDK는 `10.0.10.21` 같은 private IP에 소켓을 bind한다. EIP는 EC2 운영체제의 로컬 주소가 아니므로 EIP에 직접 bind하지 않는다. AWS 네트워크가 private IP와 연결된 EIP 사이를 변환한다.
 
-### 10.2 배포 조건
+AWS 배포에서는 다음을 추가로 검증한다.
 
-- ENI가 있는 서브넷의 기본 경로가 Internet Gateway로 향해야 한다.
+- 서브넷의 인터넷 경로와 보안 그룹이 거래소 outbound를 허용한다.
 - 인스턴스 타입별 ENI당 private IP 한도를 배포 전에 확인한다.
-- 운영체제가 secondary private IPv4를 로컬 주소로 인식하는지 부팅 시 검증한다.
-- 인바운드는 Security Group으로 차단하고 운영 접속은 SSM을 우선한다.
-- IMDSv2를 강제하고 EC2 권한은 네트워크 조회에 필요한 최소 권한만 부여한다.
-- 여러 ENI를 같은 서브넷에 붙이면 비대칭 라우팅 위험이 있으므로 1차 버전은 단일 ENI를 사용한다.
-- EIP/secondary IP 연결 정보는 IaC 상태와 애플리케이션 설정에서 동일한 논리 ID로 관리한다.
+- 운영체제가 secondary private IPv4를 로컬 주소로 인식한다.
+- 여러 ENI를 사용할 때 정책 라우팅과 비대칭 경로를 별도로 검증한다.
+- EIP/secondary IP 연결 정보를 IaC와 애플리케이션 route ID로 함께 관리한다.
 
-### 10.3 시작 시 검증
+### 10.3 Vultr 추가 public IPv4
+
+Vultr Cloud Compute에는 여러 public IPv4를 직접 추가할 수 있다. 게스트 OS에 `203.0.113.20`이 할당되어 있고 외부에서도 같은 주소로 보인다면 두 필드에 같은 값을 넣는다.
+
+```text
+Vultr instance
+├── 203.0.113.20 <-> public IP A
+└── 203.0.113.21 <-> public IP B
+```
+
+```go
+transport.EgressRoute{
+	ID:               "vultr-a",
+	LocalSourceIP:    net.ParseIP("203.0.113.20"),
+	ExpectedPublicIP: net.ParseIP("203.0.113.20"),
+}
+```
+
+IP 추가나 Reserved IP 연결 후에는 공급자 API 상태만 믿지 않고 재부팅 또는 네트워크 설정 적용, `ip -4 addr` 확인, source IP를 지정한 실제 외부 연결 검증을 수행한다. Reserved IP가 별도 라우팅 또는 가상 인터페이스를 요구하면 게스트 OS에서 실제 bind 가능한 주소를 `LocalSourceIP`로 사용한다.
+
+### 10.4 공통 배포 조건
+
+- 모든 `LocalSourceIP`가 프로세스의 네트워크 네임스페이스에 존재해야 한다.
+- source IP별 기본 또는 정책 라우팅이 올바르게 구성되어야 한다.
+- 방화벽과 네트워크 ACL이 거래소 outbound를 허용해야 한다.
+- `ExpectedPublicIP`를 거래소 API Key 허용 IP 목록에 등록해야 한다.
+- IP 프로비저닝 상태와 애플리케이션 설정은 동일한 route ID로 관리한다.
+- 현재 전송 계층은 IPv4만 지원한다.
+
+실행 중 새 IP를 추가하면 인프라 할당, OS 주소·정책 라우팅 적용, 외부 관측 검증, API Key 허용 목록 반영을 마친 뒤 새 route 설정으로 프로세스를 재시작하거나 Registry를 교체한다. 현재 route 집합은 Registry 생성 시 고정하며 주문 mutation과 기존 WebSocket을 새 경로로 자동 이동시키지 않는다.
+
+### 10.5 시작 시 검증
 
 SDK 또는 별도 readiness check가 다음을 확인한다.
 
-1. 설정된 `localPrivateIp`가 실제 네트워크 인터페이스에 존재한다.
+1. 설정된 `localSourceIp`가 실제 네트워크 인터페이스에 존재한다.
 2. route별 진단 요청이 성공한다.
-3. 외부 echo 서비스에서 본 공인 IP가 `expectedPublicIp`와 일치한다.
+3. 외부 확인 서비스가 관측한 IP가 `expectedPublicIp`와 일치한다.
 4. 계정에 필요한 route가 모두 healthy 상태다.
 
-거래 주문 경로에서 매번 공인 IP 확인 API를 호출하지 않는다. 부팅, 주기 진단, 설정 변경 시에만 확인한다.
+거래 주문 경로에서 매번 공인 IP 확인 API를 호출하지 않는다. 부팅, 주기 진단, IP 연결 또는 설정 변경 시에 확인한다.
 
-### 10.4 HTTP 연결 풀
+### 10.6 HTTP 연결 풀
 
-- local private IP별로 별도 `net.Dialer`와 `http.Transport`를 둔다.
-- `net.Dialer.LocalAddr`에는 `&net.TCPAddr{IP: route.LocalPrivateIP}`를 설정하고 그 `DialContext`를 `http.Transport`에 연결한다.
-- 하나의 `http.Transport`는 내부적으로 origin별 연결 풀을 관리하므로, route/TLS 설정이 같을 때 해당 transport를 장기 재사용한다.
-- 기본 transport에서는 환경 변수 기반 HTTP proxy를 비활성화한다. proxy를 통하면 거래소가 보는 송신 IP가 EIP가 아닌 proxy IP가 되기 때문이다.
+- local source IP별로 별도 `net.Dialer`와 `http.Transport`를 둔다.
+- `net.Dialer.LocalAddr`에는 `&net.TCPAddr{IP: route.LocalSourceIP}`를 설정하고 그 `DialContext`를 `http.Transport`에 연결한다.
+- 하나의 `http.Transport`는 내부적으로 origin별 연결 풀을 관리하므로 route/TLS 설정이 같을 때 장기 재사용한다.
+- 기본 transport에서는 환경 변수 기반 HTTP proxy를 비활성화한다. proxy를 통하면 거래소가 보는 송신 IP가 route 계약과 달라질 수 있다.
 - 요청이 끝난 뒤에도 해당 풀의 소켓은 동일 route에서만 재사용한다.
 - DNS 결과, TLS SNI와 인증서 검증은 일반 HTTPS 규칙을 그대로 따른다.
-- registry는 `localPrivateIp`, protocol, TLS 설정별 transport를 분리하고, 각 transport가 origin별 실제 연결 풀을 관리한다.
+- registry는 `localSourceIp`, protocol, TLS 설정별 transport를 분리한다.
 - route가 unhealthy가 되면 신규 요청을 차단하고 기존 유휴 연결을 폐기한다.
 - failover는 조회 요청에만 자동 적용한다. 주문 요청은 명시적 조정 절차 없이는 다른 route로 자동 재전송하지 않는다.
 
-### 10.5 WebSocket
+### 10.7 WebSocket
 
-- WebSocket도 최초 TCP 연결 시 local private IP를 선택한다.
+- WebSocket도 최초 TCP 연결 시 local source IP를 선택한다.
 - Go WebSocket 구현에는 route 전용 `net.Dialer.DialContext`를 주입한다.
-- 이미 연결된 WebSocket의 EIP는 중간에 바꿀 수 없다.
+- 이미 연결된 WebSocket의 source IP는 중간에 바꿀 수 없다.
 - 최소 `(exchange, account, channel class, egressRouteId)`별로 연결을 분리한다.
 - 재연결 시 같은 route를 유지하고, 변경은 명시적인 drain/reconnect 작업으로 처리한다.
 - sequence gap이 발견되면 REST snapshot 또는 거래소별 복구 절차로 재동기화한다.
+
+상세 운영 계약과 설정 마이그레이션은 [공급자 중립 송신 경로 설계](EGRESS_ROUTES.md)를 기준으로 한다.
 
 ## 11. 요청 제한 설계
 
@@ -368,7 +406,7 @@ SDK 또는 별도 readiness check가 다음을 확인한다.
 - Upbit: 공개 시세의 IP 기준과 private 요청의 계정/정책 단위를 분리하고 응답의 잔여 요청 정보를 반영
 - `429` 또는 거래소 고유 제한 오류는 `Retry-After`와 응답 헤더를 우선해 backoff
 - 제한값은 코드 상수만 믿지 않고 버전 관리되는 메타데이터로 관리
-- EIP가 여러 개여도 거래소 정책상 계정 단위 제한을 IP별로 중복 사용하지 않음
+- 송신 IP가 여러 개여도 거래소 정책상 계정 단위 제한을 IP별로 중복 사용하지 않음
 
 ## 12. 재시도와 주문 안전성
 
@@ -420,7 +458,7 @@ const (
 ### 15.1 구조화 로그
 
 - exchange, market type, endpoint ID, account alias
-- `egressRouteId`, local private IP, 기대 EIP
+- `egressRouteId`, local source IP, 기대·관측 공인 IP
 - request ID, exchange request ID, latency, status, retry count
 - limiter 대기 시간과 관측된 quota
 - 주문은 clientOrderId/orderId만 기록하고 필요 이상의 본문은 남기지 않음
@@ -430,13 +468,13 @@ const (
 - 요청 수/지연시간/오류율: 거래소, endpoint, route별
 - 429/418/거래소 제한 오류 수
 - limiter queue depth와 wait time
-- route health 및 외부 EIP 검증 결과
+- route health 및 외부 송신 IP 검증 결과
 - WebSocket 연결, 재연결, sequence gap 수
 - `UNKNOWN_EXECUTION_STATE` 발생 및 조정 결과
 
 ### 15.3 Runbook
 
-- EIP 불일치
+- 기대·관측 공인 송신 IP 불일치
 - 거래소 IP 차단/429 급증
 - API Key 허용 IP 오류
 - clock drift
@@ -481,7 +519,7 @@ const (
 - mock exchange server로 timeout, reset, 429, 5xx, 잘못된 JSON 재현
 - testnet/sandbox가 제공되는 거래소는 주문 lifecycle 검증
 - sandbox가 없는 경우 production read-only smoke와 명시적 opt-in 소액 주문 테스트 분리
-- 각 private IP에서 외부로 나간 실제 EIP 검증
+- 각 local source IP에서 외부로 나간 실제 송신 IP 검증
 - 서로 다른 route의 동시 요청에서 연결 풀 혼선 여부 검증
 - 프로세스 재시작, DNS 변경, route 장애, clock skew 시험
 
@@ -499,7 +537,7 @@ const (
 - README 사용 예제와 운영 주의사항 작성
 - 실제 계정 read-only smoke 통과
 - 거래 기능은 별도 승인된 계정으로 주문 생성-조회-취소 smoke 통과
-- 지정 EIP 검증 통과
+- 지정 송신 경로 검증 통과
 
 ## 19. 단계별 실행 계획
 
@@ -508,7 +546,7 @@ const (
 - Go module 경로, 지원 Go 버전, 의존성 정책 확정
 - P0 거래소의 상품 범위와 필수 endpoint 확정
 - unified 모델, capability naming, 오류 계약 확정
-- AWS EIP 수, instance type, 배포 OS, Secret 저장소 확정
+- 배포 공급자, 송신 IP 수·할당 방식, instance type, 배포 OS, Secret 저장소 확정
 - 실제 거래 없는 네트워크 PoC로 source IP 선택 검증
 
 ### Phase 1 — Core와 Transport
@@ -516,7 +554,7 @@ const (
 - Go module, formatter, linter, test, benchmark, release 기본 구성
 - decimal, symbol, market, order, error 공통 타입
 - credential/secret provider
-- local private IP별 HTTP pool registry
+- local source IP별 HTTP pool registry
 - route readiness/diagnostics
 - retry, timeout, clock, limiter, redaction, telemetry
 
@@ -532,16 +570,16 @@ const (
 
 - 공통 route 고정 연결, reconnect, 재구독 수명주기 구현 완료
 - Binance Spot public/private stream 구현 완료
-- Binance Spot 동일 EIP REST snapshot·diff depth 로컬 오더북과 sequence gap·재연결 복구 구현 완료
+- Binance Spot 동일 송신 경로 REST snapshot·diff depth 로컬 오더북과 sequence gap·재연결 복구 구현 완료
 - Binance USDⓈ-M Futures 분리 public/market 및 listenKey private stream 구현 완료
-- Binance USDⓈ-M Futures 동일 EIP REST snapshot·diff depth 로컬 오더북과 `pu` gap·재연결 복구 구현 완료
+- Binance USDⓈ-M Futures 동일 송신 경로 REST snapshot·diff depth 로컬 오더북과 `pu` gap·재연결 복구 구현 완료
 - Bitget v3 UTA public/private stream 구현 완료
-- Bitget Spot books snapshot·pseq/seq 로컬 오더북과 동일 EIP 재연결 기반 gap 복구 구현 완료
+- Bitget Spot books snapshot·pseq/seq 로컬 오더북과 동일 송신 경로 재연결 기반 gap 복구 구현 완료
 - Upbit Spot public/private stream 구현 완료
-- Upbit Spot 완전 snapshot 로컬 오더북과 동일 EIP 재연결·SIMPLE_LIST·level/unit 계약 구현 완료
-- Bybit V5 Spot·Linear snapshot/delta 로컬 오더북과 update ID gap·동일 EIP 재연결 복구 구현 완료
-- OKX V5 Spot·SWAP books prevSeqId/seqId 로컬 오더북과 books5·bbo-tbt snapshot·동일 EIP 재연결 복구 구현 완료
-- 공통 Spot read smoke와 지정 EIP JSON 증적 계약 구현 완료
+- Upbit Spot 완전 snapshot 로컬 오더북과 동일 송신 경로 재연결·SIMPLE_LIST·level/unit 계약 구현 완료
+- Bybit V5 Spot·Linear snapshot/delta 로컬 오더북과 update ID gap·동일 송신 경로 재연결 복구 구현 완료
+- OKX V5 Spot·SWAP books prevSeqId/seqId 로컬 오더북과 books5·bbo-tbt snapshot·동일 송신 경로 재연결 복구 구현 완료
+- 공통 Spot read smoke와 지정 송신 경로 JSON 증적 계약 구현 완료
 - 12개 공통 Spot 어댑터 선택형 `livesmoke` CLI와 환경 Secret 주입 구현 완료
 - 실제 주문 동의·금액 상한·post-only·호가 비관통·독립 취소 context를 강제하는 Spot trade smoke 구현 완료
 - 나머지 거래소 sequence gap recovery와 장시간 soak test
@@ -557,22 +595,22 @@ const (
 - OKX V5 Spot·SWAP public/private WebSocket 구현 완료
 - Coinbase Advanced Trade Spot REST 구현 완료
 - Coinbase Advanced Trade public/user WebSocket 구현 완료
-- Coinbase Advanced Trade Spot level2 로컬 오더북과 sequence gap·동일 EIP 재연결 복구 구현 완료
+- Coinbase Advanced Trade Spot level2 로컬 오더북과 sequence gap·동일 송신 경로 재연결 복구 구현 완료
 - Kraken Spot REST 구현 완료
 - Kraken Futures REST 구현 완료
 - Kraken Spot WebSocket v2 public/private 구현 완료
-- Kraken Spot WebSocket v2 book CRC32 로컬 오더북과 동일 EIP 재연결 복구 구현 완료
+- Kraken Spot WebSocket v2 book CRC32 로컬 오더북과 동일 송신 경로 재연결 복구 구현 완료
 - Kraken Futures WebSocket v1 public/private 구현 완료
-- Kraken Futures WebSocket v1 book_snapshot/book 로컬 오더북과 sequence gap·동일 EIP 재연결 복구 구현 완료
+- Kraken Futures WebSocket v1 book_snapshot/book 로컬 오더북과 sequence gap·동일 송신 경로 재연결 복구 구현 완료
 - Bithumb Spot REST 구현 완료
 - Bithumb public v1/private v2 WebSocket 구현 완료
-- Bithumb Spot 최대 15단계 완전 snapshot 로컬 오더북과 동일 EIP 재연결 복구 구현 완료
+- Bithumb Spot 최대 15단계 완전 snapshot 로컬 오더북과 동일 송신 경로 재연결 복구 구현 완료
 - Coinone Spot REST 구현 완료
 - Coinone public/private WebSocket 구현 완료
-- Coinone Spot 완전 snapshot·source ID 최신성 로컬 오더북과 동일 EIP 재연결 복구 구현 완료
+- Coinone Spot 완전 snapshot·source ID 최신성 로컬 오더북과 동일 송신 경로 재연결 복구 구현 완료
 - Korbit Spot REST 구현 완료
 - Korbit public/private WebSocket 구현 완료
-- Korbit Spot 최대 30단계 완전 snapshot 로컬 오더북과 level·동일 EIP 재연결 복구 구현 완료
+- Korbit Spot 최대 30단계 완전 snapshot 로컬 오더북과 level·동일 송신 경로 재연결 복구 구현 완료
 - 지원 매트릭스와 Go capability catalog 자동 생성 완료
 - 운영 수요 순으로 거래소 추가
 - 어댑터 생성 템플릿 및 문서 자동 생성
@@ -582,22 +620,22 @@ const (
 
 - KuCoin Classic Spot REST 구현 완료
 - KuCoin Spot public/private WebSocket 구현 완료
-- KuCoin Pro Spot Increment Best 500 로컬 오더북과 sequence gap·동일 EIP 재연결 복구 구현 완료
+- KuCoin Pro Spot Increment Best 500 로컬 오더북과 sequence gap·동일 송신 경로 재연결 복구 구현 완료
 - KuCoin Spot 공통 API 구현 완료
 - KuCoin Futures REST 구현 완료
 - KuCoin Futures public/private WebSocket 구현 완료
-- KuCoin Pro Futures Increment Best 500 로컬 오더북과 sequence gap·동일 EIP 재연결 복구 구현 완료
+- KuCoin Pro Futures Increment Best 500 로컬 오더북과 sequence gap·동일 송신 경로 재연결 복구 구현 완료
 - Gate.io Spot REST 구현 완료
 - Gate.io Spot public/private WebSocket 구현 완료
-- Gate.io Spot Order Book V2 50·400단계 로컬 오더북과 update ID gap·동일 EIP 재연결 복구 구현 완료
+- Gate.io Spot Order Book V2 50·400단계 로컬 오더북과 update ID gap·동일 송신 경로 재연결 복구 구현 완료
 - Gate.io Spot 공통 API 구현 완료
 - Gate.io Futures REST 구현 완료
 - Gate.io Futures public/private WebSocket 구현 완료
-- Gate.io Futures Order Book V2 50·400단계 로컬 오더북과 update ID gap·동일 EIP 재연결 복구 구현 완료
+- Gate.io Futures Order Book V2 50·400단계 로컬 오더북과 update ID gap·동일 송신 경로 재연결 복구 구현 완료
 
 ### Phase 6 — P3 네임드 거래소 확장
 
-- MEXC Spot V3 공개 REST와 요청별 EIP·endpoint별 요청 제한·오류 정규화 구현 완료
+- MEXC Spot V3 공개 REST와 요청별 송신 경로·endpoint별 요청 제한·오류 정규화 구현 완료
 - MEXC Spot private REST·주문 안전 계약 구현 완료
 - MEXC Spot 공통 API와 적합성 테스트 구현 완료
 - MEXC Spot protobuf public/private WebSocket 구현 완료
@@ -605,10 +643,10 @@ const (
 
 ### Phase 7 — P4 HTX Spot 확장
 
-- 공식 Spot API의 공개 REST와 요청별 EIP·endpoint별 요청 제한·오류 정규화 구현 완료
+- 공식 Spot API의 공개 REST와 요청별 송신 경로·endpoint별 요청 제한·오류 정규화 구현 완료
 - HMAC SHA-256 인증, 현물 계정 조회, 주문 생성·조회·취소·목록 구현 완료
 - 공통 Spot API와 적합성 테스트 구현 완료
-- gzip JSON public WebSocket, 서버 ping 응답과 같은 EIP 재구독 구현 완료
+- gzip JSON public WebSocket, 서버 ping 응답과 같은 송신 경로 재구독 구현 완료
 - v2 HMAC 인증과 private 주문·체결·잔고 WebSocket 구현 완료
 - MBP 증분 stream과 같은 `/feed` 연결의 refresh 전체 이미지를 결합한 5·20·150단계 로컬 오더북 구현 완료
 - 공식 testnet이 중단되었으므로 mock 자동 테스트와 production read-only·명시적 소액 주문 smoke를 분리
@@ -616,12 +654,12 @@ const (
 
 ### Phase 8 — P4 Crypto.com Exchange v1 Spot 확장
 
-- 현행 Exchange v1 공개 REST와 요청별 EIP·메서드별 IP 요청 제한·오류 정규화 구현 완료
+- 현행 Exchange v1 공개 REST와 요청별 송신 경로·메서드별 IP 요청 제한·오류 정규화 구현 완료
 - HMAC SHA-256 재귀 params 정규화, 잔고와 주문 생성·조회·취소·이력 구현 완료
 - 공통 Spot API와 적합성 테스트 구현 완료
-- market WebSocket, heartbeat, 동적 구독과 같은 EIP 재구독 구현 완료
-- user WebSocket 인증과 같은 EIP private 재구독 구현 완료
-- 명시적 10·50단계 `SNAPSHOT_AND_UPDATE`의 `u`·`pu` 로컬 오더북과 같은 EIP 재구독 복구 구현 완료
+- market WebSocket, heartbeat, 동적 구독과 같은 송신 경로 재구독 구현 완료
+- user WebSocket 인증과 같은 송신 경로 private 재구독 구현 완료
+- 명시적 10·50단계 `SNAPSHOT_AND_UPDATE`의 `u`·`pu` 로컬 오더북과 같은 송신 경로 재구독 복구 구현 완료
 - UAT mock 자동 테스트와 production read-only·명시적 소액 주문 smoke를 분리
 - Margin·Derivatives, 고급 조건부 주문, 자산 이동 실행은 초기 Spot 범위에서 제외
 
@@ -630,18 +668,18 @@ const (
 다음 항목은 구현 기준으로 확정했다.
 
 1. **언어**: Go로 구현한다.
-2. **초기 순서**: 공통 코어와 다중 EIP 계층을 먼저 완성하고 Binance Spot, Bitget, Upbit 순으로 어댑터를 확장한다. 파생상품과 WebSocket은 REST 현물 기반을 검증한 뒤 추가한다.
-3. **EIP 선택 정책**: 클라이언트 기본 route와 요청별 재정의를 모두 허용한다. 자격증명의 route 허용 목록 검사는 항상 적용한다.
+2. **초기 순서**: 공통 코어와 다중 송신 IP 계층을 먼저 완성하고 Binance Spot, Bitget, Upbit 순으로 어댑터를 확장한다. 파생상품과 WebSocket은 REST 현물 기반을 검증한 뒤 추가한다.
+3. **송신 경로 선택 정책**: 클라이언트 기본 route와 요청별 재정의를 모두 허용한다. 자격증명의 route 허용 목록 검사는 항상 적용한다.
 
-실제 배포 전에 EC2 OS와 instance type, EIP 개수, IaC 도구, Secret 저장소를 운영 환경에 맞게 결정해야 한다.
+실제 배포 전에 AWS·Vultr 등 공급자, 게스트 OS, instance type, IP 개수와 할당 방식, IaC 도구, Secret 저장소를 운영 환경에 맞게 결정해야 한다.
 
 ## 21. 주요 위험과 대응
 
 | 위험 | 영향 | 대응 |
 |---|---|---|
 | 공통 모델의 과도한 추상화 | 거래소 고유 기능 손실 | unified/native 이중 표면, capability 명시 |
-| EIP와 private IP 혼동 | 잘못된 IP 또는 연결 실패 | route 객체에 둘 다 기록, local IP bind, readiness 검증 |
-| keep-alive 풀 공유 | 선택하지 않은 EIP 사용 | local private IP별 풀 완전 분리 |
+| local source IP와 외부 공인 IP 혼동 | 잘못된 IP 또는 연결 실패 | route 객체에 둘 다 기록, source IP bind, readiness 검증 |
+| keep-alive 풀 공유 | 선택하지 않은 공인 송신 IP 사용 | local source IP별 풀 완전 분리 |
 | 주문 POST 자동 재시도 | 중복 주문 | unknown state + clientOrderId 조정 |
 | 제한 정책 변경 | IP 차단 | 응답 헤더 기반 동적 상태, 버전 관리 메타데이터 |
 | 거래소 API 폐기 | 갑작스러운 장애 | 공식 changelog 모니터링, adapter 독립 릴리스 |
@@ -653,6 +691,8 @@ const (
 
 기획 시점에 확인한 1차 출처다. 실제 구현 시 endpoint별 문서를 다시 고정하고 테스트 벡터를 갱신한다.
 
+- [Vultr Cloud Compute 추가 IPv4](https://docs.vultr.com/products/compute/instances/cloud-compute/networking/ipv4)
+- [Vultr Cloud Compute Reserved IP](https://docs.vultr.com/products/compute/instances/cloud-compute/networking/reserved-ips)
 - [AWS EC2 인스턴스 IP 주소와 다중 IP](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-instance-addressing.html)
 - [AWS Secondary IP 설정](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-secondary-ip-addresses.html)
 - [AWS Elastic Network Interface](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html)
@@ -680,9 +720,9 @@ const (
 
 1. Go module과 core/transport 패키지 골격
 2. `EgressRoute`, `CredentialDescriptor`, `RequestOptions` 타입
-3. local private IP별 HTTP 연결 풀
-4. 두 개 이상의 EIP를 구분하는 진단 CLI
-5. 존재하지 않는 IP, 허용되지 않은 route, EIP 불일치 테스트
+3. local source IP별 HTTP 연결 풀
+4. 두 개 이상의 공인 송신 IP를 구분하는 진단 CLI
+5. 존재하지 않는 IP, 허용되지 않은 route, 기대·관측 공인 IP 불일치 테스트
 6. mock exchange를 이용한 retry/timeout/connection reuse 테스트
 
 이 PoC를 통과한 다음 Binance 어댑터부터 적합성 스위트를 붙인다.

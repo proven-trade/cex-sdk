@@ -34,7 +34,7 @@ private API를 사용하려면 다음 세 값이 `credential.Provider`의 `crede
    - 조회 private API: `20/UID/초`
    - 주문 생성·취소: `10/UID/초`
 
-각 EIP route는 독립된 IP 제한 bucket을 사용합니다. UID 제한은 route를 변경해도 같은 계정 bucket을 사용하므로 EIP 변경을 UID 제한 우회 수단으로 사용하지 않습니다.
+각 송신 경로는 독립된 IP 제한 bucket을 사용합니다. UID 제한은 route를 변경해도 같은 계정 bucket을 사용하므로 송신 경로 변경을 UID 제한 우회 수단으로 사용하지 않습니다.
 
 ## 서명과 안전한 주문 실패
 
@@ -61,7 +61,7 @@ v3 UTA WebSocket은 다음 endpoint를 사용합니다.
 | 운영 | `wss://ws.bitget.com/v3/ws/public` | `wss://ws.bitget.com/v3/ws/private` |
 | Demo | `wss://wspap.bitget.com/v3/ws/public` | `wss://wspap.bitget.com/v3/ws/private` |
 
-`StreamClient`는 각 연결과 모든 재연결을 생성 시 선택한 EIP route에 고정합니다.
+`StreamClient`는 각 연결과 모든 재연결을 생성 시 선택한 송신 경로에 고정합니다.
 
 ```go
 streams, err := bitget.NewStreamClient(bitget.StreamClientConfig{
@@ -110,7 +110,7 @@ public channel의 1차 typed 범위는 다음과 같습니다.
 
 ### Spot 로컬 오더북과 자동 갭 복구
 
-Bitget v3 UTA의 `books` 채널은 최초 full snapshot과 이후 incremental update를 같은 WebSocket에서 제공합니다. REST order book에는 WebSocket과 연결할 sequence가 없으므로 로컬 장부는 REST snapshot을 섞지 않고, 선택한 EIP의 `books` snapshot과 `pseq`·`seq`만 사용합니다.
+Bitget v3 UTA의 `books` 채널은 최초 full snapshot과 이후 incremental update를 같은 WebSocket에서 제공합니다. REST order book에는 WebSocket과 연결할 sequence가 없으므로 로컬 장부는 REST snapshot을 섞지 않고, 선택한 송신 경로의 `books` snapshot과 `pseq`·`seq`만 사용합니다.
 
 ```go
 books, err := bitget.PublicStreamArgument(bitget.CategorySpot, "books", "BTCUSDT")
@@ -146,7 +146,7 @@ err = book.Run(ctx, public, func(ctx context.Context, view bitget.LocalOrderBook
 - incremental update를 제공하는 Spot `books`만 허용하며, 매번 snapshot인 `books1`·`books5`·`books50`은 로컬 오더북 입력으로 받지 않습니다.
 - snapshot은 즉시 게시하고, 첫 update에서 `snapshot seq ∈ [pseq, seq]`인지 확인합니다.
 - 이후에는 `update.pseq == 이전 update.seq`이고 `seq`가 증가하는 데이터만 적용합니다.
-- sequence 누락·역행 또는 동기화 완료 뒤 `pseq=0` reset을 발견하면 현재 장부를 폐기하고 같은 EIP로 재연결해 새 snapshot부터 복구합니다.
+- sequence 누락·역행 또는 동기화 완료 뒤 `pseq=0` reset을 발견하면 현재 장부를 폐기하고 같은 송신 경로로 재연결해 새 snapshot부터 복구합니다.
 - 일반 네트워크 재연결도 이전 세대 장부를 폐기하지만 `GapCount`는 늘리지 않습니다.
 - `SynchronizationID`, `Generation`, `GapCount`, `Sequence`, `MaxDepth`로 재동기화와 데이터 연속성을 관측할 수 있습니다.
 - `Run` 중에는 대상 `books` 구독을 해제하지 않아야 합니다.
@@ -176,7 +176,7 @@ defer private.Close()
 
 연결마다 다음 순서로 인증합니다.
 
-1. 자격증명 read 권한과 EIP route 허용 목록 검사
+1. 자격증명 read 권한과 송신 경로 허용 목록 검사
 2. Secret Provider에서 API Key, HMAC Secret, Passphrase 조회
 3. `timestamp + "GET" + "/user/verify"`를 HMAC SHA-256과 Base64로 서명
 4. login 요청 전송 후 `event=login`, `code=0` 응답 확인

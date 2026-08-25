@@ -14,7 +14,7 @@
 - cursor 기반 체결 목록
 - 공개 ticker, ticker batch, 체결, 호가, 5분 캔들, 상품 상태 stream
 - private user 주문 stream
-- 요청별 EIP route 선택
+- 요청별 송신 경로 선택
 
 고급 주문, 포트폴리오 자금 이동과 파생상품은 이 단계의 범위가 아니다. 지원하지 않는 주문 설정을 임의의 필드 조합으로 전송하지 않고 명시적으로 거부한다.
 
@@ -30,7 +30,7 @@ Coinbase App API는 CDP에서 ECDSA 서명 알고리즘으로 생성한 key를 �
 | `SecretKey` | P-256 EC private key PEM |
 | `Passphrase` | 사용하지 않음 |
 
-PEM의 실제 줄바꿈과 `\n`으로 escape된 줄바꿈을 모두 읽을 수 있다. Secret은 요청을 최종 생성할 때 조회하며, 요청이 끝나면 Provider가 반환한 byte slice를 덮어쓴다. 자격증명에 허용되지 않은 EIP route나 필요한 read/trade 권한은 Secret 조회 전에 거부한다.
+PEM의 실제 줄바꿈과 `\n`으로 escape된 줄바꿈을 모두 읽을 수 있다. Secret은 요청을 최종 생성할 때 조회하며, 요청이 끝나면 Provider가 반환한 byte slice를 덮어쓴다. 자격증명에 허용되지 않은 송신 경로나 필요한 read/trade 권한은 Secret 조회 전에 거부한다.
 
 ## JWT 인증
 
@@ -198,11 +198,11 @@ err = book.Run(ctx, public, func(ctx context.Context, view coinbase.LocalOrderBo
 })
 ```
 
-SDK는 상품별 `SequenceNumber`가 직전 값보다 정확히 1 증가하는지 검사한다. 더 작은 오래된 순서는 무시하고, 앞으로 건너뛴 순서나 새 연결에서 snapshot보다 먼저 온 update는 현재 장부를 폐기한 뒤 같은 EIP route로 재연결해 새 snapshot을 받는다. snapshot 이벤트는 언제든 전체 장부를 교체하며, 한 메시지에 같은 상품 이벤트가 여러 개 있으면 배열 순서대로 모두 반영한 뒤 한 번만 handler를 호출한다.
+SDK는 상품별 `SequenceNumber`가 직전 값보다 정확히 1 증가하는지 검사한다. 더 작은 오래된 순서는 무시하고, 앞으로 건너뛴 순서나 새 연결에서 snapshot보다 먼저 온 update는 현재 장부를 폐기한 뒤 같은 송신 경로로 재연결해 새 snapshot을 받는다. snapshot 이벤트는 언제든 전체 장부를 교체하며, 한 메시지에 같은 상품 이벤트가 여러 개 있으면 배열 순서대로 모두 반영한 뒤 한 번만 handler를 호출한다.
 
-`SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 재연결을 유발한 sequence 이상 횟수, `Generation`은 WebSocket 연결 세대를 나타낸다. `ViewDepth` 기본값은 20이며 handler에 복사하는 상위 호가 수만 제한하고 내부 장부는 전체 snapshot과 이후 모든 가격 레벨을 유지한다. 로컬 오더북과 public stream의 상품·EIP가 다르면 네트워크 연결 전에 거부한다.
+`SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 재연결을 유발한 sequence 이상 횟수, `Generation`은 WebSocket 연결 세대를 나타낸다. `ViewDepth` 기본값은 20이며 handler에 복사하는 상위 호가 수만 제한하고 내부 장부는 전체 snapshot과 이후 모든 가격 레벨을 유지한다. 로컬 오더북과 public stream의 상품·송신 경로가 다르면 네트워크 연결 전에 거부한다.
 
-public `Subscribe`와 `Unsubscribe`가 성공하면 현재 구독 목록을 갱신한다. 연결이 끊기면 같은 EIP route에서 heartbeat를 포함한 현재 목록을 채널별 메시지로 다시 구독한다. Coinbase는 연결 후 5초 안에 구독 메시지를 요구하며 채널 하나마다 별도 메시지를 보내야 한다.
+public `Subscribe`와 `Unsubscribe`가 성공하면 현재 구독 목록을 갱신한다. 연결이 끊기면 같은 송신 경로에서 heartbeat를 포함한 현재 목록을 채널별 메시지로 다시 구독한다. Coinbase는 연결 후 5초 안에 구독 메시지를 요구하며 채널 하나마다 별도 메시지를 보내야 한다.
 
 user stream은 Spot 주문 snapshot과 update를 `[]StreamUserEvent`로 decode한다. 상품 목록이 비어 있으면 계정 전체 상품이며, 공식 계약상 user 연결의 상품 필터를 바꾸려면 기존 연결을 닫고 새 `UserStream`을 만들어야 한다.
 
@@ -221,17 +221,17 @@ user 연결은 `user`와 `heartbeats`를 모두 인증 구독한다. 연결할 �
 
 공개 구독 메시지는 IP당 초당 8건 공식 제한보다 낮도록 기본 150ms 간격으로 직렬화한다. heartbeat는 매초 수신되며 Coinbase가 60~90초 동안 업데이트가 없는 채널을 닫지 않도록 모든 세션에서 자동 구독한다. WebSocket protocol ping도 기본 20초 간격으로 수행한다.
 
-한 WebSocket의 EIP route는 생성 후 바뀌지 않는다. 최초 연결과 모든 재연결은 생성 시 선택한 route의 private IP 전용 HTTP client로 handshake한다.
+한 WebSocket의 송신 경로는 생성 후 바뀌지 않는다. 최초 연결과 모든 재연결은 생성 시 선택한 route의 local source IP 전용 HTTP client로 handshake한다.
 
 ## 요청 제한
 
-공식 한도와 계정별 상향 한도는 변경될 수 있으므로 SDK 기본값은 공개 route와 private 계정 모두 초당 10건으로 보수적으로 설정한다. `PublicRequestsPerSecond`와 `PrivateRequestsPerSecond`로 운영 계정의 공식 한도에 맞춰 조정할 수 있다. public 설정값은 한 EIP route의 전체 REST 상한으로도 적용되어 public/private 요청을 합산한다.
+공식 한도와 계정별 상향 한도는 변경될 수 있으므로 SDK 기본값은 공개 route와 private 계정 모두 초당 10건으로 보수적으로 설정한다. `PublicRequestsPerSecond`와 `PrivateRequestsPerSecond`로 운영 계정의 공식 한도에 맞춰 조정할 수 있다. public 설정값은 한 송신 경로의 전체 REST 상한으로도 적용되어 public/private 요청을 합산한다.
 
-HTTP 429와 `Retry-After`는 공통 limiter에 반영된다. 여러 EIP route를 쓰더라도 거래소 제한이나 이용 정책을 우회하는 용도로 사용하면 안 된다.
+HTTP 429와 `Retry-After`는 공통 limiter에 반영된다. 여러 송신 경로를 쓰더라도 거래소 제한이나 이용 정책을 우회하는 용도로 사용하면 안 된다.
 
-## EIP 선택
+## 송신 경로 선택
 
-모든 메서드는 `trade.RequestOption`을 받는다. 옵션이 없으면 클라이언트 기본 route를 사용하고, `trade.WithEgressRoute`를 지정하면 해당 요청만 선택한 private IP 전용 연결 풀로 보낸다. HTTP keep-alive 풀은 route별로 분리되어 다른 EIP의 기존 연결을 재사용하지 않는다.
+모든 메서드는 `trade.RequestOption`을 받는다. 옵션이 없으면 클라이언트 기본 route를 사용하고, `trade.WithEgressRoute`를 지정하면 해당 요청만 선택한 local source IP 전용 연결 풀로 보낸다. HTTP keep-alive 풀은 route별로 분리되어 다른 송신 경로의 기존 연결을 재사용하지 않는다.
 
 ## 공식 기준 문서
 

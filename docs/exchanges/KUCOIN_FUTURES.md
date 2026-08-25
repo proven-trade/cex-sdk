@@ -14,7 +14,7 @@ private API를 사용하려면 `credential.Provider`가 반환하는 `credential
 
 기본 `Config.APIKeyVersion`은 `2`입니다. 버전 2는 Passphrase 원문을 Secret Key로 HMAC-SHA256 서명한 Base64 값을 헤더에 전송합니다. 기존 버전 1 API Key를 사용해야 할 때만 `APIKeyVersion: "1"`을 지정하며, 이 경우 Passphrase 원문을 전송합니다.
 
-`credential.Descriptor.AccountID`에는 KuCoin UID 요청 제한을 공유하는 계정의 안정적인 식별자를 넣어야 합니다. 자격증명의 `AllowedEgressRouteIDs` 밖에 있는 route는 Secret 조회 전에 차단됩니다. API Key의 IP 허용 목록에는 해당 route와 연결된 EIP를 등록해야 합니다.
+`credential.Descriptor.AccountID`에는 KuCoin UID 요청 제한을 공유하는 계정의 안정적인 식별자를 넣어야 합니다. 자격증명의 `AllowedEgressRouteIDs` 밖에 있는 route는 Secret 조회 전에 차단됩니다. API Key의 IP 허용 목록에는 해당 route와 연결된 공인 송신 IP를 등록해야 합니다.
 
 ## 지원 범위
 
@@ -70,18 +70,18 @@ private 요청은 요청 제한 대기가 끝난 뒤 자격증명을 조회하�
 
 SDK의 symbol, currency, 주문 ID는 URL 인코딩 전후가 달라지지 않는 제한된 문자만 허용합니다. Provider가 반환한 API Key, Secret, Passphrase byte slice는 요청 뒤 가능한 범위에서 덮어씁니다. Go 문자열과 HTTP 계층 내부 복사본까지 완전히 지울 수 있다는 보장은 하지 않습니다.
 
-## 요청 제한과 EIP
+## 요청 제한과 송신 경로
 
 VIP 0 기준 기본 로컬 quota는 각 30초 구간의 Public 2,000 weight와 Futures 2,000 weight입니다.
 
 | bucket | 기본 제한 | 범위 |
 |---|---:|---|
-| `kucoin-futures:route:<route>:public:30seconds` | 2,000 weight/30초 | 선택한 EIP route |
+| `kucoin-futures:route:<route>:public:30seconds` | 2,000 weight/30초 | 선택한 송신 경로 |
 | `kucoin-futures:account:<account>:futures:30seconds` | 2,000 weight/30초 | KuCoin UID의 Futures API |
 
 각 endpoint의 공식 weight를 차감합니다. `gw-ratelimit-limit`과 `gw-ratelimit-remaining`이 로컬 설정과 일치하면 관측 사용량을 반영하고, remaining이 0이면 `gw-ratelimit-reset` millisecond 동안 해당 bucket을 막습니다. `Config`의 quota는 계정 VIP 등급이나 더 보수적인 운영 정책에 맞게 조정할 수 있습니다.
 
-Public 풀은 IP 기준이므로 요청별 EIP가 각각 독립된 bucket을 사용합니다. Futures private 풀은 UID 기준이므로 EIP를 바꿔도 quota가 늘어나지 않습니다. 다중 EIP는 public 처리량 분산과 API Key IP 허용 목록·장애 격리를 위한 기능이며 private 제한 우회 용도가 아닙니다.
+Public 풀은 IP 기준이므로 요청별 송신 경로가 각각 독립된 bucket을 사용합니다. Futures private 풀은 UID 기준이므로 송신 경로를 바꿔도 quota가 늘어나지 않습니다. 다중 송신 IP는 public 처리량 분산과 API Key IP 허용 목록·장애 격리를 위한 기능이며 private 제한 우회 용도가 아닙니다.
 
 Classic public token 발급은 Public pool에서 10 weight, private token 발급은 Futures pool에서 10 weight를 사용합니다. Classic WebSocket 재연결마다 새 token을 발급하므로 연결 장애가 반복될 때 REST 요청 제한도 함께 소비됩니다. Pro public 로컬 오더북 연결은 REST token을 사용하지 않습니다.
 
@@ -138,13 +138,13 @@ return public.Run(ctx, func(_ context.Context, message futures.StreamMessage) er
 })
 ```
 
-token REST 요청과 WebSocket handshake는 모두 세션에서 선택한 같은 EIP route를 사용합니다. 연결된 세션은 route를 바꾸지 않으며 재연결 시에도 같은 route에서 token과 `connectId`를 새로 만들고 현재 구독을 복구합니다. private 세션은 token 발급 전에 자격증명의 route 허용 목록과 읽기 권한을 검사하므로 허용되지 않은 route에서는 Secret을 조회하지 않습니다.
+token REST 요청과 WebSocket handshake는 모두 세션에서 선택한 같은 송신 경로를 사용합니다. 연결된 세션은 route를 바꾸지 않으며 재연결 시에도 같은 route에서 token과 `connectId`를 새로 만들고 현재 구독을 복구합니다. private 세션은 token 발급 전에 자격증명의 route 허용 목록과 읽기 권한을 검사하므로 허용되지 않은 route에서는 Secret을 조회하지 않습니다.
 
 기본 heartbeat는 15초마다 `{type:"ping"}`을 보내고 9초 안에 같은 ID의 `{type:"pong"}`을 기다립니다. 이 값은 token 응답의 `pingInterval`보다 짧고 `pingTimeout`보다 길지 않아야 합니다. 서버가 더 엄격한 값을 반환하면 연결을 시작하지 않고 설정 오류를 반환합니다.
 
 Classic `StreamChannelLevel2`는 단일 `sequence`가 포함된 원본 증분 feed입니다. SDK가 이 Classic feed로 로컬 호가장을 자동 조립하지는 않습니다. Classic 증분 호가 API는 2026-07-15 폐기 대상으로 공지되었으므로 신규 로컬 오더북은 다음 Pro API를 사용해야 합니다. 기존 Classic 채널은 raw stream 호환을 위해 유지합니다.
 
-## Pro 로컬 오더북과 같은 EIP 복구
+## Pro 로컬 오더북과 같은 송신 경로 복구
 
 `ProOrderBookStream`은 REST token 없이 현행 Pro public endpoint에 직접 연결하고 `obu.FUTURES`, `increment@10ms`를 구독합니다. 서버가 보내는 최초 snapshot으로 상위 500단계 장부를 만들고 이후 delta의 절대 수량을 적용합니다. 수량 `0`은 해당 가격을 삭제합니다.
 
@@ -181,9 +181,9 @@ return book.Run(ctx, orderBookStream, func(_ context.Context, view futures.Local
 })
 ```
 
-snapshot은 `O == C`여야 합니다. 현재 마지막 sequence가 `lastC`일 때 `C <= lastC`인 오래된 delta는 무시하고, `O <= lastC+1`이면서 `C > lastC`인 delta만 적용합니다. `O > lastC+1`이면 gap으로 판정하여 기존 장부를 버리고 같은 EIP route로 즉시 재연결한 뒤 새 snapshot부터 복구합니다. 재연결 직후 snapshot보다 delta가 먼저 와도 불완전한 장부를 공개하지 않고 다시 연결합니다.
+snapshot은 `O == C`여야 합니다. 현재 마지막 sequence가 `lastC`일 때 `C <= lastC`인 오래된 delta는 무시하고, `O <= lastC+1`이면서 `C > lastC`인 delta만 적용합니다. `O > lastC+1`이면 gap으로 판정하여 기존 장부를 버리고 같은 송신 경로로 즉시 재연결한 뒤 새 snapshot부터 복구합니다. 재연결 직후 snapshot보다 delta가 먼저 와도 불완전한 장부를 공개하지 않고 다시 연결합니다.
 
-내부 장부는 매수·매도 각각 최우선 500단계로 제한합니다. `ViewDepth`는 1~500이며 기본값은 20입니다. `Generation`은 WebSocket 연결 세대, `SynchronizationID`는 받아들인 snapshot 세대, `GapCount`는 감지한 gap 누계를 나타냅니다. stream과 로컬 오더북의 symbol·EIP route가 다르면 네트워크 연결 전에 거절합니다.
+내부 장부는 매수·매도 각각 최우선 500단계로 제한합니다. `ViewDepth`는 1~500이며 기본값은 20입니다. `Generation`은 WebSocket 연결 세대, `SynchronizationID`는 받아들인 snapshot 세대, `GapCount`는 감지한 gap 누계를 나타냅니다. stream과 로컬 오더북의 symbol·송신 경로가 다르면 네트워크 연결 전에 거절합니다.
 
 Pro 재연결은 최초 선택한 route를 바꾸지 않으며 Classic token REST 호출을 발생시키지 않습니다. `StreamClientConfig.ProPublicWebSocketURL`은 기본적으로 공식 production endpoint를 사용하고 테스트용 `ws` 주소는 `AllowInsecureWebSocket`을 명시한 경우에만 허용합니다.
 

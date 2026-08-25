@@ -13,7 +13,7 @@
 - 주문 취소와 최근 주문 상태 조회
 - WebSocket ticker, ticker lite, L2 호가, public 체결
 - WebSocket 잔고, 체결, 미체결 주문, 포지션, 계정 원장, 운영 알림
-- 요청별 EIP route 선택
+- 요청별 송신 경로 선택
 
 조건부 주문, 주문 수정, 일괄 주문, 레버리지 설정과 자금 이동은 후속 범위다. 첫 범위 밖의 주문 종류, 잘못된 수량·가격과 지원하지 않는 WebSocket 구독 조합은 전송 전에 검증 오류로 거부한다.
 
@@ -110,11 +110,11 @@ nonce는 API key 단위다. 같은 API key를 여러 프로세스나 여러 `Cli
 
 ## 요청 제한
 
-공개 endpoint는 선택한 route, 즉 EIP별 로컬 pool을 사용한다. 공식 문서가 공개 REST의 단일 공통 수치를 명시하지 않으므로 기본값은 route별 초당 20건이며 `PublicRequestsPerSecond`로 보수적으로 낮출 수 있다.
+공개 endpoint는 선택한 route, 즉 송신 IP별 로컬 pool을 사용한다. 공식 문서가 공개 REST의 단일 공통 수치를 명시하지 않으므로 기본값은 route별 초당 20건이며 `PublicRequestsPerSecond`로 보수적으로 낮출 수 있다.
 
 private derivatives endpoint는 계정별 기본 500 point/10초 pool로 제한한다. 지갑·포지션·미체결 주문·기본 체결 조회는 2 point, `lastFillTime`을 사용한 체결 조회는 25 point, 주문 생성·취소는 10 point, 주문 상태 조회는 1 point를 차감한다. 로컬 limiter는 fixed window 근사이므로 거래소의 실제 제한과 오류 관측을 대체하지 않는다. 계정 등급이나 정책이 다르면 `DerivativesPointLimit`과 `DerivativesWindow`를 조정한다.
 
-private 제한은 EIP를 바꿔도 우회되지 않도록 account ID를 기준으로 공유한다. Secret을 조회하기 전에 API key의 route 허용 목록과 read/trade 권한을 검사한다.
+private 제한은 송신 경로를 바꿔도 우회되지 않도록 account ID를 기준으로 공유한다. Secret을 조회하기 전에 API key의 route 허용 목록과 read/trade 권한을 검사한다.
 
 HTTP 429의 `Retry-After`는 공통 limiter에 반영한다. HTTP 200이어도 `result`가 `error`이거나 `error`·`errors`가 존재하면 인증, 권한, 제한, 잔고 부족, 주문 없음, 거래소 장애 범주로 정규화한다.
 
@@ -180,9 +180,9 @@ err = book.Run(ctx, public, func(ctx context.Context, view krakenfutures.LocalOr
 })
 ```
 
-SDK는 `book_snapshot`의 전체 장부를 시작점으로 삼고, 이후 `book`의 `seq`가 직전 값보다 정확히 1 증가하는지 검사한다. `side=buy`는 bid, `side=sell`은 ask를 뜻하며 `qty=0`이면 해당 가격 레벨을 제거한다. 중복·과거 update는 무시하고 sequence gap이나 새 연결에서 snapshot보다 먼저 온 update는 장부를 폐기한 뒤 같은 EIP route로 재연결해 새 snapshot을 받는다.
+SDK는 `book_snapshot`의 전체 장부를 시작점으로 삼고, 이후 `book`의 `seq`가 직전 값보다 정확히 1 증가하는지 검사한다. `side=buy`는 bid, `side=sell`은 ask를 뜻하며 `qty=0`이면 해당 가격 레벨을 제거한다. 중복·과거 update는 무시하고 sequence gap이나 새 연결에서 snapshot보다 먼저 온 update는 장부를 폐기한 뒤 같은 송신 경로로 재연결해 새 snapshot을 받는다.
 
-`SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 재연결을 유발한 sequence 이상 횟수, `Generation`은 WebSocket 연결 세대를 나타낸다. `ViewDepth` 기본값은 20이며 handler 출력만 제한하고 내부 장부는 snapshot의 전체 가격 레벨과 이후 update를 유지한다. 상품·EIP 계약이 public stream과 다르면 네트워크 연결 전에 거부한다.
+`SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 재연결을 유발한 sequence 이상 횟수, `Generation`은 WebSocket 연결 세대를 나타낸다. `ViewDepth` 기본값은 20이며 handler 출력만 제한하고 내부 장부는 snapshot의 전체 가격 레벨과 이후 update를 유지한다. 상품·송신 경로 계약이 public stream과 다르면 네트워크 연결 전에 거부한다.
 
 private stream은 다음 feed를 지원한다.
 
@@ -210,7 +210,7 @@ private, err := streamClient.PrivateStream(
 
 private 연결은 매번 API key로 새 challenge를 요청한다. challenge 원문을 SHA-256으로 해시하고 Base64 decode한 Secret으로 HMAC-SHA-512 서명한 뒤 Base64로 인코딩한다. 모든 private 구독에는 API key, 원 challenge와 서명을 함께 보낸다. 재연결 시 자격증명을 다시 조회하고 새 challenge를 서명한 뒤 전체 feed를 다시 구독한다.
 
-Secret 조회 전에 API key의 route 허용 목록과 `read` 권한을 검사한다. 최초 handshake와 모든 재연결은 같은 EIP route를 사용한다. 거래소가 private 구독 승인 응답에서 인증 필드를 되돌려주더라도 `StreamMessage.Raw`에서는 `api_key`, `original_challenge`, `signed_challenge`를 제거한다. 자격증명 바이트와 송신 JSON은 사용 직후 덮어쓴다.
+Secret 조회 전에 API key의 route 허용 목록과 `read` 권한을 검사한다. 최초 handshake와 모든 재연결은 같은 송신 경로를 사용한다. 거래소가 private 구독 승인 응답에서 인증 필드를 되돌려주더라도 `StreamMessage.Raw`에서는 `api_key`, `original_challenge`, `signed_challenge`를 제거한다. 자격증명 바이트와 송신 JSON은 사용 직후 덮어쓴다.
 
 공식 연결 관리 지침은 60초보다 자주 ping을 보내도록 요구한다. 기본 ping 간격은 30초이며 `PingInterval`로 조정할 수 있다. challenge 응답 제한 시간은 기본 10초이고 `ChallengeTimeout`으로 설정한다.
 

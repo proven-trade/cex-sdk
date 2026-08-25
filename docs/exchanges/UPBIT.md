@@ -41,7 +41,7 @@ Secret Key는 Base64 디코딩하지 않고 HS512 서명 키로 직접 사용합
 
 ## 요청 제한
 
-SDK는 공개 API를 EIP route별 IP bucket으로, private API를 `AccountID`별 pocket bucket으로 관리합니다.
+SDK는 공개 API를 송신 경로별 IP bucket으로, private API를 `AccountID`별 pocket bucket으로 관리합니다.
 
 | 그룹 | 로컬 제한 | 범위 |
 |---|---:|---|
@@ -51,7 +51,7 @@ SDK는 공개 API를 EIP route별 IP bucket으로, private API를 `AccountID`별
 
 2026-08-21 적용된 주문 그룹 상향값 `12회/초`를 반영했습니다. 응답의 `Remaining-Req` 중 `group`과 `sec` 값을 로컬 limiter에 반영합니다. HTTP 429와 418은 `Retry-After`가 있으면 그 기간, 없으면 최소 1초 동안 관련 bucket을 차단합니다.
 
-여러 EIP를 사용해도 pocket 단위 제한은 증가하지 않습니다. route 선택은 API Key IP 허용 목록 준수와 네트워크 격리를 위한 기능이며 거래소 제한 우회 용도가 아닙니다.
+여러 공인 송신 IP를 사용해도 pocket 단위 제한은 증가하지 않습니다. route 선택은 API Key IP 허용 목록 준수와 네트워크 격리를 위한 기능이며 거래소 제한 우회 용도가 아닙니다.
 
 ## 안전한 주문 실패
 
@@ -68,7 +68,7 @@ SDK는 공개 API를 EIP route별 IP bucket으로, private API를 `AccountID`별
 | public 시세 | `wss://api.upbit.com/websocket/v1` | IP |
 | private Exchange | `wss://api.upbit.com/websocket/v1/private` | 계정 pocket |
 
-`StreamClient`의 모든 연결과 재연결은 세션 생성 시 선택한 EIP route에 고정됩니다.
+`StreamClient`의 모든 연결과 재연결은 세션 생성 시 선택한 송신 경로에 고정됩니다.
 
 ```go
 streams, err := upbit.NewStreamClient(upbit.StreamClientConfig{
@@ -172,7 +172,7 @@ err = book.Run(ctx, public, func(ctx context.Context, view upbit.LocalOrderBookV
 - 마켓 코드는 대문자로 정규화하며 `.1`, `.5`, `.15`, `.30` 호가 개수 옵션을 검증합니다.
 - KRW 마켓의 `Level`은 JSON 숫자로 전송하며, 다른 stream type에는 지정할 수 없습니다.
 - 각 이벤트가 완전한 snapshot이므로 이전 상태를 병합하지 않고 통째로 교체합니다.
-- 네트워크 재연결 시 같은 EIP와 새 ticket으로 다시 구독하며, 다음 완전한 snapshot부터 `Generation`이 증가한 view를 제공합니다.
+- 네트워크 재연결 시 같은 송신 경로와 새 ticket으로 다시 구독하며, 다음 완전한 snapshot부터 `Generation`이 증가한 view를 제공합니다.
 - 공식 오더북 응답에 sequence가 없으므로 탐지할 수 없는 gap count를 만들지 않습니다. `SnapshotID`, `Generation`, `Timestamp`, `StreamType`으로 수신과 재연결을 관측합니다.
 
 private stream은 handshake 요청의 `Authorization` 헤더에 HS512 JWT를 넣습니다.

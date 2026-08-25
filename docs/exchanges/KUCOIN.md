@@ -14,7 +14,7 @@ private API를 사용하려면 `credential.Provider`가 반환하는 `credential
 
 기본 `Config.APIKeyVersion`은 `2`입니다. 버전 2는 Passphrase 원문을 Secret Key로 HMAC-SHA256 서명한 Base64 값을 헤더에 전송합니다. 기존 버전 1 API Key를 사용해야 할 때만 `APIKeyVersion: "1"`을 지정하며, 이 경우 Passphrase 원문을 전송합니다.
 
-`credential.Descriptor.AccountID`에는 KuCoin UID 요청 제한을 공유하는 계정의 안정적인 식별자를 넣어야 합니다. 자격증명의 `AllowedEgressRouteIDs` 밖에 있는 route는 Secret 조회 전에 차단됩니다. API Key의 IP 허용 목록에는 해당 route와 연결된 EIP를 등록해야 합니다.
+`credential.Descriptor.AccountID`에는 KuCoin UID 요청 제한을 공유하는 계정의 안정적인 식별자를 넣어야 합니다. 자격증명의 `AllowedEgressRouteIDs` 밖에 있는 route는 Secret 조회 전에 차단됩니다. API Key의 IP 허용 목록에는 해당 route와 연결된 공인 송신 IP를 등록해야 합니다.
 
 ## 지원 범위
 
@@ -51,19 +51,19 @@ SDK가 지원하는 query 값은 URL 인코딩 전후가 달라지지 않도록 
 
 Provider가 반환한 API Key, Secret, Passphrase byte slice는 요청 뒤 가능한 범위에서 덮어씁니다. Go 문자열과 HTTP 계층 내부 복사본까지 완전히 지울 수 있다는 보장은 하지 않습니다.
 
-## 요청 제한과 EIP
+## 요청 제한과 송신 경로
 
 VIP 0 기준 기본 로컬 quota는 각 30초 구간의 Public 2,000 weight, Spot 4,000 weight, Management 2,000 weight입니다.
 
 | bucket | 기본 제한 | 범위 |
 |---|---:|---|
-| `kucoin:route:<route>:public:30seconds` | 2,000 weight/30초 | 선택한 EIP route |
+| `kucoin:route:<route>:public:30seconds` | 2,000 weight/30초 | 선택한 송신 경로 |
 | `kucoin:account:<account>:spot:30seconds` | 4,000 weight/30초 | KuCoin UID의 Spot 주문 API |
 | `kucoin:account:<account>:management:30seconds` | 2,000 weight/30초 | KuCoin UID의 계정 API |
 
 각 endpoint의 공식 weight를 차감합니다. 예를 들어 `Symbols`는 4, `Accounts`는 5, 주문 생성·취소는 각각 1입니다. `gw-ratelimit-limit`과 `gw-ratelimit-remaining`이 로컬 설정과 일치하면 관측 사용량을 반영하고, remaining이 0이면 `gw-ratelimit-reset` millisecond 동안 해당 bucket을 막습니다. `Config`의 quota는 계정 VIP 등급이나 더 보수적인 운영 정책에 맞게 조정할 수 있습니다.
 
-Public 풀은 IP 기준이므로 요청별 EIP가 각각 독립된 bucket을 사용합니다. Spot과 Management private 풀은 UID 기준이므로 EIP를 바꿔도 quota가 늘어나지 않습니다. 다중 EIP는 public 처리량 분산과 API Key IP 허용 목록·장애 격리를 위한 기능이며 private 제한 우회 용도가 아닙니다.
+Public 풀은 IP 기준이므로 요청별 송신 경로가 각각 독립된 bucket을 사용합니다. Spot과 Management private 풀은 UID 기준이므로 송신 경로를 바꿔도 quota가 늘어나지 않습니다. 다중 송신 IP는 public 처리량 분산과 API Key IP 허용 목록·장애 격리를 위한 기능이며 private 제한 우회 용도가 아닙니다.
 
 public token 발급은 Public pool에서 10 weight, private token 발급은 Spot pool에서 10 weight를 사용합니다. WebSocket 재연결마다 새 token을 발급하므로 연결 장애가 반복될 때 REST 요청 제한도 함께 소비됩니다.
 
@@ -115,7 +115,7 @@ return public.Run(ctx, func(_ context.Context, message kucoin.StreamMessage) err
 })
 ```
 
-token REST 요청과 WebSocket handshake는 모두 세션에서 선택한 같은 EIP route를 사용합니다. 연결된 세션은 route를 바꾸지 않으며 재연결 시에도 같은 route에서 token과 `connectId`를 새로 만들고 현재 구독을 복구합니다. private 세션은 token 발급 전에 자격증명의 route 허용 목록과 읽기 권한을 검사하므로 허용되지 않은 route에서는 Secret을 조회하지 않습니다.
+token REST 요청과 WebSocket handshake는 모두 세션에서 선택한 같은 송신 경로를 사용합니다. 연결된 세션은 route를 바꾸지 않으며 재연결 시에도 같은 route에서 token과 `connectId`를 새로 만들고 현재 구독을 복구합니다. private 세션은 token 발급 전에 자격증명의 route 허용 목록과 읽기 권한을 검사하므로 허용되지 않은 route에서는 Secret을 조회하지 않습니다.
 
 기본 heartbeat는 15초마다 `{type:"ping"}`을 보내고 9초 안에 `{type:"pong"}`을 기다립니다. 이 값은 token 응답의 `pingInterval`보다 짧고 `pingTimeout`보다 길지 않아야 합니다. 서버가 더 엄격한 값을 반환하면 연결을 시작하지 않고 설정 오류를 반환합니다.
 
@@ -123,7 +123,7 @@ Classic `StreamChannelLevel2`는 `sequenceStart`와 `sequenceEnd`가 포함된 �
 
 token과 `WebSocketToken.Raw`에는 짧은 수명의 접속 자격이 포함됩니다. 로그, 메트릭 label, 오류 문자열에 저장하지 않아야 합니다. public feed도 재연결 구간에는 이벤트 유실이 가능하며 private 주문·잔고는 연결 복구 뒤 REST 조회로 최종 상태를 재조정해야 합니다.
 
-## Pro 로컬 오더북과 같은 EIP 복구
+## Pro 로컬 오더북과 같은 송신 경로 복구
 
 `ProOrderBookStream`은 token이 필요 없는 Pro public endpoint에 연결하고 Spot `obu` 채널의 `increment@10ms`를 구독합니다. 첫 `snapshot`과 이어지는 `delta`는 최대 500호가를 제공하며, delta 수량은 증감량이 아니라 해당 가격의 새 절대 수량입니다. 수량 `0`은 가격 레벨 삭제를 뜻합니다.
 
@@ -163,9 +163,9 @@ return orderBook.Run(ctx, orderBookStream, func(
 })
 ```
 
-snapshot은 `O == C`를 만족해야 합니다. 현재 적용한 마지막 sequence가 `oldC`일 때 새 delta는 `O <= oldC + 1`이고 `C > oldC`여야 하며, `C <= oldC`인 오래된 이벤트는 무시합니다. `O > oldC + 1`인 공백이나 새 연결에서 snapshot보다 먼저 온 delta를 발견하면 장부를 버리고 선택한 같은 EIP route로 재연결해 새 snapshot부터 복구합니다.
+snapshot은 `O == C`를 만족해야 합니다. 현재 적용한 마지막 sequence가 `oldC`일 때 새 delta는 `O <= oldC + 1`이고 `C > oldC`여야 하며, `C <= oldC`인 오래된 이벤트는 무시합니다. `O > oldC + 1`인 공백이나 새 연결에서 snapshot보다 먼저 온 delta를 발견하면 장부를 버리고 선택한 같은 송신 경로로 재연결해 새 snapshot부터 복구합니다.
 
-`SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 복구를 유발한 sequence 공백 횟수, `Generation`은 WebSocket 연결 세대입니다. `ViewDepth` 기본값은 20이고 최대 500이며, 내부 장부도 Pro 채널 계약에 맞춰 매수·매도 각각 최우선 500호가로 제한합니다. 로컬 오더북과 stream의 symbol 또는 EIP가 다르면 네트워크 연결 전에 거부합니다.
+`SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 복구를 유발한 sequence 공백 횟수, `Generation`은 WebSocket 연결 세대입니다. `ViewDepth` 기본값은 20이고 최대 500이며, 내부 장부도 Pro 채널 계약에 맞춰 매수·매도 각각 최우선 500호가로 제한합니다. 로컬 오더북과 stream의 symbol 또는 송신 경로가 다르면 네트워크 연결 전에 거부합니다.
 
 Pro public 연결은 REST token을 발급하지 않으므로 token 요청 제한을 소비하지 않습니다. 연결과 재연결은 세션 생성 시 선택한 route에 고정되며 `ProPublicWebSocketURL`을 바꾸는 설정은 테스트나 KuCoin이 공지한 공식 대체 endpoint 적용에만 사용해야 합니다.
 

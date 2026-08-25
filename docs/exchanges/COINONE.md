@@ -11,7 +11,7 @@ private API를 사용하려면 `credential.Provider`가 반환하는 `credential
 | `APIKey` | Access Token |
 | `SecretKey` | Secret Key 원문 |
 
-`credential.Descriptor.AccountID`에는 요청 제한을 공유하는 코인원 포트폴리오의 안정적인 식별자를 넣어야 합니다. 자격증명의 `AllowedEgressRouteIDs` 밖에 있는 route는 Secret 조회 전에 차단됩니다. 코인원 API Key의 허용 IP에는 실제 route와 연결된 EIP를 등록해야 합니다.
+`credential.Descriptor.AccountID`에는 요청 제한을 공유하는 코인원 포트폴리오의 안정적인 식별자를 넣어야 합니다. 자격증명의 `AllowedEgressRouteIDs` 밖에 있는 route는 Secret 조회 전에 차단됩니다. 코인원 API Key의 허용 IP에는 실제 route와 연결된 공인 송신 IP를 등록해야 합니다.
 
 ## 지원 범위
 
@@ -42,19 +42,19 @@ private API를 사용하려면 `credential.Provider`가 반환하는 `credential
 
 `NonceSource`는 결정적인 테스트를 위한 주입 지점입니다. 운영에서는 기본 암호학적 난수 UUID v4 생성기를 사용해야 합니다.
 
-## 요청 제한과 EIP
+## 요청 제한과 송신 경로
 
 SDK 기본 로컬 제한은 공식 안내의 공개 1,200회/분, private 일반 80회/초, private 주문 40회/초입니다.
 
 | bucket | 기본 제한 | 범위 |
 |---|---:|---|
-| `coinone:route:<route>:public:1minute` | 1,200회/분 | 선택한 EIP route |
+| `coinone:route:<route>:public:1minute` | 1,200회/분 | 선택한 송신 경로 |
 | `coinone:account:<account>:private:1second` | 80회/초 | 포트폴리오의 일반 private API |
 | `coinone:account:<account>:order:1second` | 40회/초 | 포트폴리오의 주문 API |
 
 private 일반 API와 주문 API는 별도 bucket입니다. 응답의 `Public-Ratelimit-Remaining`, `Private-Ratelimit-Remaining`, `Private-Order-Ratelimit-Remaining`을 읽어 로컬 사용량이 거래소 관측값보다 작지 않게 보정합니다. 제한값은 `Config`에서 더 보수적으로 조정할 수 있습니다.
 
-여러 EIP를 사용해도 포트폴리오 단위 private 제한은 늘어나지 않습니다. route 선택은 API Key IP 허용 목록 준수와 네트워크 격리를 위한 기능이며 거래소 제한 우회 용도가 아닙니다.
+여러 공인 송신 IP를 사용해도 포트폴리오 단위 private 제한은 늘어나지 않습니다. route 선택은 API Key IP 허용 목록 준수와 네트워크 격리를 위한 기능이며 거래소 제한 우회 용도가 아닙니다.
 
 ## 주문 안전 계약
 
@@ -74,7 +74,7 @@ private 일반 API와 주문 API는 별도 bucket입니다. 응답의 `Public-Ra
 
 ## WebSocket
 
-`StreamClient`는 public `wss://stream.coinone.co.kr`과 private `wss://stream.coinone.co.kr/v1/private`를 분리합니다. `PublicStream`과 `PrivateStream`을 생성할 때 선택한 EIP route는 해당 세션의 모든 재연결에서도 고정됩니다.
+`StreamClient`는 public `wss://stream.coinone.co.kr`과 private `wss://stream.coinone.co.kr/v1/private`를 분리합니다. `PublicStream`과 `PrivateStream`을 생성할 때 선택한 송신 경로는 해당 세션의 모든 재연결에서도 고정됩니다.
 
 private handshake는 매 연결 세대마다 Secret Provider를 다시 조회하고 다음 JSON을 새 nonce와 현재 millisecond timestamp로 생성합니다.
 
@@ -142,7 +142,7 @@ err = book.Run(ctx, public, func(ctx context.Context, view coinone.LocalOrderBoo
 - 각 방향 최대 16단계를 검증하고 `ViewDepth` 기본값도 16으로 둡니다.
 - 로컬 오더북과 WebSocket의 통화쌍·`EgressRouteID`가 다르면 연결 전에 거부합니다.
 - `LocalOrderBook.Run`이 대상 구독의 수명주기를 소유하므로 실행 중 해당 `ORDERBOOK` 구독을 제거하지 않아야 합니다.
-- 네트워크 재연결 시 같은 EIP로 현재 구독을 복구하고 새 세대의 첫 전체 snapshot을 받아들입니다. `SnapshotID`, `Generation`, millisecond `Timestamp`, `SourceID`로 상태를 관측합니다.
+- 네트워크 재연결 시 같은 송신 경로로 현재 구독을 복구하고 새 세대의 첫 전체 snapshot을 받아들입니다. `SnapshotID`, `Generation`, millisecond `Timestamp`, `SourceID`로 상태를 관측합니다.
 - source `id`는 최신성 비교값일 뿐 연속 sequence가 아니므로 gap count를 만들거나 REST snapshot과 섞지 않습니다.
 
 ## 공통 Spot API

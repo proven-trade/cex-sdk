@@ -93,7 +93,7 @@ SDK limiter는 공식 제한의 실제 scope를 분리합니다.
 | 미체결 주문 | 계정 | 60/2초 |
 | 최근 7일 주문 이력 | 계정 | 40/2초 |
 
-EIP route를 바꾸면 IP scope만 분리됩니다. 사용자 ID 또는 사용자+상품 scope 제한은 같은 계정 bucket을 공유하므로 다중 EIP를 계정 제한 우회 수단으로 사용하지 않습니다.
+송신 경로를 바꾸면 IP scope만 분리됩니다. 사용자 ID 또는 사용자+상품 scope 제한은 같은 계정 bucket을 공유하므로 다중 송신 IP를 계정 제한 우회 수단으로 사용하지 않습니다.
 
 ## 안전한 주문 실패
 
@@ -101,9 +101,9 @@ OKX는 top-level `code`가 `0`이어도 주문 접수 항목의 `sCode`로 실�
 
 주문 생성·취소의 전송 타임아웃, 연결 단절, 읽을 수 없는 응답, HTTP 5xx, `50004`·`50013`·`50026`·`51149`처럼 실행 여부가 불명확한 결과는 `trade.ErrUnknownExecutionState`로 반환하며 자동 재시도하지 않습니다. 고유한 `ClientOrderID`로 `OrderInfo` 또는 향후 private order stream을 조회해 최종 상태를 조정해야 합니다.
 
-## 요청별 EIP 선택
+## 요청별 송신 경로 선택
 
-모든 메서드는 `trade.RequestOption`을 받습니다. 옵션이 없으면 클라이언트 기본 route를 사용하고, `trade.WithEgressRoute`를 지정하면 해당 요청만 선택한 private IP 전용 연결 풀로 보냅니다. 자격증명에 허용되지 않은 route는 Secret 조회 전에 거부됩니다.
+모든 메서드는 `trade.RequestOption`을 받습니다. 옵션이 없으면 클라이언트 기본 route를 사용하고, `trade.WithEgressRoute`를 지정하면 해당 요청만 선택한 local source IP 전용 연결 풀로 보냅니다. 자격증명에 허용되지 않은 route는 Secret 조회 전에 거부됩니다.
 
 ## WebSocket
 
@@ -167,7 +167,7 @@ public typed data는 다음 구조체로 decode할 수 있습니다.
 - `books`, `books5`, `bbo-tbt`: `[]OrderBook`
 - `candle{bar}`: `[]Candle`
 
-캔들은 `CandleStreamArgument`로 인자를 만들고 `StreamEndpointBusiness` 세션에서 구독해야 합니다. public과 business 인자를 같은 연결에 섞으면 생성 시 거부합니다. 동적 `Subscribe`와 `Unsubscribe`가 성공하면 현재 목록을 갱신하고 재연결 때 같은 endpoint와 EIP route에서 복구합니다.
+캔들은 `CandleStreamArgument`로 인자를 만들고 `StreamEndpointBusiness` 세션에서 구독해야 합니다. public과 business 인자를 같은 연결에 섞으면 생성 시 거부합니다. 동적 `Subscribe`와 `Unsubscribe`가 성공하면 현재 목록을 갱신하고 재연결 때 같은 endpoint와 송신 경로에서 복구합니다.
 
 ## Spot·SWAP 로컬 오더북
 
@@ -205,9 +205,9 @@ err = book.Run(ctx, public, func(ctx context.Context, view okx.LocalOrderBookVie
 })
 ```
 
-`books` update의 `prevSeqId`가 직전 `seqId`와 다르면 장부를 폐기하고 WebSocket을 같은 EIP route로 다시 연결해 새 snapshot을 받습니다. 약 60초 동안 변경이 없을 때 오는 빈 heartbeat update의 `prevSeqId == seqId`와 정비 중 `seqId`가 감소하는 공식 예외는 정상 처리합니다. 수량 0은 해당 가격 단계를 삭제합니다.
+`books` update의 `prevSeqId`가 직전 `seqId`와 다르면 장부를 폐기하고 WebSocket을 같은 송신 경로로 다시 연결해 새 snapshot을 받습니다. 약 60초 동안 변경이 없을 때 오는 빈 heartbeat update의 `prevSeqId == seqId`와 정비 중 `seqId`가 감소하는 공식 예외는 정상 처리합니다. 수량 0은 해당 가격 단계를 삭제합니다.
 
-2026년 6월 23일부터 JSON `books` 계열의 `checksum`은 폐지되어 항상 0이므로 SDK는 무결성 판단에 사용하지 않고 `prevSeqId`·`seqId`만 검증합니다. `SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 재연결을 유발한 sequence 이상 횟수, `Generation`은 WebSocket 연결 세대를 나타냅니다. channel·상품·EIP가 public stream과 일치하지 않으면 연결 전에 거부합니다.
+2026년 6월 23일부터 JSON `books` 계열의 `checksum`은 폐지되어 항상 0이므로 SDK는 무결성 판단에 사용하지 않고 `prevSeqId`·`seqId`만 검증합니다. `SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 재연결을 유발한 sequence 이상 횟수, `Generation`은 WebSocket 연결 세대를 나타냅니다. channel·상품·송신 경로가 public stream과 일치하지 않으면 연결 전에 거부합니다.
 
 private stream은 연결마다 Unix 초 timestamp와 `timestamp + "GET" + "/users/self/verify"` 원문으로 새 서명을 만들어 login합니다.
 
@@ -237,7 +237,7 @@ if err != nil {
 defer private.Close()
 ```
 
-private typed data는 `[]Balance`, `[]Position`, `[]Order`, `[]StreamBalanceAndPosition`으로 decode할 수 있습니다. 연결이 끊기면 같은 EIP route에서 최신 Secret과 timestamp로 다시 login한 뒤 현재 channel 목록을 구독합니다. 로그인이 명시적으로 거절되면 같은 키로 무한 재연결하지 않습니다.
+private typed data는 `[]Balance`, `[]Position`, `[]Order`, `[]StreamBalanceAndPosition`으로 decode할 수 있습니다. 연결이 끊기면 같은 송신 경로에서 최신 Secret과 timestamp로 다시 login한 뒤 현재 channel 목록을 구독합니다. 로그인이 명시적으로 거절되면 같은 키로 무한 재연결하지 않습니다.
 
 OKX는 연결당 login·subscribe·unsubscribe 요청을 합해 시간당 480회로 제한합니다. SDK는 동적 구독 명령을 기본 8초 간격으로 직렬화하고, 한 operation의 인자를 최대 100개씩 분할하며 64KiB를 넘는 요청은 거부합니다. 프로세스 전체의 IP당 연결 시도 제한 `3/초`와 private channel별 sub-account 연결 수는 운영 메트릭에서 별도로 감시해야 합니다.
 

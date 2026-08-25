@@ -13,7 +13,7 @@ private API를 사용하려면 `credential.Provider`가 반환하는 `credential
 
 API Key의 서명 방식과 `Config.SigningMode`가 일치해야 합니다. 기본값은 `SigningModeHMACSHA256`이며 ED25519 키에는 `SigningModeED25519`를 지정합니다.
 
-`credential.Descriptor.AccountID`에는 요청 제한을 공유하는 코빗 계정의 안정적인 식별자를 넣어야 합니다. `AccountSeq`는 코빗 하위 계정 번호이며 0이면 파라미터를 생략해 거래소 기본값 1을 사용합니다. 자격증명의 `AllowedEgressRouteIDs` 밖에 있는 route는 Secret 조회 전에 차단됩니다. API Key의 허용 IP에는 해당 route와 연결된 EIP를 등록해야 합니다.
+`credential.Descriptor.AccountID`에는 요청 제한을 공유하는 코빗 계정의 안정적인 식별자를 넣어야 합니다. `AccountSeq`는 코빗 하위 계정 번호이며 0이면 파라미터를 생략해 거래소 기본값 1을 사용합니다. 자격증명의 `AllowedEgressRouteIDs` 밖에 있는 route는 Secret 조회 전에 차단됩니다. API Key의 허용 IP에는 해당 route와 연결된 공인 송신 IP를 등록해야 합니다.
 
 ## 지원 범위
 
@@ -45,20 +45,20 @@ private 요청은 요청 제한 대기가 끝난 뒤 최종 파라미터를 만�
 
 Provider가 반환한 자격증명 byte slice와 생성된 서명 bytes는 요청 후 가능한 범위에서 덮어씁니다. Go 문자열과 네트워크 계층 내부 복사본까지 완전히 지울 수 있다는 보장은 하지 않습니다.
 
-## 요청 제한과 EIP
+## 요청 제한과 송신 경로
 
 SDK 기본 로컬 제한은 공개 50회/초, private 일반 50회/초, 주문 생성 30회/초, 주문 취소 30회/초입니다.
 
 | bucket | 기본 제한 | 범위 |
 |---|---:|---|
-| `korbit:route:<route>:public:1second` | 50회/초 | 선택한 EIP route |
+| `korbit:route:<route>:public:1second` | 50회/초 | 선택한 송신 경로 |
 | `korbit:account:<account>:private:1second` | 50회/초 | 계정의 일반 private API |
 | `korbit:account:<account>:order-place:1second` | 30회/초 | 계정의 주문 생성 API |
 | `korbit:account:<account>:order-cancel:1second` | 30회/초 | 계정의 주문 취소 API |
 
 응답의 `Ratelimit` 헤더에서 `remaining` 값을 읽어 로컬 사용량이 거래소 관측값보다 작지 않게 보정합니다. `429`는 요청 제한 오류로 분류하며 거래소의 `Retry-After` 처리는 공통 실행 계층을 따릅니다. 제한값은 `Config`에서 더 보수적으로 조정할 수 있습니다.
 
-여러 EIP를 사용해도 계정 단위 private 제한은 늘어나지 않습니다. route 선택은 API Key IP 허용 목록 준수와 네트워크 격리를 위한 기능이며 거래소 제한 우회 용도가 아닙니다.
+여러 공인 송신 IP를 사용해도 계정 단위 private 제한은 늘어나지 않습니다. route 선택은 API Key IP 허용 목록 준수와 네트워크 격리를 위한 기능이며 거래소 제한 우회 용도가 아닙니다.
 
 ## 주문 안전 계약
 
@@ -79,7 +79,7 @@ SDK는 HTTP 상태와 `{success,data,error}` envelope를 모두 검사합니다.
 
 ## WebSocket
 
-`StreamClient`는 public `wss://ws-api.korbit.co.kr/v2/public`과 private `wss://ws-api.korbit.co.kr/v2/private`를 분리합니다. `PublicStream`과 `PrivateStream`을 생성할 때 선택한 EIP route는 해당 세션의 모든 재연결에서도 고정됩니다.
+`StreamClient`는 public `wss://ws-api.korbit.co.kr/v2/public`과 private `wss://ws-api.korbit.co.kr/v2/private`를 분리합니다. `PublicStream`과 `PrivateStream`을 생성할 때 선택한 송신 경로는 해당 세션의 모든 재연결에서도 고정됩니다.
 
 private handshake는 매 연결 세대마다 Secret Provider를 다시 조회하고 `timestamp`, `recvWindow`를 REST와 같은 방식으로 서명합니다. 서명은 URL query의 마지막 파라미터로 넣고 API Key는 `X-KAPI-KEY` 헤더로 전송합니다. 인증 query가 포함된 endpoint는 오류와 상태 객체에 보존하지 않습니다.
 
@@ -139,15 +139,15 @@ err = book.Run(ctx, public, func(ctx context.Context, view korbit.LocalOrderBook
 - 응답에는 구독 `level`이 없으므로 같은 심볼의 orderbook 구독이 여러 개면 서로 구분할 수 없어 사전 거부합니다.
 - asks는 낮은 가격부터, bids는 높은 가격부터인 best-first 순서와 가격·수량·선택적 금액을 검증합니다.
 - 같은 연결 세대에서 data timestamp가 역행한 프레임은 무시하고, 같은 millisecond의 복수 변경은 유실하지 않도록 같은 timestamp는 허용합니다.
-- 재연결 시 같은 EIP와 현재 구독으로 복구하고 새 세대의 첫 전체 호가를 받아들입니다. `SnapshotID`, `Generation`, envelope·data timestamp, `Snapshot`으로 상태를 관측합니다.
+- 재연결 시 같은 송신 경로와 현재 구독으로 복구하고 새 세대의 첫 전체 호가를 받아들입니다. `SnapshotID`, `Generation`, envelope·data timestamp, `Snapshot`으로 상태를 관측합니다.
 - `LocalOrderBook.Run`이 대상 구독의 수명주기를 소유하므로 실행 중 해당 구독을 제거하지 않아야 합니다.
-- 공식 계약상 public 메시지는 부하 시 누락될 수 있고 sequence가 없어 누락을 탐지할 수 없습니다. 정합성이 매우 중요한 운영에서는 같은 EIP의 REST `OrderBook`을 주기적으로 조회해 view와 대조해야 합니다.
+- 공식 계약상 public 메시지는 부하 시 누락될 수 있고 sequence가 없어 누락을 탐지할 수 없습니다. 정합성이 매우 중요한 운영에서는 같은 송신 경로의 REST `OrderBook`을 주기적으로 조회해 view와 대조해야 합니다.
 
 ## 공통 Spot API
 
 `NewUnifiedSpot`은 native 클라이언트를 `unified.SpotClient`로 변환합니다. 공통 `BTC/KRW`는 Korbit의 소문자 `btc_krw`로 변환하며, 시장가 매수의 `QuoteAmount`는 `amt`, 시장가 매도의 `Quantity`는 `qty`로 전송합니다. `ClientOrderID`를 생략하면 36자 이내의 암호학적 난수 ID를 생성합니다.
 
-Korbit에 native 3분봉이 없으므로 1분봉을 `start`와 `end`로 최대 200개씩 나눠 같은 요청별 EIP에서 조회하고 공통 epoch 기준으로 합성합니다. 전체 마켓 미체결 조회는 public `CurrencyPairs` 뒤 각 거래쌍의 private `OpenOrders`를 같은 EIP에서 순회합니다.
+Korbit에 native 3분봉이 없으므로 1분봉을 `start`와 `end`로 최대 200개씩 나눠 같은 요청별 송신 경로에서 조회하고 공통 epoch 기준으로 합성합니다. 전체 마켓 미체결 조회는 public `CurrencyPairs` 뒤 각 거래쌍의 private `OpenOrders`를 같은 송신 경로에서 순회합니다.
 
 공통 잠금 잔고는 `tradeInUse + withdrawalInUse`를 decimal 문자열 정밀도로 계산합니다. `pending`, `open`, 부분 체결, 완료, 부분 체결 후 취소, 만료 상태는 공통 주문 상태로 변환합니다.
 

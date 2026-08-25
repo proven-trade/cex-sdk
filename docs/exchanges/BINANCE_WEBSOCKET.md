@@ -11,7 +11,7 @@
 
 ## public stream
 
-`StreamClient.MarketStream`은 하나의 연결에서 최대 1,024개 stream을 관리합니다. 연결은 생성할 때 선택한 EIP route에 고정되고, 끊어지면 같은 route로 재연결한 뒤 현재 구독 목록을 다시 전송합니다.
+`StreamClient.MarketStream`은 하나의 연결에서 최대 1,024개 stream을 관리합니다. 연결은 생성할 때 선택한 송신 경로에 고정되고, 끊어지면 같은 route로 재연결한 뒤 현재 구독 목록을 다시 전송합니다.
 
 ```go
 tradeStream, err := binance.SymbolMarketStream("BTCUSDT", "aggTrade")
@@ -139,7 +139,7 @@ public 구독 응답과 private WebSocket API 응답은 이벤트와 섞여 수�
 
 ## 로컬 오더북과 자동 갭 복구
 
-`LocalOrderBook`은 공식 Binance 절차에 따라 diff depth 이벤트를 먼저 버퍼링한 뒤 같은 EIP route로 REST depth snapshot을 조회합니다. 최초 적용 이벤트가 `lastUpdateId + 1`을 포함해야 동기화를 완료하며, 이후 update ID가 끊기거나 WebSocket 연결 세대가 바뀌면 새 snapshot으로 자동 재동기화합니다.
+`LocalOrderBook`은 공식 Binance 절차에 따라 diff depth 이벤트를 먼저 버퍼링한 뒤 같은 송신 경로로 REST depth snapshot을 조회합니다. 최초 적용 이벤트가 `lastUpdateId + 1`을 포함해야 동기화를 완료하며, 이후 update ID가 끊기거나 WebSocket 연결 세대가 바뀌면 새 snapshot으로 자동 재동기화합니다.
 
 ```go
 depthStream, err := binance.SymbolMarketStream("BTCUSDT", "depth")
@@ -177,7 +177,7 @@ err = book.Run(ctx, market, func(ctx context.Context, view binance.LocalOrderBoo
 - snapshot 기본 limit은 Binance 최대치인 5,000, 사용자에게 전달하는 정렬된 상위 호가는 기본 20단계입니다.
 - snapshot보다 오래된 이벤트는 버리고, 최초 연결 이벤트가 snapshot 다음 update ID를 포함하지 못하면 snapshot을 다시 조회합니다.
 - 동기화 뒤 `U > localUpdateId + 1`이면 gap으로 판단하고 해당 이벤트를 보존한 채 snapshot부터 다시 맞춥니다.
-- 재연결 세대가 바뀌면 이전 세대의 로컬 상태를 폐기하고 같은 EIP로 재동기화합니다.
+- 재연결 세대가 바뀌면 이전 세대의 로컬 상태를 폐기하고 같은 송신 경로로 재동기화합니다.
 - 동기화 중 버퍼가 `MaxBufferedEvents`를 넘으면 `ErrDepthBufferOverflow`로 종료해 손상된 장부를 노출하지 않습니다.
 - `SynchronizationID`, `Generation`, `GapCount`, `LastUpdateID`로 재동기화와 데이터 연속성을 관측할 수 있습니다.
 

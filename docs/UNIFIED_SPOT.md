@@ -78,7 +78,7 @@ Bybit UNIFIED 계정은 `availableToWithdraw`가 폐기되어 항상 빈 문자�
 
 그 밖의 초봉, 일봉, 주봉과 기준 가격 캔들은 native 클라이언트를 사용합니다. 공통 호가 깊이는 Coinone 제한에 맞춰 최대 16, 최근 체결은 최대 100, 캔들은 최대 200으로 제한합니다. Coinone은 5·10·15·16단계 중 요청 이상인 최소 깊이를 조회한 뒤 정확한 요청 수만 반환합니다.
 
-Coinbase, Kraken, Korbit, Gate.io와 MEXC는 native 3분봉이 없으므로 같은 요청별 EIP로 1분봉을 조회한 뒤 공통 epoch 기준 3분 버킷으로 합성합니다. Coinbase는 한 요청의 350개 제한, Korbit은 200개 제한에 맞춰 페이지를 나눕니다. 중복 시각은 한 번만 반영하고 OHLC와 거래량은 decimal 문자열 정밀도를 유지합니다.
+Coinbase, Kraken, Korbit, Gate.io와 MEXC는 native 3분봉이 없으므로 같은 요청별 송신 경로로 1분봉을 조회한 뒤 공통 epoch 기준 3분 버킷으로 합성합니다. Coinbase는 한 요청의 350개 제한, Korbit은 200개 제한에 맞춰 페이지를 나눕니다. 중복 시각은 한 번만 반영하고 OHLC와 거래량은 decimal 문자열 정밀도를 유지합니다.
 
 ## 주문 실패 안전성
 
@@ -96,6 +96,6 @@ MEXC에서 사용자 주문 ID를 생략하면 어댑터가 `proven-` 접두사�
 - 공통 마켓과 native 마켓 변환
 - 가격 문자열과 원본 응답 보존
 - 자산 잔고 변환
-- 요청별 EIP 옵션 전달
+- 요청별 송신 경로 옵션 전달
 
 각 어댑터는 컴파일 시 `unified.SpotClient` 구현 여부도 검사합니다.

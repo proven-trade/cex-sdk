@@ -1,0 +1,23 @@
+{
+  "exchange": "binance",
+  "routes": [
+    {
+      "id": "vultr-a",
+      "localSourceIp": "203.0.113.20",
+      "expectedPublicIp": "203.0.113.20"
+    },
+    {
+      "id": "vultr-b",
+      "localSourceIp": "203.0.113.21",
+      "expectedPublicIp": "203.0.113.21"
+    }
+  ],
+  "egressRouteId": "vultr-b",
+  "market": {
+    "base": "BTC",
+    "quote": "USDT"
+  },
+  "publicIpEndpoint": "https://api.ipify.org",
+  "checkTimeout": "10s",
+  "includeBalances": false
+}

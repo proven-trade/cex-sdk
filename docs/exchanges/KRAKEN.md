@@ -14,7 +14,7 @@
 - 미체결·종료 주문 목록과 계정 체결 이력
 - WebSocket ticker, L2 호가, 체결, OHLC, 상품 규칙
 - WebSocket 주문·체결과 잔고 account stream
-- 요청별 EIP route 선택
+- 요청별 송신 경로 선택
 
 마진 주문, 조건부 주문, 주문 수정, batch 주문과 자금 이동은 후속 범위다. Futures는 별도 package로 분리한다. 지원하지 않는 주문 종류와 WebSocket 구독 조합은 전송 전에 검증 오류로 거부한다.
 
@@ -116,7 +116,7 @@ Kraken nonce는 API key 단위다. 같은 API key를 여러 프로세스나 여�
 
 ## 요청 제한
 
-기본 공개 제한은 route, 즉 EIP별 초당 1건이다. 공식 정책상 `Trades`와 `OHLC`는 IP+상품별 제한이고 나머지는 IP별 제한이지만, 첫 범위는 모든 공개 호출을 EIP별 초당 1건으로 더 보수적으로 직렬화한다. `PublicRequestsPerSecond`로 조정할 수 있다.
+기본 공개 제한은 route, 즉 송신 IP별 초당 1건이다. 공식 정책상 `Trades`와 `OHLC`는 IP+상품별 제한이고 나머지는 IP별 제한이지만, 첫 범위는 모든 공개 호출을 송신 IP별 초당 1건으로 더 보수적으로 직렬화한다. `PublicRequestsPerSecond`로 조정할 수 있다.
 
 private account endpoint는 API key counter를 근사해 기본 40초 구간에서 20 point를 허용한다. 일반 조회는 1 point, `ClosedOrders`와 `TradesHistory`는 공식 증가량에 맞춰 4 point다. 실제 정책은 연속 감소 counter이므로 로컬 fixed window는 보수적 근사다. `PrivateCounterLimit`과 `PrivateCounterWindow`로 계정 등급에 맞춰 조정할 수 있다.
 
@@ -124,9 +124,9 @@ private account endpoint는 API key counter를 근사해 기본 40초 구간에�
 
 HTTP 429·418의 `Retry-After`는 공통 limiter에 반영한다. HTTP 200이어도 `error` 배열이 비어 있지 않으면 실패이며 인증, 권한, 제한, 잔고 부족, 주문 없음, 거래소 장애 범주로 정규화한다.
 
-## 다중 EIP
+## 다중 송신 IP
 
-public 요청 제한은 선택한 route별로 분리된다. private account와 주문 제한은 EIP를 바꿔도 계정 규칙을 우회하지 않도록 account ID와 상품을 기준으로 공유한다. Secret을 조회하기 전에 API key의 route 허용 목록을 검사한다.
+public 요청 제한은 선택한 route별로 분리된다. private account와 주문 제한은 송신 경로를 바꿔도 계정 규칙을 우회하지 않도록 account ID와 상품을 기준으로 공유한다. Secret을 조회하기 전에 API key의 route 허용 목록을 검사한다.
 
 ## WebSocket v2
 
@@ -181,9 +181,9 @@ err = public.Run(ctx, func(_ context.Context, message kraken.SpotStreamMessage) 
 })
 ```
 
-public stream은 `Subscribe`와 `Unsubscribe`로 구독을 변경하며, 연결이 끊기면 현재 구독 집합을 정렬된 순서로 복구한다. 같은 세션의 최초 연결과 모든 재연결은 생성할 때 선택한 EIP route에 고정된다.
+public stream은 `Subscribe`와 `Unsubscribe`로 구독을 변경하며, 연결이 끊기면 현재 구독 집합을 정렬된 순서로 복구한다. 같은 세션의 최초 연결과 모든 재연결은 생성할 때 선택한 송신 경로에 고정된다.
 
-private stream은 WebSocket 연결 직후 REST `GetWebSocketsToken`을 호출한다. 토큰은 발급 후 15분 안에 구독에 사용해야 하며 성공한 private 구독의 연결이 유지되는 동안에는 유효하다. 재연결 때는 이전 토큰을 재사용하지 않고 새 토큰을 발급한 뒤 `executions`와 `balances`를 다시 구독한다. REST 토큰 요청과 WebSocket handshake에는 반드시 같은 route를 사용하므로 API key IP 허용 목록과 실제 송신 EIP가 일치한다.
+private stream은 WebSocket 연결 직후 REST `GetWebSocketsToken`을 호출한다. 토큰은 발급 후 15분 안에 구독에 사용해야 하며 성공한 private 구독의 연결이 유지되는 동안에는 유효하다. 재연결 때는 이전 토큰을 재사용하지 않고 새 토큰을 발급한 뒤 `executions`와 `balances`를 다시 구독한다. REST 토큰 요청과 WebSocket handshake에는 반드시 같은 route를 사용하므로 API key IP 허용 목록과 실제 공인 송신 IP가 일치한다.
 
 ```go
 private, err := streamClient.PrivateStream(
@@ -215,7 +215,7 @@ err = book.Run(ctx, public, func(ctx context.Context, view kraken.SpotLocalOrder
 
 SDK는 한 메시지의 모든 가격 변경을 배열 순서대로 반영하고 구독 depth로 장부를 자른 뒤 CRC32 checksum을 검증한다. checksum은 구독 depth와 관계없이 ask 상위 10단계를 가격 오름차순, bid 상위 10단계를 가격 내림차순으로 이어 계산한다. 계산 중 가격·수량의 소수점만 제거하고 선행 0을 잘라내므로 `SpotStreamDecimal`의 원문 정밀도를 유지한다.
 
-checksum이 다르거나 새 연결에서 snapshot보다 update가 먼저 오면 현재 장부를 폐기하고 같은 EIP route로 재연결해 새 snapshot을 받는다. `SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 재연결을 유발한 checksum·snapshot 이상 횟수, `Generation`은 WebSocket 연결 세대를 나타낸다. `ViewDepth` 기본값은 `min(20, Depth)`이며 handler 출력만 제한하고 내부 장부는 구독 depth까지 유지한다. symbol·depth·snapshot·EIP 계약이 public stream과 다르면 네트워크 연결 전에 거부한다.
+checksum이 다르거나 새 연결에서 snapshot보다 update가 먼저 오면 현재 장부를 폐기하고 같은 송신 경로로 재연결해 새 snapshot을 받는다. `SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 재연결을 유발한 checksum·snapshot 이상 횟수, `Generation`은 WebSocket 연결 세대를 나타낸다. `ViewDepth` 기본값은 `min(20, Depth)`이며 handler 출력만 제한하고 내부 장부는 구독 depth까지 유지한다. symbol·depth·snapshot·송신 경로 계약이 public stream과 다르면 네트워크 연결 전에 거부한다.
 
 ## 공식 문서
 

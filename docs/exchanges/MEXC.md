@@ -13,7 +13,7 @@ Private API를 사용하려면 `credential.Provider`가 반환하는 `credential
 | `APIKey` | Access Key |
 | `SecretKey` | Secret Key 원문 |
 
-`credential.Descriptor.AccountID`에는 UID 요청 제한을 공유하는 계정의 안정적인 식별자를 넣어야 합니다. 자격증명의 `AllowedEgressRouteIDs` 밖에 있는 route와 필요한 읽기·거래 권한이 없는 호출은 Secret 조회 전에 차단됩니다. MEXC API Key의 IP 허용 목록에는 사용을 허용할 route에 연결된 EIP를 등록해야 합니다.
+`credential.Descriptor.AccountID`에는 UID 요청 제한을 공유하는 계정의 안정적인 식별자를 넣어야 합니다. 자격증명의 `AllowedEgressRouteIDs` 밖에 있는 route와 필요한 읽기·거래 권한이 없는 호출은 Secret 조회 전에 차단됩니다. MEXC API Key의 IP 허용 목록에는 사용을 허용할 route에 연결된 공인 송신 IP를 등록해야 합니다.
 
 ```go
 client, err := mexc.New(mexc.Config{
@@ -121,7 +121,7 @@ err = public.Run(ctx, func(_ context.Context, message mexc.StreamMessage) error 
 })
 ```
 
-`PublicStream`과 `UserDataStream`은 실행 중 `Subscribe`·`Unsubscribe`를 지원합니다. 성공적으로 보낸 변경은 재연결 복구 목록에 즉시 반영하고, 거래소가 nonzero `code`로 거절하면 해당 변경만 되돌립니다. 연결이 끊기면 같은 EIP route에서 재연결하고 현재 목록을 다시 구독합니다. 데이터가 없는 연결도 유지하도록 기본 20초마다 공식 JSON `PING`을 보내며 PONG은 `StreamMessage.Control`로 전달합니다.
+`PublicStream`과 `UserDataStream`은 실행 중 `Subscribe`·`Unsubscribe`를 지원합니다. 성공적으로 보낸 변경은 재연결 복구 목록에 즉시 반영하고, 거래소가 nonzero `code`로 거절하면 해당 변경만 되돌립니다. 연결이 끊기면 같은 송신 경로에서 재연결하고 현재 목록을 다시 구독합니다. 데이터가 없는 연결도 유지하도록 기본 20초마다 공식 JSON `PING`을 보내며 PONG은 `StreamMessage.Control`로 전달합니다.
 
 ### Private listenKey 수명주기
 
@@ -148,7 +148,7 @@ err = private.Run(ctx, func(_ context.Context, message mexc.StreamMessage) error
 })
 ```
 
-SDK는 기본 30분마다 같은 EIP로 `PUT /api/v3/userDataStream?listenKey=...`을 보내 60분 유효 시간을 연장합니다. 갱신 실패 시 기존 키를 버리고 같은 route에서 새 키를 발급해 재연결합니다. 일반 WebSocket 재연결은 아직 유효한 키를 재사용합니다. 로컬 `Close`는 연결만 종료하므로 키를 즉시 무효화해야 하면 `Client.CloseUserDataStream`에 `private.ListenKey()`를 전달해야 합니다. 현재 유효 키 목록은 `Client.UserDataStreams`로 확인할 수 있습니다.
+SDK는 기본 30분마다 같은 송신 경로로 `PUT /api/v3/userDataStream?listenKey=...`을 보내 60분 유효 시간을 연장합니다. 갱신 실패 시 기존 키를 버리고 같은 route에서 새 키를 발급해 재연결합니다. 일반 WebSocket 재연결은 아직 유효한 키를 재사용합니다. 로컬 `Close`는 연결만 종료하므로 키를 즉시 무효화해야 하면 `Client.CloseUserDataStream`에 `private.ListenKey()`를 전달해야 합니다. 현재 유효 키 목록은 `Client.UserDataStreams`로 확인할 수 있습니다.
 
 listenKey 생성은 응답 유실 시 서버에서 키가 만들어졌는지 알 수 없는 mutation입니다. 전송 오류·5xx·성공 응답 파싱 실패는 `UNKNOWN_EXECUTION_STATE`로 반환하고 자동 재시도하지 않아 키를 무제한 생성하지 않습니다. MEXC의 24시간 연결 상한은 자동 재연결로 처리하며 실제 계정 운영 smoke는 아직 대기 상태입니다.
 
@@ -191,7 +191,7 @@ err = book.Run(ctx, public, func(_ context.Context, view mexc.LocalOrderBookView
 동기화 순서는 공식 MEXC 절차를 따릅니다.
 
 1. diff depth를 먼저 연결하고 이벤트를 버퍼링합니다.
-2. 같은 EIP에서 REST snapshot을 조회합니다.
+2. 같은 송신 경로에서 REST snapshot을 조회합니다.
 3. `toVersion < lastUpdateId`인 오래된 이벤트를 버립니다.
 4. 첫 관련 이벤트가 `fromVersion <= lastUpdateId <= toVersion`을 만족해야 snapshot과 연결합니다.
 5. 이후 모든 이벤트는 `fromVersion == 이전 toVersion + 1`이어야 합니다.
@@ -207,7 +207,7 @@ REST snapshot 단계 수에는 상한이 있으므로 최초 snapshot 밖에서 
 
 `NewUnifiedSpot`은 마켓, 최근가, 호가, 공개 체결, 캔들, 잔고, 주문 생성·조회·취소·미체결 목록을 `unified.SpotClient`로 제공합니다. 공통 `BTC/USDT`는 MEXC `BTCUSDT`로 변환하며 모든 요청 옵션을 native 호출까지 전달합니다. 구분자 없는 응답 심볼은 임의로 분해하지 않고 `ExchangeInfo`의 base/quote와 원문 심볼이 정확히 일치하는지 검증합니다.
 
-공통 3분봉은 같은 EIP에서 1분봉을 요청한 뒤 epoch 기준 3개씩 합성하며 OHLC와 기준 통화 거래량의 decimal 문자열 정밀도를 유지합니다. 지정가 GTC·IOC·FOK·post-only는 각각 `LIMIT`·`IMMEDIATE_OR_CANCEL`·`FILL_OR_KILL`·`LIMIT_MAKER`로 변환합니다. 공통 주문에서 `ClientOrderID`를 생략하면 `proven-`과 암호학적 난수 hex로 구성된 31자 ID를 생성합니다.
+공통 3분봉은 같은 송신 경로에서 1분봉을 요청한 뒤 epoch 기준 3개씩 합성하며 OHLC와 기준 통화 거래량의 decimal 문자열 정밀도를 유지합니다. 지정가 GTC·IOC·FOK·post-only는 각각 `LIMIT`·`IMMEDIATE_OR_CANCEL`·`FILL_OR_KILL`·`LIMIT_MAKER`로 변환합니다. 공통 주문에서 `ClientOrderID`를 생략하면 `proven-`과 암호학적 난수 hex로 구성된 31자 ID를 생성합니다.
 
 전체 미체결은 `SelfSymbols`의 API Key 허용 거래쌍을 `ExchangeInfo`와 대조한 뒤 최대 5개씩 묶어 조회합니다. 중복·알 수 없는 심볼이나 요청 묶음 밖의 주문이 응답되면 결과를 반환하지 않습니다. 허용 거래쌍이 많으면 여러 private 요청과 UID quota를 소비하므로 호출자가 `AllMarkets: true`를 명시한 경우에만 실행됩니다.
 
@@ -222,7 +222,7 @@ Private 요청은 limiter 대기가 끝난 뒤 자격증명을 조회하고 다�
 
 `Config.ReceiveWindow` 기본값은 5초이며 1ms 이상 60초 이하만 허용합니다. Provider가 반환한 API Key와 Secret byte slice는 요청 뒤 가능한 범위에서 덮어씁니다. Go 문자열과 HTTP 계층 내부 복사본까지 완전히 지울 수 있다는 보장은 하지 않습니다.
 
-## 생성과 요청별 EIP 선택
+## 생성과 요청별 송신 경로 선택
 
 ```go
 client, err := mexc.New(mexc.Config{
@@ -240,7 +240,7 @@ book, err := client.OrderBook(
 )
 ```
 
-요청 옵션을 생략하면 `DefaultEgressRouteID`를 사용하고 `trade.WithEgressRoute`를 지정하면 해당 요청만 다른 route로 보냅니다. 실제 public IP 선택은 공통 전송 계층이 route에 연결된 secondary private IPv4로 소켓을 bind하여 수행합니다. Public 제한은 route마다 분리되고 private 요청은 선택한 route 제한과 계정 제한을 함께 차감합니다.
+요청 옵션을 생략하면 `DefaultEgressRouteID`를 사용하고 `trade.WithEgressRoute`를 지정하면 해당 요청만 다른 route로 보냅니다. 실제 public IP 선택은 공통 전송 계층이 route의 local source IPv4로 소켓을 bind하여 수행합니다. Public 제한은 route마다 분리되고 private 요청은 선택한 route 제한과 계정 제한을 함께 차감합니다.
 
 ## 요청 제한과 차단 응답
 
@@ -248,8 +248,8 @@ book, err := client.OrderBook(
 
 | bucket | 기본 제한 | 범위 |
 |---|---:|---|
-| `mexc:route:<route>:public:<endpoint>:10seconds` | 500 weight/10초 | 선택한 EIP route의 공개 endpoint |
-| `mexc:route:<route>:private:<endpoint>:10seconds` | 500 weight/10초 | 선택한 EIP route의 private endpoint |
+| `mexc:route:<route>:public:<endpoint>:10seconds` | 500 weight/10초 | 선택한 송신 경로의 공개 endpoint |
+| `mexc:route:<route>:private:<endpoint>:10seconds` | 500 weight/10초 | 선택한 송신 경로의 private endpoint |
 | `mexc:account:<account>:private:<endpoint>:10seconds` | 500 weight/10초 | UID의 private endpoint |
 | `mexc:account:<account>:order:1second` | 5회/초 | UID의 주문 생성 |
 | `mexc:account:<account>:cancel:1second` | 50회/초 | UID의 주문 취소 |
@@ -258,7 +258,7 @@ book, err := client.OrderBook(
 
 `Config.EndpointQuota` 기본값은 500이며 private 초당 제한은 `OrderQuota`, `CancelQuota`, `PrivateReadQuota`, `AccountQuota`로 더 낮출 수 있습니다. 2025년 제한표와 endpoint 본문의 계정 조회 제한이 다르므로 계정 조회에는 더 보수적인 2회/초를 적용합니다. 서버가 HTTP 418 또는 429와 `Retry-After`를 반환하면 요청이 차감한 route·계정 bucket을 지정된 기간 동안 차단합니다. 429 이후 계속 호출하면 IP ban 기간이 길어질 수 있으므로 호출자가 별도 우회 재시도를 추가하면 안 됩니다.
 
-EIP를 바꿔도 UID bucket은 공유됩니다. 다중 EIP 기능은 정상적인 public 트래픽 분산, API Key 허용 IP 일치, 장애 격리를 위한 기능이며 MEXC의 제한이나 이용 정책을 우회하는 용도로 사용하면 안 됩니다.
+송신 경로를 바꿔도 UID bucket은 공유됩니다. 다중 송신 IP 기능은 정상적인 public 트래픽 분산, API Key 허용 IP 일치, 장애 격리를 위한 기능이며 MEXC의 제한이나 이용 정책을 우회하는 용도로 사용하면 안 됩니다.
 
 ## 주문 안전 계약
 
@@ -276,7 +276,7 @@ EIP를 바꿔도 UID bucket은 공유됩니다. 다중 EIP 기능은 정상적�
 
 `DefaultSymbols`와 `SelfSymbols`는 공식 문서 예시의 성공 code `200`과 production에서 사용하는 `0`을 모두 허용합니다. 다른 nonzero code, HTTP 오류, JSON 파싱 실패는 `trade.APIError`로 변환합니다. 인증·권한·잔고·주문 없음·요청 제한·거래소 장애 코드를 공통 category로 분류하고 MEXC 원본 code·message와 요청 ID를 함께 보존합니다.
 
-자동 테스트는 HMAC 서명과 실제 query 일치, 요청별 route 선택, route·권한 사전 검사, Secret 덮어쓰기, IP·UID 요청 제한, 주문 검증, 원본 JSON 보존, 오류 분류와 mutation 불명확 상태를 검증합니다. WebSocket 테스트는 공식 Protobuf field 번호별 공개·private 이벤트 해석, 잘못된 wire type·UTF-8 거절, JSON 제어 응답, listenKey 수명주기, JSON PING, 구독 rollback, 동일 EIP 재연결과 race 안전성을 검증합니다. 로컬 오더북 테스트는 공식 snapshot bridge 경계, 엄격한 다음 version, 중복·역행·전방 갭, snapshot 실패·불일치 재시도, 재연결 세대, 버퍼 상한과 동일 EIP REST·WebSocket 통합을 검증합니다. 공통 적합성 테스트는 마켓·시세·잔고·주문 변환, 3분봉 합성, 전체 미체결 5개 묶음과 EIP 전달을 검증합니다. 공통 live smoke CLI 연결은 구현됐으며 실제 MEXC 계정과 지정 EIP를 이용한 읽기·주문 smoke는 아직 대기 상태입니다.
+자동 테스트는 HMAC 서명과 실제 query 일치, 요청별 route 선택, route·권한 사전 검사, Secret 덮어쓰기, IP·UID 요청 제한, 주문 검증, 원본 JSON 보존, 오류 분류와 mutation 불명확 상태를 검증합니다. WebSocket 테스트는 공식 Protobuf field 번호별 공개·private 이벤트 해석, 잘못된 wire type·UTF-8 거절, JSON 제어 응답, listenKey 수명주기, JSON PING, 구독 rollback, 동일 송신 경로 재연결과 race 안전성을 검증합니다. 로컬 오더북 테스트는 공식 snapshot bridge 경계, 엄격한 다음 version, 중복·역행·전방 갭, snapshot 실패·불일치 재시도, 재연결 세대, 버퍼 상한과 동일 송신 경로 REST·WebSocket 통합을 검증합니다. 공통 적합성 테스트는 마켓·시세·잔고·주문 변환, 3분봉 합성, 전체 미체결 5개 묶음과 송신 경로 전달을 검증합니다. 공통 live smoke CLI 연결은 구현됐으며 실제 MEXC 계정과 지정 송신 경로를 이용한 읽기·주문 smoke는 아직 대기 상태입니다.
 
 ## 공식 기준
 

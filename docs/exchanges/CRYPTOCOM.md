@@ -130,7 +130,7 @@ private 본문의 `id`, `nonce`, 주문 ID, 시각, 개수와 decimal은 문자�
 - `CCY_PAIR` 상품, ticker, order book, 체결, candle, 잔고와 주문 계약 정규화 구현 완료
 - MARKET 매수·매도 수량 의미와 GTC·IOC·FOK·POST_ONLY 변환·검증 구현 완료
 - 원본 응답과 미래 필드는 민감 정보를 제외하고 보존
-- 공통 적합성 스위트와 모든 요청의 EIP 전달 검증 구현 완료
+- 공통 적합성 스위트와 모든 요청의 송신 경로 전달 검증 구현 완료
 
 공통 `Balances`는 `position_balances`의 `max_withdrawal_balance`와 `reserved_qty`를 각각 `Available`과 `Locked`로 매핑한다. 공통 3분 캔들은 공식 1분 캔들을 epoch 기준으로 묶고 decimal 문자열을 정수 비례 값으로 더해 부동소수점 정밀도 손실을 피한다.
 
@@ -144,7 +144,7 @@ private 본문의 `id`, `nonce`, 주문 ID, 시각, 개수와 decimal은 문자�
 - 연결 직후 비례 요청 제한을 피하기 위한 공식 권장 1초 준비 구간 구현 완료
 - market 100회/초와 user 150회/초 command 제한 구현 완료
 - 동적 구독·해지의 실패 응답 rollback 구현 완료
-- market·user 재연결마다 같은 EIP 유지와 목표 구독 복구 구현 완료
+- market·user 재연결마다 같은 송신 경로 유지와 목표 구독 복구 구현 완료
 
 | 공개 채널 | SDK 채널 | 채널 문자열 |
 |---|---|---|
@@ -195,7 +195,7 @@ private, err := streamClient.PrivateStream(
 
 현행 명시적 10·50단계 `SNAPSHOT_AND_UPDATE`를 사용하도록 구현 완료했다. 최초 `book` full snapshot의 `u`를 기준으로 `book.update`의 `pu`가 직전 `u`와 같은지 검사하고, 수량 0은 해당 가격을 삭제한다. 서버가 큰 delta 대신 full snapshot을 보내면 기존 장부를 원자적으로 교체한다.
 
-`pu` gap, update ID 역행, snapshot 이전 delta 또는 연결 세대 변경이 발생하면 불완전한 view를 공개하지 않고 같은 EIP route로 재구독해 새 full snapshot부터 복구한다. 공식 REST book에는 WebSocket `u`와 연결할 sequence가 없으므로 임의로 결합하지 않는다. 빈 delta heartbeat도 유효한 `u`·`pu` 연결로 처리한다.
+`pu` gap, update ID 역행, snapshot 이전 delta 또는 연결 세대 변경이 발생하면 불완전한 view를 공개하지 않고 같은 송신 경로로 재구독해 새 full snapshot부터 복구한다. 공식 REST book에는 WebSocket `u`와 연결할 sequence가 없으므로 임의로 결합하지 않는다. 빈 delta heartbeat도 유효한 `u`·`pu` 연결로 처리한다.
 
 ```go
 book, err := cryptocom.NewLocalOrderBook(cryptocom.LocalOrderBookConfig{
@@ -237,8 +237,8 @@ err = book.Run(ctx, public, func(_ context.Context, view cryptocom.LocalOrderBoo
 
 ## 운영 제약
 
-- API Key는 공식 IP whitelist에 실제 EIP를 등록하고 SDK route 허용 목록과 일치시킨다.
-- 여러 EIP는 키 분리와 가용성을 위해 사용하며 거래소 요청 제한이나 지역 정책을 우회하지 않는다.
+- API Key는 공식 IP whitelist에 실제 공인 송신 IP를 등록하고 SDK route 허용 목록과 일치시킨다.
+- 여러 공인 송신 IP는 키 분리와 가용성을 위해 사용하며 거래소 요청 제한이나 지역 정책을 우회하지 않는다.
 - Production과 UAT endpoint·credential은 혼용하지 않는다.
 - 지역 제한 우회용 도메인이나 proxy 기능은 제공하지 않는다.
 - 입출금, 내부 이체, staking 실행은 프로젝트 비목표에 따라 구현하지 않는다.

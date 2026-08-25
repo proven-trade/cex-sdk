@@ -29,7 +29,7 @@ SIGNED 요청은 URL 인코딩한 최종 파라미터에 HMAC SHA-256을 적용�
 2. IP weight와 계정 주문 count 제한을 확보합니다.
 3. Secret을 조회합니다.
 4. 보정된 현재 시간과 `recvWindow`를 넣습니다.
-5. 최종 쿼리에 서명하고 선택한 EIP route로 전송합니다.
+5. 최종 쿼리에 서명하고 선택한 송신 경로로 전송합니다.
 
 기본 `recvWindow`는 5초이며 최대 1분까지 설정할 수 있습니다. `ServerTime`은 요청 왕복 중간 시점을 기준으로 clock offset을 보정합니다.
 
@@ -39,13 +39,13 @@ SIGNED 요청은 URL 인코딩한 최종 파라미터에 HMAC SHA-256을 적용�
 
 | 제한 | 초기값 | 범위 |
 |---|---:|---|
-| 요청 weight | 2400/분 | EIP route |
+| 요청 weight | 2400/분 | 송신 경로 |
 | 주문 count | 300/10초 | 계정 |
 | 주문 count | 1200/분 | 계정 |
 
 `ExchangeInfo` 응답의 `REQUEST_WEIGHT`와 `ORDERS` 규칙으로 값을 동적으로 갱신합니다. 응답의 `X-MBX-USED-WEIGHT-1M`, `X-MBX-ORDER-COUNT-10S`, `X-MBX-ORDER-COUNT-1M`도 로컬 limiter에 반영합니다.
 
-주문 생성은 IP weight를 소비하지 않지만 계정 주문 count를 소비합니다. 여러 EIP를 사용해도 계정 주문 제한은 늘어나지 않습니다.
+주문 생성은 IP weight를 소비하지 않지만 계정 주문 count를 소비합니다. 여러 공인 송신 IP를 사용해도 계정 주문 제한은 늘어나지 않습니다.
 
 ## 포지션 모드와 주문 검증
 
@@ -80,7 +80,7 @@ SDK 실행기는 mutation을 자동 재시도하지 않습니다. 특히 불명�
 | `StreamRoutePublic` | `wss://fstream.binance.com/public/stream` | `BookTickerStream`, `DiffDepthStream`, `PartialDepthStream` |
 | `StreamRouteMarket` | `wss://fstream.binance.com/market/stream` | `AggregateTradeStream`, `MarkPriceStream`, `KlineStream`, `TickerStream` |
 
-한 연결에는 같은 route의 구독만 넣을 수 있습니다. 서로 다른 route를 섞으면 네트워크 연결 전에 검증 오류를 반환합니다. 연결당 최대 구독 수는 1,024개이며, `Subscribe`와 `Unsubscribe` 명령은 기본 250ms 간격으로 직렬화합니다. 연결이 끊어지면 동일한 EIP route로 재연결한 뒤 현재 구독 목록을 정렬해 다시 전송합니다.
+한 연결에는 같은 route의 구독만 넣을 수 있습니다. 서로 다른 route를 섞으면 네트워크 연결 전에 검증 오류를 반환합니다. 연결당 최대 구독 수는 1,024개이며, `Subscribe`와 `Unsubscribe` 명령은 기본 250ms 간격으로 직렬화합니다. 연결이 끊어지면 동일한 송신 경로로 재연결한 뒤 현재 구독 목록을 정렬해 다시 전송합니다.
 
 ```go
 aggregate, err := usdm.AggregateTradeStream("BTCUSDT")
@@ -125,7 +125,7 @@ err = market.Run(ctx, func(ctx context.Context, message usdm.MarketStreamMessage
 
 typed 공개 이벤트는 aggregate trade, 마크가, 캔들, 24시간 ticker, 최우선 호가와 호가 갱신을 제공합니다. 추가 native 이벤트도 `Payload`와 `Raw`에서 손실 없이 decode할 수 있습니다.
 
-## 로컬 오더북과 같은 EIP 복구
+## 로컬 오더북과 같은 송신 경로 복구
 
 `LocalOrderBook`은 diff depth WebSocket을 먼저 열어 이벤트를 버퍼링하고, 같은 `EgressRouteID`로 `/fapi/v1/depth` snapshot을 조회합니다. REST와 WebSocket route가 다르거나 부분 호가 구독만 있으면 네트워크 작업 전에 거부합니다.
 
@@ -158,13 +158,13 @@ err = book.Run(ctx, market, func(ctx context.Context, view usdm.LocalOrderBookVi
 })
 ```
 
-공식 sequence 규칙에 따라 snapshot의 `lastUpdateId`보다 `u`가 작은 이벤트만 버리고, 첫 처리 이벤트가 `U <= lastUpdateId <= u`인지 확인합니다. 동기화 후에는 모든 새 이벤트의 `pu`가 직전 `u`와 같은지 검사합니다. `pu` 불일치나 WebSocket 연결 세대 변경이 감지되면 기존 장부를 폐기하고 같은 EIP에서 snapshot을 다시 받아 복구합니다. 수량은 절대값으로 반영하고 0이면 해당 가격 단계를 삭제합니다.
+공식 sequence 규칙에 따라 snapshot의 `lastUpdateId`보다 `u`가 작은 이벤트만 버리고, 첫 처리 이벤트가 `U <= lastUpdateId <= u`인지 확인합니다. 동기화 후에는 모든 새 이벤트의 `pu`가 직전 `u`와 같은지 검사합니다. `pu` 불일치나 WebSocket 연결 세대 변경이 감지되면 기존 장부를 폐기하고 같은 송신 경로에서 snapshot을 다시 받아 복구합니다. 수량은 절대값으로 반영하고 0이면 해당 가격 단계를 삭제합니다.
 
 snapshot 기본 limit은 1,000이고 `ViewDepth` 기본값은 20입니다. `SynchronizationID`는 성공한 초기화 횟수, `GapCount`는 감지한 sequence gap 횟수이며 `Generation`은 WebSocket 재연결 세대를 나타냅니다. 동기화 중 이벤트가 `MaxBufferedEvents`를 넘으면 `ErrDepthBufferOverflow`로 안전하게 종료합니다.
 
 ## private User Data Stream
 
-private 연결에는 REST 자격증명이 설정된 `Client`를 `StreamClientConfig.RESTClient`로 전달합니다. SDK는 연결할 때 `POST /fapi/v1/listenKey`로 키를 발급하고, 기본 50분마다 `PUT /fapi/v1/listenKey`로 수명을 연장합니다. 두 REST 요청과 WebSocket 연결은 모두 세션을 생성할 때 선택한 하나의 EIP route를 사용합니다.
+private 연결에는 REST 자격증명이 설정된 `Client`를 `StreamClientConfig.RESTClient`로 전달합니다. SDK는 연결할 때 `POST /fapi/v1/listenKey`로 키를 발급하고, 기본 50분마다 `PUT /fapi/v1/listenKey`로 수명을 연장합니다. 두 REST 요청과 WebSocket 연결은 모두 세션을 생성할 때 선택한 하나의 송신 경로를 사용합니다.
 
 ```go
 streams, err := usdm.NewStreamClient(usdm.StreamClientConfig{
@@ -193,7 +193,7 @@ err = userData.Run(ctx, func(ctx context.Context, message usdm.UserDataStreamMes
 })
 ```
 
-세션 생성 시 read 권한과 route 허용 목록을 Secret 조회 전에 검사합니다. listenKey 갱신 실패, 키 변경 또는 `listenKeyExpired` 이벤트가 발생하면 현재 연결만 닫고 같은 EIP에서 새 키를 받아 재연결합니다. typed private 이벤트는 계정·잔고·포지션, 주문·체결, 마진콜과 listenKey 만료를 포함합니다.
+세션 생성 시 read 권한과 route 허용 목록을 Secret 조회 전에 검사합니다. listenKey 갱신 실패, 키 변경 또는 `listenKeyExpired` 이벤트가 발생하면 현재 연결만 닫고 같은 송신 경로에서 새 키를 받아 재연결합니다. typed private 이벤트는 계정·잔고·포지션, 주문·체결, 마진콜과 listenKey 만료를 포함합니다.
 
 `UserDataStream.Close`는 로컬 WebSocket 세션을 종료합니다. 서버 listenKey를 즉시 무효화해야 하면 같은 route를 지정해 `CloseUserDataStream`도 호출합니다.
 

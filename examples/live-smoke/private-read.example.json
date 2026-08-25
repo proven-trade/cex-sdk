@@ -3,12 +3,12 @@
   "routes": [
     {
       "id": "seoul-a",
-      "localPrivateIp": "10.0.10.21",
+      "localSourceIp": "10.0.10.21",
       "expectedPublicIp": "203.0.113.10"
     },
     {
       "id": "seoul-b",
-      "localPrivateIp": "10.0.10.22",
+      "localSourceIp": "10.0.10.22",
       "expectedPublicIp": "203.0.113.11"
     }
   ],
@@ -17,7 +17,7 @@
     "base": "BTC",
     "quote": "USDT"
   },
-  "publicIpEndpoint": "https://checkip.amazonaws.com",
+  "publicIpEndpoint": "https://api.ipify.org",
   "checkTimeout": "10s",
   "includeBalances": true,
   "credentials": {

@@ -2,7 +2,7 @@
 
 ## 목적
 
-`smoke.SpotReadRunner`는 실제 거래소의 Spot 읽기 API와 지정 EIP를 한 번에 검증합니다. 자동 단위 테스트가 확인할 수 없는 EC2 네트워크 설정, EIP 연결 관계, 거래소 접근 정책과 실제 응답 계약을 운영 환경에서 확인하기 위한 도구입니다.
+`smoke.SpotReadRunner`는 실제 거래소의 Spot 읽기 API와 지정 송신 경로를 한 번에 검증합니다. 자동 단위 테스트가 확인할 수 없는 호스트 네트워크 설정, 클라우드의 IP 연결·NAT 관계, 거래소 접근 정책과 실제 응답 계약을 운영 환경에서 확인하기 위한 도구입니다.
 
 읽기 smoke는 주문을 생성하거나 취소하지 않습니다. private 검사를 켜도 잔고 조회만 수행합니다. 거래 smoke는 주문이 발생하므로 별도의 명시적 승인과 제한된 계정이 필요하며 이 실행기에 포함하지 않습니다.
 
@@ -18,11 +18,11 @@
 6. 1분 캔들의 OHLC 범위와 거래량 확인
 7. 선택적으로 private 잔고 필드 확인
 
-EIP 검사를 통과하려면 route에 `ExpectedPublicIP`가 반드시 설정돼 있어야 합니다. 실제 관측 IP와 기대 EIP가 다르면 거래소 API가 정상이어도 전체 결과는 실패합니다.
+송신 IP 검사를 통과하려면 route에 `ExpectedPublicIP`가 반드시 설정돼 있어야 합니다. 실제 관측 IP와 기대 공인 IP가 다르면 거래소 API가 정상이어도 전체 결과는 실패합니다.
 
 ## 사용 예시
 
-CLI는 Binance, Bitget, Upbit, Bybit, OKX, Coinbase Advanced, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io, MEXC, HTX와 Crypto.com의 공통 Spot 어댑터를 선택할 수 있습니다. 먼저 [public 예제 설정](../examples/live-smoke/public.example.json)을 복사해 실제 EC2 private IP와 연결된 EIP로 바꿉니다.
+CLI는 Binance, Bitget, Upbit, Bybit, OKX, Coinbase Advanced, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io, MEXC, HTX와 Crypto.com의 공통 Spot 어댑터를 선택할 수 있습니다. 먼저 [NAT형 public 예제](../examples/live-smoke/public.example.json) 또는 [Vultr 직접 할당형 public 예제](../examples/live-smoke/public-vultr.example.json)를 복사해 실제 호스트의 `localSourceIp`와 외부에서 보일 `expectedPublicIp`로 바꿉니다.
 
 ```bash
 go run ./cmd/livesmoke -config ./live-smoke.json
@@ -66,7 +66,7 @@ return runErr
 
 `Client`에는 각 거래소의 `NewUnifiedSpot`으로 만든 공통 Spot 어댑터를 전달합니다. `IncludeBalances`가 `true`이면 read 권한과 선택 route가 허용된 자격증명이 클라이언트에 설정돼 있어야 합니다.
 
-CLI 설정의 `routes`에는 여러 private-IP/EIP 쌍을 등록할 수 있고 `egressRouteId`로 이번 실행에 사용할 하나를 선택합니다. 모든 local private IP는 실행 인스턴스의 네트워크 인터페이스에 실제로 할당돼 있어야 합니다.
+CLI 설정의 `routes`에는 여러 source-IP/public-IP 쌍을 등록할 수 있고 `egressRouteId`로 이번 실행에 사용할 하나를 선택합니다. 모든 `localSourceIp`는 실행 인스턴스의 네트워크 인터페이스에 실제로 할당돼 있어야 합니다. AWS NAT형은 private source IP와 EIP를, Vultr 직접 할당형은 같은 public IP를 두 필드에 기록합니다.
 
 ## 증적 보안
 
@@ -75,10 +75,10 @@ JSON 증적에는 다음 정보만 기록합니다.
 - 거래소, 상품, 마켓과 route ID
 - 검사 시작·종료 시각과 소요 시간
 - native market과 응답 항목 수
-- local private IP, 기대 EIP와 관측 EIP
+- local source IP, 기대 공인 IP와 관측 공인 IP
 - 공통 오류 분류, 거래소 오류 코드와 HTTP 상태
 
-원본 응답, 잔고 수량, 체결 가격, API Key, Secret, Passphrase와 거래소 오류 메시지는 기록하지 않습니다. 거래소 API 검사 하나가 실패해도 가능한 나머지 검사를 계속 실행하므로 한 결과에서 전체 상태를 확인할 수 있습니다. 단, EIP 검사가 실패하면 의도하지 않은 공인 IP로 요청을 보내지 않도록 모든 거래소 검사를 `skipped` 처리합니다.
+원본 응답, 잔고 수량, 체결 가격, API Key, Secret, Passphrase와 거래소 오류 메시지는 기록하지 않습니다. 거래소 API 검사 하나가 실패해도 가능한 나머지 검사를 계속 실행하므로 한 결과에서 전체 상태를 확인할 수 있습니다. 단, 송신 IP 검사가 실패하면 의도하지 않은 공인 IP로 요청을 보내지 않도록 모든 거래소 검사를 `skipped` 처리합니다. `localSourceIp`로 필드명이 변경된 현재 증적 스키마 버전은 2입니다.
 
 ## 실제 주문 smoke 안전 계약
 
@@ -87,7 +87,7 @@ JSON 증적에는 다음 정보만 기록합니다.
 - `Confirmation`이 `smoke.RealOrderConfirmation`과 정확히 일치
 - `Price × Quantity`가 `MaxNotional` 이하
 - 시장가가 아닌 post-only 지정가 주문
-- 주문 직전에 선택 EIP가 기대 공인 IP와 일치
+- 주문 직전에 선택한 송신 경로의 관측 IP가 기대 공인 IP와 일치
 - 매수가는 현재 최우선 매도호가보다 낮고 매도가는 현재 최우선 매수호가보다 높음
 - 비어 있지 않은 고유 `ClientOrderID` 사용
 
@@ -119,4 +119,4 @@ post-only는 주문이 접수되는 순간 taker 체결을 막지만, 호가에 
 
 ## 상태 갱신 기준
 
-지원 매트릭스의 `live_read_smoke`는 실행기가 존재한다는 이유만으로 완료 처리하지 않습니다. 실제 배포 대상 인스턴스에서 해당 거래소·상품·EIP 조합의 JSON 결과가 `passed: true`이고, 실행 시각과 설정 변경 이력을 함께 보관했을 때만 `implemented`로 변경합니다.
+지원 매트릭스의 `live_read_smoke`는 실행기가 존재한다는 이유만으로 완료 처리하지 않습니다. 실제 배포 대상 인스턴스에서 해당 거래소·상품·송신 경로 조합의 JSON 결과가 `passed: true`이고, 실행 시각과 설정 변경 이력을 함께 보관했을 때만 `implemented`로 변경합니다.

@@ -72,7 +72,7 @@ timestamp + apiKey + receiveWindow + queryStringOrJSONBody
 - private 조회: `20/account/초`
 - 주문 생성·취소: `10/account/초`
 
-서버가 `X-Bapi-Limit`과 `X-Bapi-Limit-Status`를 반환하고 해당 endpoint의 설정 한도와 일치하면 로컬 사용량에 반영합니다. 계정 bucket은 EIP route를 바꿔도 공유되므로 다중 EIP를 UID 제한 우회 수단으로 사용하지 않습니다. VIP 또는 Pro 등급에서 실제 한도가 다르면 해당 등급을 반영하는 설정 확장이 필요합니다.
+서버가 `X-Bapi-Limit`과 `X-Bapi-Limit-Status`를 반환하고 해당 endpoint의 설정 한도와 일치하면 로컬 사용량에 반영합니다. 계정 bucket은 송신 경로를 바꿔도 공유되므로 다중 송신 IP를 UID 제한 우회 수단으로 사용하지 않습니다. VIP 또는 Pro 등급에서 실제 한도가 다르면 해당 등급을 반영하는 설정 확장이 필요합니다.
 
 ## 안전한 주문 실패
 
@@ -80,9 +80,9 @@ timestamp + apiKey + receiveWindow + queryStringOrJSONBody
 
 가능하면 고유한 `OrderLinkID`를 지정하고 `OrderInfo` 또는 향후 private order stream으로 최종 상태를 확인해야 합니다. 성공한 생성·취소 응답도 접수 결과이므로 최종 주문 상태를 뜻하지 않습니다.
 
-## 요청별 EIP 선택
+## 요청별 송신 경로 선택
 
-모든 메서드는 마지막 인자로 `trade.RequestOption`을 받습니다. 옵션이 없으면 클라이언트 기본 route를 사용하고, `trade.WithEgressRoute`를 지정하면 해당 요청만 다른 private IP 전용 연결 풀로 보냅니다.
+모든 메서드는 마지막 인자로 `trade.RequestOption`을 받습니다. 옵션이 없으면 클라이언트 기본 route를 사용하고, `trade.WithEgressRoute`를 지정하면 해당 요청만 다른 local source IP 전용 연결 풀로 보냅니다.
 
 ```go
 book, err := client.OrderBook(
@@ -107,7 +107,7 @@ public endpoint는 category별로 분리됩니다.
 | 운영 | `wss://stream.bybit.com/v5/public/spot` | `wss://stream.bybit.com/v5/public/linear` | `wss://stream.bybit.com/v5/private` |
 | Testnet | `wss://stream-testnet.bybit.com/v5/public/spot` | `wss://stream-testnet.bybit.com/v5/public/linear` | `wss://stream-testnet.bybit.com/v5/private` |
 
-public stream은 생성 시 category와 EIP route를 고정합니다. 동적 구독·해제가 성공하면 현재 topic 목록을 갱신하고, 연결이 끊기면 같은 endpoint와 route에서 전체 목록을 다시 구독합니다.
+public stream은 생성 시 category와 송신 경로를 고정합니다. 동적 구독·해제가 성공하면 현재 topic 목록을 갱신하고, 연결이 끊기면 같은 endpoint와 route에서 전체 목록을 다시 구독합니다.
 
 ```go
 streams, err := bybit.NewStreamClient(bybit.StreamClientConfig{
@@ -201,9 +201,9 @@ err = book.Run(ctx, public, func(ctx context.Context, view bybit.LocalOrderBookV
 })
 ```
 
-SDK는 같은 topic의 `u`가 직전 update ID의 다음 값이고 `seq`가 증가하는지 검사합니다. 초기 snapshot 없이 delta가 오거나 update ID·cross sequence 이상이 감지되면 현재 장부를 폐기하고 WebSocket을 같은 EIP route로 다시 연결해 새 snapshot을 받습니다. 서버가 `u=1`인 새 snapshot을 보내는 서비스 재시작도 전체 교체로 처리합니다.
+SDK는 같은 topic의 `u`가 직전 update ID의 다음 값이고 `seq`가 증가하는지 검사합니다. 초기 snapshot 없이 delta가 오거나 update ID·cross sequence 이상이 감지되면 현재 장부를 폐기하고 WebSocket을 같은 송신 경로로 다시 연결해 새 snapshot을 받습니다. 서버가 `u=1`인 새 snapshot을 보내는 서비스 재시작도 전체 교체로 처리합니다.
 
-`SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 재연결을 유발한 sequence 이상 횟수, `Generation`은 WebSocket 연결 세대를 나타냅니다. `ViewDepth`는 구독 `Depth`를 넘을 수 없으며 기본값은 `min(20, Depth)`입니다. 설정한 category·topic·EIP가 public stream과 일치하지 않으면 연결 전에 거부합니다.
+`SynchronizationID`는 적용한 snapshot 횟수, `GapCount`는 재연결을 유발한 sequence 이상 횟수, `Generation`은 WebSocket 연결 세대를 나타냅니다. `ViewDepth`는 구독 `Depth`를 넘을 수 없으며 기본값은 `min(20, Depth)`입니다. 설정한 category·topic·송신 경로가 public stream과 일치하지 않으면 연결 전에 거부합니다.
 
 private stream은 연결할 때마다 `GET/realtime + expires`를 HMAC SHA-256으로 서명해 인증한 뒤 topic을 구독합니다.
 
@@ -222,7 +222,7 @@ defer private.Close()
 
 private typed data는 `[]StreamOrder`, `[]StreamExecution`, `[]StreamPosition`, `[]StreamWallet`로 decode할 수 있습니다. `order`와 `order.linear`처럼 같은 종류의 all-in-one topic과 category topic은 Bybit 규칙에 따라 한 구독에서 함께 사용할 수 없습니다.
 
-연결이 끊기면 같은 EIP route에서 새 만료 시각과 Secret으로 재인증하고 현재 topic을 다시 구독합니다. 인증이 명시적으로 거절된 경우 잘못된 키로 무한 재연결하지 않습니다. heartbeat는 Bybit 권장 주기인 20초마다 `{"op":"ping"}`을 보내고 10초 안에 pong이 없으면 재연결합니다. stream 수명은 `Run`의 context로 제어하므로 생성 시 `trade.WithTimeout`은 허용하지 않습니다.
+연결이 끊기면 같은 송신 경로에서 새 만료 시각과 Secret으로 재인증하고 현재 topic을 다시 구독합니다. 인증이 명시적으로 거절된 경우 잘못된 키로 무한 재연결하지 않습니다. heartbeat는 Bybit 권장 주기인 20초마다 `{"op":"ping"}`을 보내고 10초 안에 pong이 없으면 재연결합니다. stream 수명은 `Run`의 context로 제어하므로 생성 시 `trade.WithTimeout`은 허용하지 않습니다.
 
 WebSocket 연결은 도메인별 IP당 5분에 500회보다 자주 만들면 안 됩니다. 재연결 횟수와 장시간 연결 상태는 운영 메트릭에서 함께 감시해야 합니다.
 
