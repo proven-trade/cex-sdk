@@ -24,10 +24,11 @@
 - [KuCoin Futures REST·WebSocket](docs/exchanges/KUCOIN_FUTURES.md)
 - [Gate.io API v4 Spot REST·WebSocket](docs/exchanges/GATEIO.md)
 - [Gate.io API v4 Futures REST·WebSocket](docs/exchanges/GATEIO_FUTURES.md)
+- [MEXC Spot V3 REST](docs/exchanges/MEXC.md)
 
 ## 현재 기준
 
-- 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io
+- 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io, MEXC 공개 Spot REST
 - 구현 언어: Go
 - 네트워크: 단일 ENI의 여러 secondary private IPv4와 EIP 1:1 연결
 - IP 선택: 클라이언트 기본값과 요청별 `egressRouteId` 재정의
@@ -78,6 +79,7 @@
 | Gate.io 공통 Spot API | 공통 마켓·시세·잔고·주문 계약과 적합성 테스트 구현됨 |
 | Gate.io API v4 Futures REST | 계약 규칙, 공개 시세, 계정·포지션, 주문·체결 구현됨 |
 | Gate.io API v4 Futures WebSocket | public 시세·호가·캔들·체결, private 주문·체결·잔고·포지션 stream·V2 로컬 오더북 자동 갭 복구 구현됨 |
+| MEXC Spot V3 REST | 서버 시각, 기본 API 거래쌍, 상품 규칙, 호가·체결·캔들·ticker 공개 조회와 요청별 EIP 구현됨; private REST는 예정 |
 
 ## 요청별 EIP 선택
 
@@ -469,6 +471,19 @@ defer session.Close()
 - `X-Gate-Size-Decimal: 1` handshake와 `futures.obu` 50·400단계 로컬 오더북·동일 EIP 갭 복구
 
 세부 계약은 [Gate.io API v4 Futures 문서](docs/exchanges/GATEIO_FUTURES.md)를 참고합니다.
+
+## MEXC Spot V3 공개 REST 1차 범위
+
+- 서버 시각과 API 기본 허용 거래쌍
+- 전체·단일·복수 거래쌍 규칙과 주문 정밀도
+- 최대 5000단계 호가 snapshot, 최근·합산 체결, 캔들
+- 평균가, 24시간 통계, 최근가, 최우선 호가
+- public IP+endpoint별 500 weight/10초 제한과 `Retry-After` 차단
+- 요청별 EIP 선택과 route별 독립 limiter
+- 숫자·문자열·`null`이 혼재하는 식별자 원형과 응답 `Raw` 보존
+- HTTP 상태와 MEXC code 기반 공통 오류 정규화
+
+private 인증·잔고·주문, Unified, protobuf WebSocket은 다음 단계 범위입니다. 세부 계약은 [MEXC Spot V3 문서](docs/exchanges/MEXC.md)를 참고합니다.
 
 ## 공통 Spot API
 

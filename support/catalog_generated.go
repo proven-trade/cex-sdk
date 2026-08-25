@@ -156,4 +156,12 @@ var catalogData = []ProductSupport{
 		LiveReadSmoke: Status("planned"), LiveTradeSmoke: Status("planned"),
 		Docs: []string{"docs/exchanges/GATEIO_FUTURES.md"},
 	},
+	{
+		Exchange: model.ExchangeID("mexc"), DisplayName: "MEXC", Tier: "P3",
+		Product: ProductID("spot"), ProductName: "Spot",
+		REST: Status("planned"), WebSocketPublic: Status("planned"), WebSocketPrivate: Status("planned"),
+		Unified: Status("planned"), AutomatedTests: Status("planned"),
+		LiveReadSmoke: Status("planned"), LiveTradeSmoke: Status("planned"),
+		Docs: []string{"docs/exchanges/MEXC.md"},
+	},
 }

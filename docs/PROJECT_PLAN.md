@@ -70,6 +70,7 @@
 | P1 | Kraken | Spot, Futures | Spot/Futures API 차이 분리 |
 | P1 | Bithumb, Coinone, Korbit | Spot | 국내 거래소 확장 |
 | P2 | KuCoin, Gate.io | Spot, Futures | 수요와 운영 계정 확보 후 |
+| P3 | MEXC | Spot | 네임드 거래소 확대의 첫 대상 |
 
 목록은 `config/exchange-support.yaml`을 기준 정보로 관리하며 `support` Go catalog와 `docs/SUPPORT_MATRIX.md`를 자동 생성한다. 추가 의존성을 피하기 위해 설정 파일은 YAML과 호환되는 JSON 문법을 사용한다.
 
@@ -592,6 +593,14 @@ const (
 - Gate.io Futures public/private WebSocket 구현 완료
 - Gate.io Futures Order Book V2 50·400단계 로컬 오더북과 update ID gap·동일 EIP 재연결 복구 구현 완료
 
+### Phase 6 — P3 네임드 거래소 확장
+
+- MEXC Spot V3 공개 REST와 요청별 EIP·endpoint별 요청 제한·오류 정규화 구현 완료
+- MEXC Spot private REST·주문 안전 계약 구현
+- MEXC Spot 공통 API와 적합성 테스트 구현
+- MEXC Spot protobuf public/private WebSocket과 로컬 오더북 구현
+- 운영 수요·거래량·API 안정성을 기준으로 다음 거래소 확장
+
 ## 20. 확정 사항과 배포 전 결정 사항
 
 다음 항목은 구현 기준으로 확정했다.
@@ -629,6 +638,7 @@ const (
 - [Bitget API Quick Start](https://www.bitget.com/api-doc/uta/guide)
 - [Upbit API 개요](https://docs.upbit.com/kr/reference/api-overview)
 - [Upbit 인증](https://docs.upbit.com/kr/reference/auth)
+- [MEXC Spot V3 API](https://mexcdevelop.github.io/apidocs/spot_v3_en/)
 - [Upbit 요청 수 제한](https://docs.upbit.com/kr/reference/rate-limits)
 - [Bybit V5 요청 제한](https://bybit-exchange.github.io/docs/v5/rate-limit)
 - [OKX V5 API](https://www.okx.com/docs-v5/en/)

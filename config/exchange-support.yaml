@@ -285,6 +285,21 @@
       "live_read_smoke": "planned",
       "live_trade_smoke": "planned",
       "docs": ["docs/exchanges/GATEIO_FUTURES.md"]
+    },
+    {
+      "exchange_id": "mexc",
+      "display_name": "MEXC",
+      "tier": "P3",
+      "product_id": "spot",
+      "product_name": "Spot",
+      "rest": "planned",
+      "websocket_public": "planned",
+      "websocket_private": "planned",
+      "unified": "planned",
+      "automated_tests": "planned",
+      "live_read_smoke": "planned",
+      "live_trade_smoke": "planned",
+      "docs": ["docs/exchanges/MEXC.md"]
     }
   ]
 }
