@@ -13,7 +13,7 @@
 
 공식 2026년 변경 로그가 유지되는 현행 Exchange v1만 대상으로 한다. 구형 기본 `book.{instrument_name}` 구독과 100ms full snapshot 구독은 이미 폐기됐으므로 구현하지 않는다. Margin·Derivatives와 고급 조건부 주문은 native 타입이 안정된 뒤 별도 상품 단계로 확장한다.
 
-현재 `exchange/cryptocom`의 공개·private REST와 mock 자동 테스트가 구현되어 있다. 공통 Spot API, WebSocket과 로컬 오더북은 아래 순서대로 진행 중이며 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
+현재 `exchange/cryptocom`의 공개·private REST, 공통 Spot API와 mock 자동 테스트가 구현되어 있다. WebSocket과 로컬 오더북은 아래 순서대로 진행 중이며 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
 
 ## 구현 범위
 
@@ -126,11 +126,15 @@ private 본문의 `id`, `nonce`, 주문 ID, 시각, 개수와 decimal은 문자�
 
 ### 공통 Spot API
 
-- `Base`·`Quote`와 underscore 형식 Spot `instrument_name`의 양방향 변환
-- 상품 규칙, ticker, order book, 체결, candle, 잔고와 주문 계약 정규화
-- MARKET 매수·매도 수량 의미와 지원 time-in-force를 명시적으로 검증
+- `Base`·`Quote`와 underscore 형식 Spot `instrument_name`의 양방향 변환 구현 완료
+- `CCY_PAIR` 상품, ticker, order book, 체결, candle, 잔고와 주문 계약 정규화 구현 완료
+- MARKET 매수·매도 수량 의미와 GTC·IOC·FOK·POST_ONLY 변환·검증 구현 완료
 - 원본 응답과 미래 필드는 민감 정보를 제외하고 보존
-- 공통 적합성 스위트와 모든 요청의 EIP 전달 검증
+- 공통 적합성 스위트와 모든 요청의 EIP 전달 검증 구현 완료
+
+공통 `Balances`는 `position_balances`의 `max_withdrawal_balance`와 `reserved_qty`를 각각 `Available`과 `Locked`로 매핑한다. 공통 3분 캔들은 공식 1분 캔들을 epoch 기준으로 묶고 decimal 문자열을 정수 비례 값으로 더해 부동소수점 정밀도 손실을 피한다.
+
+주문 취소 응답은 비동기 접수이므로 공통 상태를 즉시 `canceled`로 단정하지 않고 `unknown`으로 반환한다. 이후 `Order` 또는 private WebSocket 주문 이벤트로 최종 상태를 확인해야 한다. 사용자 주문 ID가 없으면 36바이트 제한 안에서 `proven-` 접두사의 암호학적 난수를 생성한다.
 
 ### WebSocket
 
@@ -154,7 +158,7 @@ private user 연결은 API Key whitelist route와 `read` 권한을 연결 전에
 
 1. 공개 REST, 오류 정규화, 요청 제한과 mock 테스트 구현 완료
 2. private REST, signer golden vector와 주문 안전 계약 구현 완료
-3. 공통 Spot API와 적합성 테스트
+3. 공통 Spot API와 적합성 테스트 구현 완료
 4. public market WebSocket과 heartbeat·동적 구독
 5. private user WebSocket 인증과 주문·체결·잔고 구독
 6. 10·50단계 로컬 오더북과 sequence gap 복구

@@ -618,7 +618,7 @@ const (
 
 - 현행 Exchange v1 공개 REST와 요청별 EIP·메서드별 IP 요청 제한·오류 정규화 구현 완료
 - HMAC SHA-256 재귀 params 정규화, 잔고와 주문 생성·조회·취소·이력 구현 완료
-- 공통 Spot API와 적합성 테스트
+- 공통 Spot API와 적합성 테스트 구현 완료
 - 분리 market/user WebSocket, heartbeat, user 인증과 같은 EIP 재구독
 - 명시적 10·50단계 `SNAPSHOT_AND_UPDATE`의 `u`·`pu` 로컬 오더북과 같은 EIP 재구독 복구
 - UAT mock 자동 테스트와 production read-only·명시적 소액 주문 smoke를 분리

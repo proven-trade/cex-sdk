@@ -31,7 +31,7 @@
 ## 현재 기준
 
 - 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io, MEXC, HTX, Crypto.com REST
-- 다음 구현 대상: Crypto.com Exchange v1 공통 Spot API
+- 다음 구현 대상: Crypto.com Exchange v1 public market WebSocket
 - 구현 언어: Go
 - 네트워크: 단일 ENI의 여러 secondary private IPv4와 EIP 1:1 연결
 - IP 선택: 클라이언트 기본값과 요청별 `egressRouteId` 재정의
@@ -88,6 +88,7 @@
 | HTX Spot private WebSocket | v2 HMAC 인증·재인증, 주문·체결·계정 stream, plain JSON ping 응답, 요청 제한과 같은 EIP 구독 복구 구현됨 |
 | HTX Spot MBP 로컬 오더북 | `/feed` 5·20·150단계 refresh·증분 정렬, sequence gap 재동기화와 같은 EIP 복구 구현됨 |
 | Crypto.com Exchange v1 Spot REST | 공개 시세, 계정 잔고, 주문 생성·조회·취소, 미체결·주문·체결 이력과 요청별 EIP 구현됨 |
+| Crypto.com 공통 Spot API | 상품·시세·호가·체결·캔들·잔고·주문 계약과 요청별 EIP 전달 적합성 구현됨 |
 
 ## 요청별 EIP 선택
 
