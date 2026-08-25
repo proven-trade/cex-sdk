@@ -17,7 +17,7 @@ import (
 	"github.com/proven-trade/proven-trade-sdk/transport"
 )
 
-const defaultEndpoint = "https://checkip.amazonaws.com"
+const defaultEndpoint = "https://api.ipify.org"
 
 type routeFlags []transport.EgressRoute
 
@@ -27,7 +27,7 @@ func (flags *routeFlags) String() string {
 		items = append(items, fmt.Sprintf(
 			"%s,%s,%s",
 			route.ID,
-			route.LocalPrivateIP,
+			route.LocalSourceIP,
 			route.ExpectedPublicIP,
 		))
 	}
@@ -37,7 +37,7 @@ func (flags *routeFlags) String() string {
 func (flags *routeFlags) Set(value string) error {
 	parts := strings.Split(value, ",")
 	if len(parts) != 3 {
-		return fmt.Errorf("route 형식은 id,local-private-ip,expected-public-ip 이어야 합니다")
+		return fmt.Errorf("route 형식은 id,local-source-ip,expected-public-ip 이어야 합니다")
 	}
 
 	id := transport.EgressRouteID(strings.TrimSpace(parts[0]))
@@ -47,7 +47,7 @@ func (flags *routeFlags) Set(value string) error {
 		return fmt.Errorf("route ID가 비어 있습니다")
 	}
 	if localIP == nil || localIP.To4() == nil {
-		return fmt.Errorf("route %q의 local private IP가 올바른 IPv4가 아닙니다", id)
+		return fmt.Errorf("route %q의 local source IP가 올바른 IPv4가 아닙니다", id)
 	}
 	if expectedIP == nil || expectedIP.To4() == nil {
 		return fmt.Errorf("route %q의 expected public IP가 올바른 IPv4가 아닙니다", id)
@@ -55,7 +55,7 @@ func (flags *routeFlags) Set(value string) error {
 
 	*flags = append(*flags, transport.EgressRoute{
 		ID:               id,
-		LocalPrivateIP:   localIP,
+		LocalSourceIP:    localIP,
 		ExpectedPublicIP: expectedIP,
 	})
 	return nil
@@ -63,7 +63,7 @@ func (flags *routeFlags) Set(value string) error {
 
 type routeResult struct {
 	RouteID          transport.EgressRouteID `json:"routeId"`
-	LocalPrivateIP   net.IP                  `json:"localPrivateIp"`
+	LocalSourceIP    net.IP                  `json:"localSourceIp"`
 	ExpectedPublicIP net.IP                  `json:"expectedPublicIp"`
 	ObservedPublicIP net.IP                  `json:"observedPublicIp,omitempty"`
 	MatchesExpected  bool                    `json:"matchesExpected"`
@@ -90,7 +90,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	flags.Var(
 		&routes,
 		"route",
-		"진단할 id,local-private-ip,expected-public-ip 형식의 경로이며 여러 번 지정 가능",
+		"진단할 id,local-source-ip,expected-public-ip 형식의 경로이며 여러 번 지정 가능",
 	)
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -118,7 +118,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 
 		result := routeResult{
 			RouteID:          route.ID,
-			LocalPrivateIP:   route.LocalPrivateIP,
+			LocalSourceIP:    route.LocalSourceIP,
 			ExpectedPublicIP: route.ExpectedPublicIP,
 			ObservedPublicIP: check.ObservedPublicIP,
 			MatchesExpected:  check.MatchesExpected,

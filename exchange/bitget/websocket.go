@@ -180,7 +180,7 @@ type PublicStream struct {
 	managed *managedStream
 }
 
-// PublicStream은 선택한 EIP route에 고정된 public channel 세션을 생성한다.
+// PublicStream은 선택한 송신 경로에 고정된 public channel 세션을 생성한다.
 func (client *StreamClient) PublicStream(request StreamRequest, options ...trade.RequestOption) (*PublicStream, error) {
 	arguments, err := validateStreamArguments(request.Arguments, false)
 	if err != nil {

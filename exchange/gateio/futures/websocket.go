@@ -155,7 +155,7 @@ type PublicStream struct {
 	settlement Settlement
 }
 
-// PublicStream은 정산 통화와 EIP route에 고정된 public 시세 세션을 생성한다.
+// PublicStream은 정산 통화와 송신 경로에 고정된 public 시세 세션을 생성한다.
 func (client *StreamClient) PublicStream(
 	request StreamRequest,
 	options ...trade.RequestOption,
@@ -231,7 +231,7 @@ func (public *PublicStream) reconnect() error { return public.managed.session.Re
 // PrivateStream은 Gate.io 무기한 Futures private 주문·체결·잔고·포지션 연결을 관리한다.
 type PrivateStream struct{ managed *managedStream }
 
-// PrivateStream은 매 구독을 새로 서명하고 선택한 EIP route에 고정된 private 세션을 생성한다.
+// PrivateStream은 매 구독을 새로 서명하고 선택한 송신 경로에 고정된 private 세션을 생성한다.
 func (client *StreamClient) PrivateStream(
 	request StreamRequest,
 	options ...trade.RequestOption,

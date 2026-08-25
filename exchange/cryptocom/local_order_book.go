@@ -121,7 +121,7 @@ func (book *LocalOrderBook) Subscription() StreamSubscription {
 	return book.subscription
 }
 
-// Run은 public stream을 소유하고 sequence gap 발생 시 같은 EIP로 재연결한다.
+// Run은 public stream을 소유하고 sequence gap 발생 시 같은 송신 경로로 재연결한다.
 func (book *LocalOrderBook) Run(
 	ctx context.Context,
 	public *PublicStream,

@@ -16,12 +16,15 @@ const maxPublicIPResponseBytes = 4096
 
 // PublicIPCheck는 외부에서 관측한 송신 경로의 IP 확인 결과다.
 type PublicIPCheck struct {
-	RouteID          EgressRouteID `json:"routeId"`
-	LocalPrivateIP   net.IP        `json:"localPrivateIp"`
-	ExpectedPublicIP net.IP        `json:"expectedPublicIp,omitempty"`
-	ObservedPublicIP net.IP        `json:"observedPublicIp"`
-	MatchesExpected  bool          `json:"matchesExpected"`
-	CheckedAt        time.Time     `json:"checkedAt"`
+	RouteID       EgressRouteID `json:"routeId"`
+	LocalSourceIP net.IP        `json:"localSourceIp"`
+	// LocalPrivateIP은 이전 Go 호출 코드의 호환성을 위한 별칭이며 JSON에는 기록하지 않는다.
+	// Deprecated: 새 코드는 공급자 중립적인 LocalSourceIP를 사용해야 한다.
+	LocalPrivateIP   net.IP    `json:"-"`
+	ExpectedPublicIP net.IP    `json:"expectedPublicIp,omitempty"`
+	ObservedPublicIP net.IP    `json:"observedPublicIp"`
+	MatchesExpected  bool      `json:"matchesExpected"`
+	CheckedAt        time.Time `json:"checkedAt"`
 }
 
 // VerifyPublicIP는 routeID를 통해 IP 확인 endpoint를 호출한다.
@@ -74,6 +77,7 @@ func (registry *Registry) VerifyPublicIP(
 	}
 	check := PublicIPCheck{
 		RouteID:          route.ID,
+		LocalSourceIP:    cloneIP(route.LocalSourceIP),
 		LocalPrivateIP:   cloneIP(route.LocalPrivateIP),
 		ExpectedPublicIP: cloneIP(route.ExpectedPublicIP),
 		ObservedPublicIP: cloneIP(observedIP),

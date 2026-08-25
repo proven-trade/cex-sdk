@@ -21,7 +21,7 @@ type MBPStream struct {
 	lastRefresh       time.Time
 }
 
-// MBPStream은 선택한 EIP route에 고정된 증분 호가 세션을 생성한다.
+// MBPStream은 선택한 송신 경로에 고정된 증분 호가 세션을 생성한다.
 func (client *StreamClient) MBPStream(
 	request StreamRequest,
 	options ...trade.RequestOption,

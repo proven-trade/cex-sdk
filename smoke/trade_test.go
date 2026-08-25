@@ -135,7 +135,7 @@ func validTradeConfig(client unified.SpotClient) SpotTradeConfig {
 	return SpotTradeConfig{
 		Client: client,
 		EgressVerifier: &fakeEgressVerifier{check: transport.PublicIPCheck{
-			RouteID: "route-b", LocalPrivateIP: net.ParseIP("10.0.10.22"),
+			RouteID: "route-b", LocalSourceIP: net.ParseIP("10.0.10.22"),
 			ExpectedPublicIP: expectedIP, ObservedPublicIP: append(net.IP(nil), expectedIP...),
 			MatchesExpected: true,
 		}},

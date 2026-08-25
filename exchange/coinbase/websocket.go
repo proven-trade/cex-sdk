@@ -169,7 +169,7 @@ type PublicStream struct {
 	managed *managedCoinbaseStream
 }
 
-// PublicStream은 선택한 EIP route에 고정된 공개 market data 세션을 생성한다.
+// PublicStream은 선택한 송신 경로에 고정된 공개 market data 세션을 생성한다.
 // 연결 유지를 위해 heartbeats 채널을 자동으로 함께 구독한다.
 func (client *StreamClient) PublicStream(
 	request PublicStreamRequest,
@@ -278,7 +278,7 @@ type UserStream struct {
 	session *corestream.Session
 }
 
-// UserStream은 선택한 EIP route에서 user와 heartbeat 채널을 인증 구독한다.
+// UserStream은 선택한 송신 경로에서 user와 heartbeat 채널을 인증 구독한다.
 func (client *StreamClient) UserStream(
 	request UserStreamRequest,
 	options ...trade.RequestOption,

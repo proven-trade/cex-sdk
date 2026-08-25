@@ -42,7 +42,7 @@ type Config struct {
 	Now                  func() time.Time
 }
 
-// Client는 KuCoin Classic Futures REST API를 요청별 EIP 선택과 함께 제공한다.
+// Client는 KuCoin Classic Futures REST API를 요청별 송신 경로 선택과 함께 제공한다.
 type Client struct {
 	executor             *commonexchange.Executor
 	credentials          *credential.Descriptor

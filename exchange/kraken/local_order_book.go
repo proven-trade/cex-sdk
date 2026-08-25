@@ -40,7 +40,7 @@ type SpotLocalOrderBookView struct {
 // SpotLocalOrderBookHandler는 snapshot 교체와 이후 각 유효 update의 장부를 처리한다.
 type SpotLocalOrderBookHandler func(context.Context, SpotLocalOrderBookView) error
 
-// SpotLocalOrderBook은 book snapshot과 update를 결합하고 checksum 이상 시 같은 EIP로 재연결한다.
+// SpotLocalOrderBook은 book snapshot과 update를 결합하고 checksum 이상 시 같은 송신 경로로 재연결한다.
 type SpotLocalOrderBook struct {
 	symbol    string
 	depth     int

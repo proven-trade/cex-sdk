@@ -128,7 +128,7 @@ func NewSpotTradeRunner(config SpotTradeConfig) (*SpotTradeRunner, error) {
 	}, nil
 }
 
-// Run은 EIP와 비관통 호가를 확인한 뒤 실제 주문을 한 번 생성하고 반드시 취소를 시도한다.
+// Run은 송신 경로와 비관통 호가를 확인한 뒤 실제 주문을 한 번 생성하고 반드시 취소를 시도한다.
 func (runner *SpotTradeRunner) Run(ctx context.Context) (TradeReport, error) {
 	if ctx == nil {
 		return TradeReport{}, fmt.Errorf("smoke context cannot be nil")

@@ -128,7 +128,7 @@ type managedStream struct {
 // PublicStream은 MEXC 공개 시세 Protobuf 연결을 관리한다.
 type PublicStream struct{ managed *managedStream }
 
-// PublicStream은 선택한 EIP route에 고정된 공개 시세 세션을 생성한다.
+// PublicStream은 선택한 송신 경로에 고정된 공개 시세 세션을 생성한다.
 func (client *StreamClient) PublicStream(
 	request StreamRequest,
 	options ...trade.RequestOption,
@@ -211,7 +211,7 @@ type UserDataStream struct {
 	listenKey string
 }
 
-// UserDataStream은 listenKey 발급과 WebSocket 연결을 같은 EIP route에 고정한다.
+// UserDataStream은 listenKey 발급과 WebSocket 연결을 같은 송신 경로 route에 고정한다.
 func (client *StreamClient) UserDataStream(
 	request StreamRequest,
 	options ...trade.RequestOption,

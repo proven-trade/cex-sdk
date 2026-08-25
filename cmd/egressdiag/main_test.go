@@ -23,8 +23,8 @@ func TestRouteFlagsSet(t *testing.T) {
 	if routes[0].ID != "seoul-a" {
 		t.Fatalf("ID = %q, want seoul-a", routes[0].ID)
 	}
-	if !routes[0].LocalPrivateIP.Equal(net.ParseIP("127.0.0.1")) {
-		t.Fatalf("LocalPrivateIP = %s, want 127.0.0.1", routes[0].LocalPrivateIP)
+	if !routes[0].LocalSourceIP.Equal(net.ParseIP("127.0.0.1")) {
+		t.Fatalf("LocalSourceIP = %s, want 127.0.0.1", routes[0].LocalSourceIP)
 	}
 }
 
@@ -57,6 +57,10 @@ func TestRunReportsMatchingRoute(t *testing.T) {
 	}
 	if len(results) != 1 || !results[0].MatchesExpected {
 		t.Fatalf("results = %+v, want one matching route", results)
+	}
+	if !results[0].LocalSourceIP.Equal(net.ParseIP("127.0.0.1")) ||
+		bytes.Contains(stdout.Bytes(), []byte("localPrivateIp")) {
+		t.Fatalf("공급자 중립 진단 JSON = %s", stdout.String())
 	}
 }
 

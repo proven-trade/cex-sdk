@@ -46,7 +46,8 @@ var environmentNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 type routeConfig struct {
 	ID               string `json:"id"`
-	LocalPrivateIP   string `json:"localPrivateIp"`
+	LocalSourceIP    string `json:"localSourceIp"`
+	LocalPrivateIP   string `json:"localPrivateIp,omitempty"`
 	ExpectedPublicIP string `json:"expectedPublicIp"`
 }
 
@@ -125,7 +126,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 	registry, err := transport.NewRegistry(config.routes)
 	if err != nil {
-		return fmt.Errorf("송신 route 레지스트리 생성: %w", err)
+		return fmt.Errorf("송신 경로 레지스트리 생성: %w", err)
 	}
 	defer registry.Close()
 	limiter, err := ratelimit.New()
@@ -277,9 +278,9 @@ func resolveRoutes(
 		if _, exists := seen[id]; exists {
 			return nil, fmt.Errorf("중복 route ID %q", id)
 		}
-		localIP := net.ParseIP(strings.TrimSpace(value.LocalPrivateIP))
-		if localIP == nil || localIP.To4() == nil || !localIP.IsPrivate() {
-			return nil, fmt.Errorf("routes[%d] localPrivateIp는 private IPv4여야 합니다", index)
+		localIP, err := resolveLocalSourceIP(index, value)
+		if err != nil {
+			return nil, err
 		}
 		expectedIP := net.ParseIP(strings.TrimSpace(value.ExpectedPublicIP))
 		if expectedIP == nil || expectedIP.To4() == nil || !expectedIP.IsGlobalUnicast() ||
@@ -287,7 +288,7 @@ func resolveRoutes(
 			return nil, fmt.Errorf("routes[%d] expectedPublicIp는 공인 IPv4여야 합니다", index)
 		}
 		routes = append(routes, transport.EgressRoute{
-			ID: id, LocalPrivateIP: append(net.IP(nil), localIP.To4()...),
+			ID: id, LocalSourceIP: append(net.IP(nil), localIP.To4()...),
 			ExpectedPublicIP: append(net.IP(nil), expectedIP.To4()...),
 		})
 		seen[id] = struct{}{}
@@ -299,6 +300,28 @@ func resolveRoutes(
 		return nil, fmt.Errorf("선택한 egressRouteId %q가 routes에 없습니다", selected)
 	}
 	return routes, nil
+}
+
+func resolveLocalSourceIP(index int, value routeConfig) (net.IP, error) {
+	sourceText := strings.TrimSpace(value.LocalSourceIP)
+	legacyText := strings.TrimSpace(value.LocalPrivateIP)
+	if sourceText == "" && legacyText == "" {
+		return nil, fmt.Errorf("routes[%d] localSourceIp가 비어 있습니다", index)
+	}
+	sourceIP := net.ParseIP(sourceText)
+	if sourceText == "" {
+		sourceIP = net.ParseIP(legacyText)
+	}
+	if sourceIP == nil || sourceIP.To4() == nil || sourceIP.IsUnspecified() || sourceIP.IsMulticast() {
+		return nil, fmt.Errorf("routes[%d] localSourceIp는 바인딩 가능한 IPv4여야 합니다", index)
+	}
+	if sourceText != "" && legacyText != "" {
+		legacyIP := net.ParseIP(legacyText)
+		if legacyIP == nil || !sourceIP.Equal(legacyIP) {
+			return nil, fmt.Errorf("routes[%d] localSourceIp와 localPrivateIp가 서로 다릅니다", index)
+		}
+	}
+	return append(net.IP(nil), sourceIP.To4()...), nil
 }
 
 func resolveCredentials(

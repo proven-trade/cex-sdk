@@ -56,7 +56,7 @@ type LocalOrderBookHandler func(context.Context, LocalOrderBookView) error
 
 type depthSnapshotLoader func(context.Context) (OrderBook, error)
 
-// LocalOrderBook은 WebSocket delta를 버퍼링하고 같은 EIP의 REST snapshot과 결합한다.
+// LocalOrderBook은 WebSocket delta를 버퍼링하고 같은 송신 경로의 REST snapshot과 결합한다.
 type LocalOrderBook struct {
 	symbol                string
 	routeID               transport.EgressRouteID

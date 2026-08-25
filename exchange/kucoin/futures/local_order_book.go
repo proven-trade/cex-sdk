@@ -39,7 +39,7 @@ type LocalOrderBookView struct {
 // LocalOrderBookHandler는 snapshot 교체와 이후 각 유효 delta의 장부를 처리한다.
 type LocalOrderBookHandler func(context.Context, LocalOrderBookView) error
 
-// LocalOrderBook은 Pro Futures 상위 500호가를 결합하고 gap 시 같은 EIP로 재연결한다.
+// LocalOrderBook은 Pro Futures 상위 500호가를 결합하고 gap 시 같은 송신 경로로 재연결한다.
 type LocalOrderBook struct {
 	symbol    string
 	routeID   transport.EgressRouteID

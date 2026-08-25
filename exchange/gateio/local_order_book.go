@@ -39,7 +39,7 @@ type LocalOrderBookView struct {
 // LocalOrderBookHandler는 snapshot 교체와 이후 각 유효 증분 장부를 처리한다.
 type LocalOrderBookHandler func(context.Context, LocalOrderBookView) error
 
-// LocalOrderBook은 Spot V2 snapshot과 증분을 결합하고 공백 시 같은 EIP로 재연결한다.
+// LocalOrderBook은 Spot V2 snapshot과 증분을 결합하고 공백 시 같은 송신 경로로 재연결한다.
 type LocalOrderBook struct {
 	currencyPair string
 	depth        StreamOrderBookDepth

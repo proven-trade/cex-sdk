@@ -1,4 +1,4 @@
-// Package stream은 EIP 경로 고정 WebSocket 연결과 재연결 세션을 제공한다.
+// Package stream은 송신 경로 고정 WebSocket 연결과 재연결 세션을 제공한다.
 package stream
 
 import (
@@ -42,7 +42,7 @@ type Connection interface {
 	Close(code int, reason string) error
 }
 
-// Connector는 지정한 EIP route로 WebSocket handshake를 수행한다.
+// Connector는 지정한 송신 경로로 WebSocket handshake를 수행한다.
 type Connector interface {
 	Connect(context.Context, transport.EgressRouteID, DialRequest) (Connection, error)
 }

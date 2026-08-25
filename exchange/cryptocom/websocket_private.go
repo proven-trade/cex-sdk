@@ -35,7 +35,7 @@ type PrivateStream struct {
 	managed *privateCryptoComManagedStream
 }
 
-// PrivateStream은 인증 후 선택한 EIP route에 고정된 사용자 세션을 생성한다.
+// PrivateStream은 인증 후 선택한 송신 경로에 고정된 사용자 세션을 생성한다.
 func (client *StreamClient) PrivateStream(
 	request StreamRequest,
 	options ...trade.RequestOption,

@@ -24,7 +24,7 @@ func TestVerifyPublicIPAcceptsPlainTextAndJSON(t *testing.T) {
 	registry, err := NewRegistry(
 		[]EgressRoute{{
 			ID:               "route-a",
-			LocalPrivateIP:   net.ParseIP("127.0.0.1"),
+			LocalSourceIP:    net.ParseIP("127.0.0.1"),
 			ExpectedPublicIP: net.ParseIP("127.0.0.1"),
 		}},
 	)
@@ -41,6 +41,9 @@ func TestVerifyPublicIPAcceptsPlainTextAndJSON(t *testing.T) {
 		if !check.MatchesExpected {
 			t.Fatalf("VerifyPublicIP(%q) MatchesExpected = false", path)
 		}
+		if !check.LocalSourceIP.Equal(net.ParseIP("127.0.0.1")) || check.LocalPrivateIP != nil {
+			t.Fatalf("VerifyPublicIP(%q) source IP = %s", path, check.LocalSourceIP)
+		}
 	}
 }
 
@@ -55,7 +58,7 @@ func TestVerifyPublicIPReportsMismatch(t *testing.T) {
 	registry, err := NewRegistry(
 		[]EgressRoute{{
 			ID:               "route-a",
-			LocalPrivateIP:   net.ParseIP("127.0.0.1"),
+			LocalSourceIP:    net.ParseIP("127.0.0.1"),
 			ExpectedPublicIP: net.ParseIP("127.0.0.2"),
 		}},
 	)

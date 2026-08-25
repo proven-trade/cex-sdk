@@ -35,7 +35,7 @@ type SessionConfig struct {
 	PingTimeout          time.Duration
 }
 
-// Session은 한 EIP route에 고정된 자동 재연결 WebSocket 세션이다.
+// Session은 한 송신 경로에 고정된 자동 재연결 WebSocket 세션이다.
 // 하나의 Session은 Run을 한 번만 호출할 수 있다.
 type Session struct {
 	config SessionConfig

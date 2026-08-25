@@ -154,7 +154,7 @@ type managedStream struct {
 // PublicStream은 KuCoin public 시세 WebSocket 연결을 관리한다.
 type PublicStream struct{ managed *managedStream }
 
-// PublicStream은 token을 발급하고 선택한 EIP route에 고정된 public 세션을 생성한다.
+// PublicStream은 token을 발급하고 선택한 송신 경로에 고정된 public 세션을 생성한다.
 func (client *StreamClient) PublicStream(
 	request StreamRequest,
 	options ...trade.RequestOption,
@@ -219,7 +219,7 @@ func (public *PublicStream) Generation() uint64 { return public.managed.session.
 // PrivateStream은 KuCoin private 주문·잔고 WebSocket 연결을 관리한다.
 type PrivateStream struct{ managed *managedStream }
 
-// PrivateStream은 매 연결마다 private token을 발급하고 선택한 EIP route에 고정한다.
+// PrivateStream은 매 연결마다 private token을 발급하고 선택한 송신 경로에 고정한다.
 func (client *StreamClient) PrivateStream(
 	request StreamRequest,
 	options ...trade.RequestOption,

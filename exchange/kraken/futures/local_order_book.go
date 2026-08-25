@@ -36,7 +36,7 @@ type LocalOrderBookView struct {
 // LocalOrderBookHandler는 snapshot 교체와 이후 각 유효 update의 장부를 처리한다.
 type LocalOrderBookHandler func(context.Context, LocalOrderBookView) error
 
-// LocalOrderBook은 book_snapshot과 book update를 결합하고 sequence 이상 시 같은 EIP로 재연결한다.
+// LocalOrderBook은 book_snapshot과 book update를 결합하고 sequence 이상 시 같은 송신 경로로 재연결한다.
 type LocalOrderBook struct {
 	productID string
 	viewDepth int

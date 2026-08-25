@@ -167,7 +167,7 @@ type managedStream struct {
 // PublicStream은 코빗 public 시세 WebSocket 연결을 관리한다.
 type PublicStream struct{ managed *managedStream }
 
-// PublicStream은 선택한 EIP route에 고정된 public 시세 세션을 생성한다.
+// PublicStream은 선택한 송신 경로에 고정된 public 시세 세션을 생성한다.
 func (client *StreamClient) PublicStream(
 	request StreamRequest,
 	options ...trade.RequestOption,
@@ -248,7 +248,7 @@ func (public *PublicStream) hasOrderBookSubscription(symbol, level string) bool 
 // PrivateStream은 코빗 private 주문·체결·자산 WebSocket 연결을 관리한다.
 type PrivateStream struct{ managed *managedStream }
 
-// PrivateStream은 서명한 handshake 후 선택한 EIP route에 고정된 private 세션을 생성한다.
+// PrivateStream은 서명한 handshake 후 선택한 송신 경로에 고정된 private 세션을 생성한다.
 func (client *StreamClient) PrivateStream(
 	request StreamRequest,
 	options ...trade.RequestOption,

@@ -47,7 +47,7 @@ type LocalOrderBookView struct {
 // LocalOrderBookHandler는 refresh 동기화와 이후 각 유효 증분 장부를 처리한다.
 type LocalOrderBookHandler func(context.Context, LocalOrderBookView) error
 
-// LocalOrderBook은 같은 EIP의 `/feed` 증분·refresh를 결합해 sequence를 검증한다.
+// LocalOrderBook은 같은 송신 경로의 `/feed` 증분·refresh를 결합해 sequence를 검증한다.
 type LocalOrderBook struct {
 	symbol             string
 	depth              StreamMBPDepth

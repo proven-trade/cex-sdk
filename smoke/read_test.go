@@ -175,7 +175,7 @@ func TestSpotReadRunnerPassesAllChecksOnOneRoute(t *testing.T) {
 
 	expectedIP := net.ParseIP("203.0.113.10")
 	verifier := &fakeEgressVerifier{check: transport.PublicIPCheck{
-		RouteID: "route-b", LocalPrivateIP: net.ParseIP("10.0.10.22"),
+		RouteID: "route-b", LocalSourceIP: net.ParseIP("10.0.10.22"),
 		ExpectedPublicIP: expectedIP, ObservedPublicIP: append(net.IP(nil), expectedIP...),
 		MatchesExpected: true,
 	}}
@@ -194,7 +194,7 @@ func TestSpotReadRunnerPassesAllChecksOnOneRoute(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if !report.Passed || report.Exchange != model.ExchangeBinance ||
-		report.EgressRouteID != "route-b" || len(report.Checks) != 7 {
+		report.Version != ReadReportVersion || report.EgressRouteID != "route-b" || len(report.Checks) != 7 {
 		t.Fatalf("report = %+v", report)
 	}
 	for _, check := range report.Checks {
@@ -203,6 +203,7 @@ func TestSpotReadRunnerPassesAllChecksOnOneRoute(t *testing.T) {
 		}
 	}
 	if report.Checks[0].Evidence.ObservedPublicIP != "203.0.113.10" ||
+		report.Checks[0].Evidence.LocalSourceIP != "10.0.10.22" ||
 		report.Checks[1].Evidence.NativeMarket != "BTCUSDT" {
 		t.Fatalf("checks = %+v", report.Checks)
 	}

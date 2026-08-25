@@ -43,7 +43,7 @@ type Config struct {
 	Random                   io.Reader
 }
 
-// Client는 Coinbase Advanced Trade Spot API를 요청별 EIP 선택과 함께 제공한다.
+// Client는 Coinbase Advanced Trade Spot API를 요청별 송신 경로 선택과 함께 제공한다.
 type Client struct {
 	executor                 *commonexchange.Executor
 	credentials              *credential.Descriptor

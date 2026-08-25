@@ -35,8 +35,8 @@ func TestDecodeConfigResolvesPublicSmoke(t *testing.T) {
 	config, err := decodeConfig(strings.NewReader(`{
 		"exchange":"binance",
 		"routes":[
-			{"id":"seoul-a","localPrivateIp":"10.0.10.21","expectedPublicIp":"203.0.113.10"},
-			{"id":"seoul-b","localPrivateIp":"10.0.10.22","expectedPublicIp":"203.0.113.11"}
+			{"id":"seoul-a","localSourceIp":"10.0.10.21","expectedPublicIp":"203.0.113.10"},
+			{"id":"seoul-b","localSourceIp":"203.0.113.11","expectedPublicIp":"203.0.113.11"}
 		],
 		"egressRouteId":"seoul-b",
 		"market":{"base":"BTC","quote":"USDT"},
@@ -54,7 +54,7 @@ func TestDecodeConfigResolvesPublicSmoke(t *testing.T) {
 		config.descriptor != nil || config.provider != nil || len(config.routes) != 2 {
 		t.Fatalf("config = %+v", config)
 	}
-	if config.routes[1].LocalPrivateIP.String() != "10.0.10.22" ||
+	if config.routes[1].LocalSourceIP.String() != "203.0.113.11" ||
 		config.routes[1].ExpectedPublicIP.String() != "203.0.113.11" {
 		t.Fatalf("routes = %+v", config.routes)
 	}
@@ -157,7 +157,7 @@ func TestDecodeConfigRejectsInvalidRouteAndTrailingJSON(t *testing.T) {
 
 	invalidRoute := `{
 		"exchange":"binance",
-		"routes":[{"id":"seoul-a","localPrivateIp":"203.0.113.20","expectedPublicIp":"10.0.0.10"}],
+		"routes":[{"id":"seoul-a","localSourceIp":"203.0.113.20","expectedPublicIp":"10.0.0.10"}],
 		"egressRouteId":"seoul-a",
 		"market":{"base":"BTC","quote":"USDT"},
 		"includeBalances":false
@@ -178,6 +178,39 @@ func TestDecodeConfigRejectsInvalidRouteAndTrailingJSON(t *testing.T) {
 		strings.NewReader(valid+` {}`), func(string) (string, bool) { return "", false },
 	); err == nil {
 		t.Fatal("decodeConfig() accepted trailing JSON")
+	}
+}
+
+func TestDecodeConfigAcceptsLegacySourceFieldAndRejectsAliasConflict(t *testing.T) {
+	t.Parallel()
+
+	legacy := `{
+		"exchange":"binance",
+		"routes":[{"id":"seoul-a","localPrivateIp":"10.0.10.21","expectedPublicIp":"203.0.113.10"}],
+		"egressRouteId":"seoul-a",
+		"market":{"base":"BTC","quote":"USDT"},
+		"includeBalances":false
+	}`
+	config, err := decodeConfig(
+		strings.NewReader(legacy), func(string) (string, bool) { return "", false },
+	)
+	if err != nil {
+		t.Fatalf("decodeConfig() 이전 필드 오류 = %v", err)
+	}
+	if got := config.routes[0].LocalSourceIP.String(); got != "10.0.10.21" {
+		t.Fatalf("LocalSourceIP = %s, want 10.0.10.21", got)
+	}
+
+	conflict := strings.Replace(
+		legacy,
+		`"localPrivateIp":"10.0.10.21"`,
+		`"localSourceIp":"10.0.10.22","localPrivateIp":"10.0.10.21"`,
+		1,
+	)
+	if _, err := decodeConfig(
+		strings.NewReader(conflict), func(string) (string, bool) { return "", false },
+	); err == nil {
+		t.Fatal("decodeConfig()가 서로 다른 원본 IP 별칭을 허용했습니다")
 	}
 }
 

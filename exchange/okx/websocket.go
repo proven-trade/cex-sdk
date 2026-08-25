@@ -205,7 +205,7 @@ type PublicStream struct {
 	endpoint StreamEndpoint
 }
 
-// PublicStream은 선택한 endpoint와 EIP route에 고정된 시세 세션을 생성한다.
+// PublicStream은 선택한 endpoint와 송신 경로에 고정된 시세 세션을 생성한다.
 func (client *StreamClient) PublicStream(
 	request PublicStreamRequest,
 	options ...trade.RequestOption,

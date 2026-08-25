@@ -133,7 +133,7 @@ type SpotPublicStream struct {
 	managed *managedSpotStream
 }
 
-// PublicStream은 선택한 EIP route에 고정된 Spot public 세션을 생성한다.
+// PublicStream은 선택한 송신 경로에 고정된 Spot public 세션을 생성한다.
 func (client *SpotStreamClient) PublicStream(
 	request SpotPublicStreamRequest,
 	options ...trade.RequestOption,

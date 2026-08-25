@@ -216,7 +216,7 @@ type PublicStream struct {
 	managed *managedStream
 }
 
-// PublicStream은 선택한 EIP route와 상품 category에 고정된 public 세션을 생성한다.
+// PublicStream은 선택한 송신 경로와 상품 category에 고정된 public 세션을 생성한다.
 func (client *StreamClient) PublicStream(
 	request PublicStreamRequest,
 	options ...trade.RequestOption,

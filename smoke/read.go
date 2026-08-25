@@ -1,4 +1,4 @@
-// Package smoke는 실제 거래소와 지정 EIP를 대상으로 안전한 운영 검증을 수행한다.
+// Package smoke는 실제 거래소와 지정 송신 경로를 대상으로 안전한 운영 검증을 수행한다.
 package smoke
 
 import (
@@ -19,10 +19,10 @@ import (
 
 const (
 	// DefaultPublicIPEndpoint는 외부에서 송신 IP를 관측할 기본 주소다.
-	DefaultPublicIPEndpoint = "https://checkip.amazonaws.com"
+	DefaultPublicIPEndpoint = "https://api.ipify.org"
 	defaultCheckTimeout     = 10 * time.Second
 	// ReadReportVersion은 읽기 smoke JSON 증적 스키마 버전이다.
-	ReadReportVersion = 1
+	ReadReportVersion = 2
 )
 
 var (
@@ -60,7 +60,7 @@ type CheckEvidence struct {
 	Count            int    `json:"count,omitempty"`
 	NativeMarket     string `json:"nativeMarket,omitempty"`
 	OrderStatus      string `json:"orderStatus,omitempty"`
-	LocalPrivateIP   string `json:"localPrivateIp,omitempty"`
+	LocalSourceIP    string `json:"localSourceIp,omitempty"`
 	ExpectedPublicIP string `json:"expectedPublicIp,omitempty"`
 	ObservedPublicIP string `json:"observedPublicIp,omitempty"`
 }
@@ -108,7 +108,7 @@ type SpotReadConfig struct {
 	IncludeBalances  bool
 }
 
-// SpotReadRunner는 한 거래소의 Spot 읽기 검사를 같은 EIP에서 순서대로 실행한다.
+// SpotReadRunner는 한 거래소의 Spot 읽기 검사를 같은 송신 경로에서 순서대로 실행한다.
 type SpotReadRunner struct {
 	client           unified.SpotClient
 	egressVerifier   EgressVerifier
@@ -154,7 +154,7 @@ func NewSpotReadRunner(config SpotReadConfig) (*SpotReadRunner, error) {
 	}, nil
 }
 
-// Run은 EIP, 공개 조회와 선택적 private 잔고 검사를 실행하고 안전한 증적을 반환한다.
+// Run은 송신 경로, 공개 조회와 선택적 private 잔고 검사를 실행하고 안전한 증적을 반환한다.
 func (runner *SpotReadRunner) Run(ctx context.Context) (ReadReport, error) {
 	if ctx == nil {
 		return ReadReport{}, fmt.Errorf("smoke context cannot be nil")
@@ -276,8 +276,12 @@ func verifyEgress(
 	endpoint string,
 ) (CheckEvidence, error) {
 	check, err := verifier.VerifyPublicIP(ctx, routeID, endpoint)
+	localSourceIP := check.LocalSourceIP
+	if localSourceIP == nil {
+		localSourceIP = check.LocalPrivateIP
+	}
 	evidence := CheckEvidence{
-		LocalPrivateIP:   ipString(check.LocalPrivateIP),
+		LocalSourceIP:    ipString(localSourceIP),
 		ExpectedPublicIP: ipString(check.ExpectedPublicIP),
 		ObservedPublicIP: ipString(check.ObservedPublicIP),
 	}

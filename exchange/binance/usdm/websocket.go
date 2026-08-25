@@ -162,7 +162,7 @@ type MarketStream struct {
 	pending       map[string]pendingMarketCommand
 }
 
-// MarketStream은 선택한 EIP route와 데이터 진입점에 고정된 시세 세션을 생성한다.
+// MarketStream은 선택한 송신 경로와 데이터 진입점에 고정된 시세 세션을 생성한다.
 func (client *StreamClient) MarketStream(
 	request MarketStreamRequest,
 	options ...trade.RequestOption,
@@ -469,7 +469,7 @@ type UserDataStream struct {
 	listenKey string
 }
 
-// UserDataStream은 같은 EIP에서 listenKey를 발급하고 private 연결을 생성한다.
+// UserDataStream은 같은 송신 경로에서 listenKey를 발급하고 private 연결을 생성한다.
 func (client *StreamClient) UserDataStream(
 	options ...trade.RequestOption,
 ) (*UserDataStream, error) {

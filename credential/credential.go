@@ -29,7 +29,7 @@ const (
 	PermissionTrade Permission = "trade"
 )
 
-// Descriptor는 계정의 비밀이 아닌 메타데이터와 EIP 허용 목록을 담는다.
+// Descriptor는 계정의 비밀이 아닌 메타데이터와 송신 경로 허용 목록을 담는다.
 type Descriptor struct {
 	AccountID             string
 	Exchange              model.ExchangeID

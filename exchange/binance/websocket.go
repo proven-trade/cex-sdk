@@ -149,7 +149,7 @@ type MarketStream struct {
 	nextID        atomic.Uint64
 }
 
-// MarketStream은 선택한 EIP route에 고정된 public stream 세션을 생성한다.
+// MarketStream은 선택한 송신 경로에 고정된 public stream 세션을 생성한다.
 func (client *StreamClient) MarketStream(
 	request MarketStreamRequest,
 	options ...trade.RequestOption,

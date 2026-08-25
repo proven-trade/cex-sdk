@@ -66,7 +66,7 @@ type routeTransport struct {
 	transport *http.Transport
 }
 
-// Registry는 local private IP마다 장기 재사용하는 HTTP transport 하나를 관리한다.
+// Registry는 로컬 송신 원본 IP마다 장기 재사용하는 HTTP transport 하나를 관리한다.
 // transport 내부에서는 origin마다 연결 풀이 분리되며, 해당 transport가 만드는
 // 모든 연결은 같은 source IP에 바인딩된다.
 type Registry struct {
@@ -112,26 +112,26 @@ func NewRegistry(routes []EgressRoute, options ...RegistryOption) (*Registry, er
 		if _, exists := seenIDs[clean.ID]; exists {
 			return nil, fmt.Errorf("%w: duplicate route ID %q", ErrInvalidEgressRoute, clean.ID)
 		}
-		if previousID, exists := seenLocalIPs[clean.LocalPrivateIP.String()]; exists {
+		if previousID, exists := seenLocalIPs[clean.LocalSourceIP.String()]; exists {
 			return nil, fmt.Errorf(
-				"%w: routes %q and %q use the same local private IP %s",
+				"%w: routes %q and %q use the same local source IP %s",
 				ErrInvalidEgressRoute,
 				previousID,
 				clean.ID,
-				clean.LocalPrivateIP,
+				clean.LocalSourceIP,
 			)
 		}
-		if err := config.verifyAddress(clean.LocalPrivateIP); err != nil {
+		if err := config.verifyAddress(clean.LocalSourceIP); err != nil {
 			return nil, fmt.Errorf("verify route %q: %w", clean.ID, err)
 		}
 		seenIDs[clean.ID] = struct{}{}
-		seenLocalIPs[clean.LocalPrivateIP.String()] = clean.ID
+		seenLocalIPs[clean.LocalSourceIP.String()] = clean.ID
 		normalized = append(normalized, clean)
 	}
 
 	registry := &Registry{routes: make(map[EgressRouteID]*routeTransport, len(normalized))}
 	for _, route := range normalized {
-		httpTransport := newHTTPTransport(route.LocalPrivateIP, config)
+		httpTransport := newHTTPTransport(route.LocalSourceIP, config)
 		registry.routes[route.ID] = &routeTransport{
 			route:     route,
 			transport: httpTransport,
@@ -185,7 +185,7 @@ func (registry *Registry) Do(
 	return response, nil
 }
 
-// HTTPClient는 모든 연결을 지정한 route의 private IP로 보내는 HTTP 클라이언트를 반환한다.
+// HTTPClient는 모든 연결을 지정한 route의 로컬 송신 원본 IP로 보내는 HTTP 클라이언트를 반환한다.
 // WebSocket upgrade처럼 호출자가 http.Client를 요구하는 프로토콜에 사용한다.
 // 자격증명 헤더가 다른 origin으로 전달되지 않도록 redirect는 허용하지 않는다.
 func (registry *Registry) HTTPClient(routeID EgressRouteID) (*http.Client, error) {

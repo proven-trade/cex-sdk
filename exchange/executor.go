@@ -94,7 +94,7 @@ func NewExecutor(config ExecutorConfig) (*Executor, error) {
 	}, nil
 }
 
-// Execute는 limiter 확보 이후 요청을 만들고 지정한 EIP 경로로 전송한다.
+// Execute는 limiter 확보 이후 요청을 만들고 지정한 송신 경로로 전송한다.
 func (executor *Executor) Execute(ctx context.Context, execution Execution) (Response, error) {
 	if ctx == nil {
 		return Response{}, fmt.Errorf("execution context cannot be nil")

@@ -59,7 +59,7 @@ type privateManagedStream struct {
 // PrivateStream은 HTX v2 주문·체결·계정 WebSocket 연결을 관리한다.
 type PrivateStream struct{ managed *privateManagedStream }
 
-// PrivateStream은 인증 후 선택한 EIP route에 고정된 private 세션을 생성한다.
+// PrivateStream은 인증 후 선택한 송신 경로에 고정된 private 세션을 생성한다.
 func (client *StreamClient) PrivateStream(
 	request StreamRequest,
 	options ...trade.RequestOption,

@@ -218,7 +218,7 @@ func renderMarkdown(value catalog) []byte {
 	var output strings.Builder
 	output.WriteString("# 거래소 지원 매트릭스\n\n")
 	output.WriteString("이 문서는 `config/exchange-support.yaml`에서 자동 생성됩니다. 직접 수정하지 않습니다.\n\n")
-	output.WriteString("`구현`은 코드·자동 테스트·문서가 저장소에 있다는 뜻이며 운영 검증 완료를 뜻하지 않습니다. `읽기 smoke`와 `거래 smoke`가 모두 `구현`이어야 실제 계정과 지정 EIP를 이용한 운영 검증까지 끝난 상태입니다.\n\n")
+	output.WriteString("`구현`은 코드·자동 테스트·문서가 저장소에 있다는 뜻이며 운영 검증 완료를 뜻하지 않습니다. `읽기 smoke`와 `거래 smoke`가 모두 `구현`이어야 실제 계정과 지정 송신 경로를 이용한 운영 검증까지 끝난 상태입니다.\n\n")
 	output.WriteString("| 등급 | 거래소 | 상품 | REST | WS public | WS private | Unified | 자동 테스트 | 읽기 smoke | 거래 smoke | 문서 |\n")
 	output.WriteString("|---|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, item := range value.Products {

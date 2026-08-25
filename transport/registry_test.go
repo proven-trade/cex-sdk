@@ -52,8 +52,8 @@ func TestRegistryBindsEachRouteToItsOwnSourceIP(t *testing.T) {
 	})
 
 	routes := []EgressRoute{
-		{ID: "route-a", LocalPrivateIP: net.ParseIP("127.0.0.1")},
-		{ID: "route-b", LocalPrivateIP: nonLoopbackIP},
+		{ID: "route-a", LocalSourceIP: net.ParseIP("127.0.0.1")},
+		{ID: "route-b", LocalSourceIP: nonLoopbackIP},
 	}
 	registry, err := NewRegistry(
 		routes,
@@ -125,12 +125,12 @@ func TestRegistryRejectsDuplicateRouteIDsAndLocalIPs(t *testing.T) {
 	verify := WithLocalAddressVerifier(func(net.IP) error { return nil })
 	tests := map[string][]EgressRoute{
 		"route ID": {
-			{ID: "duplicate", LocalPrivateIP: net.ParseIP("10.0.0.1")},
-			{ID: "duplicate", LocalPrivateIP: net.ParseIP("10.0.0.2")},
+			{ID: "duplicate", LocalSourceIP: net.ParseIP("10.0.0.1")},
+			{ID: "duplicate", LocalSourceIP: net.ParseIP("10.0.0.2")},
 		},
 		"local IP": {
-			{ID: "route-a", LocalPrivateIP: net.ParseIP("10.0.0.1")},
-			{ID: "route-b", LocalPrivateIP: net.ParseIP("10.0.0.1")},
+			{ID: "route-a", LocalSourceIP: net.ParseIP("10.0.0.1")},
+			{ID: "route-b", LocalSourceIP: net.ParseIP("10.0.0.1")},
 		},
 	}
 	for name, routes := range tests {
@@ -148,7 +148,7 @@ func TestRegistryRejectsAddressMissingFromHost(t *testing.T) {
 	t.Parallel()
 
 	registry, err := NewRegistry([]EgressRoute{
-		{ID: "route-a", LocalPrivateIP: net.ParseIP("10.0.0.21")},
+		{ID: "route-a", LocalSourceIP: net.ParseIP("10.0.0.21")},
 	}, WithLocalAddressVerifier(func(ip net.IP) error {
 		return fmt.Errorf("%w: %s", ErrLocalAddressUnavailable, ip)
 	}))
