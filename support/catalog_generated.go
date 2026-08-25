@@ -167,8 +167,8 @@ var catalogData = []ProductSupport{
 	{
 		Exchange: model.ExchangeID("htx"), DisplayName: "HTX", Tier: "P4",
 		Product: ProductID("spot"), ProductName: "Spot",
-		REST: Status("planned"), WebSocketPublic: Status("planned"), WebSocketPrivate: Status("planned"),
-		Unified: Status("planned"), AutomatedTests: Status("planned"),
+		REST: Status("implemented"), WebSocketPublic: Status("planned"), WebSocketPrivate: Status("planned"),
+		Unified: Status("planned"), AutomatedTests: Status("implemented"),
 		LiveReadSmoke: Status("planned"), LiveTradeSmoke: Status("planned"),
 		Docs: []string{"docs/exchanges/HTX.md"},
 	},

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -24,6 +25,10 @@ const (
 	DefaultAWSBaseURL              = "https://api-aws.huobi.pro"
 	DefaultRequestTimeout          = 10 * time.Second
 	DefaultPublicRequestsPerSecond = 10
+	DefaultAccountQuota            = 100
+	DefaultOrderQuota              = 100
+	DefaultOrderReadQuota          = 50
+	DefaultTradeHistoryQuota       = 20
 )
 
 // Config는 HTX Spot REST 클라이언트 설정이다.
@@ -36,6 +41,10 @@ type Config struct {
 	AllowInsecureHTTP       bool
 	RequestTimeout          time.Duration
 	PublicRequestsPerSecond int
+	AccountQuota            int
+	OrderQuota              int
+	OrderReadQuota          int
+	TradeHistoryQuota       int
 	Now                     func() time.Time
 }
 
@@ -48,6 +57,10 @@ type Client struct {
 	baseURL                 *url.URL
 	requestTimeout          time.Duration
 	publicRequestsPerSecond int
+	accountQuota            int
+	orderQuota              int
+	orderReadQuota          int
+	tradeHistoryQuota       int
 	now                     func() time.Time
 }
 
@@ -86,6 +99,22 @@ func New(config Config) (*Client, error) {
 	if config.PublicRequestsPerSecond < 1 {
 		return nil, fmt.Errorf("HTX public request quota must be positive")
 	}
+	if config.AccountQuota == 0 {
+		config.AccountQuota = DefaultAccountQuota
+	}
+	if config.OrderQuota == 0 {
+		config.OrderQuota = DefaultOrderQuota
+	}
+	if config.OrderReadQuota == 0 {
+		config.OrderReadQuota = DefaultOrderReadQuota
+	}
+	if config.TradeHistoryQuota == 0 {
+		config.TradeHistoryQuota = DefaultTradeHistoryQuota
+	}
+	if config.AccountQuota < 1 || config.OrderQuota < 1 ||
+		config.OrderReadQuota < 1 || config.TradeHistoryQuota < 1 {
+		return nil, fmt.Errorf("HTX private request quotas must be positive")
+	}
 	if config.Now == nil {
 		config.Now = time.Now
 	}
@@ -117,6 +146,8 @@ func New(config Config) (*Client, error) {
 		credentialProvider: config.CredentialProvider, defaultEgressRouteID: defaultRouteID,
 		baseURL: parsedBaseURL, requestTimeout: config.RequestTimeout,
 		publicRequestsPerSecond: config.PublicRequestsPerSecond, now: config.Now,
+		accountQuota: config.AccountQuota, orderQuota: config.OrderQuota,
+		orderReadQuota: config.OrderReadQuota, tradeHistoryQuota: config.TradeHistoryQuota,
 	}, nil
 }
 
@@ -154,11 +185,122 @@ func (client *Client) executePublic(
 	return response, err
 }
 
+func (client *Client) executePrivate(
+	ctx context.Context,
+	method string,
+	path string,
+	query url.Values,
+	body []byte,
+	group rateGroup,
+	quota int,
+	permission credential.Permission,
+	operation commonexchange.OperationKind,
+	options ...trade.RequestOption,
+) (commonexchange.Response, error) {
+	resolved, err := trade.ResolveRequestOptions(client.defaultEgressRouteID, options...)
+	if err != nil {
+		return commonexchange.Response{}, err
+	}
+	if resolved.Timeout == 0 {
+		resolved.Timeout = client.requestTimeout
+	}
+	if client.credentials == nil || client.credentialProvider == nil {
+		return commonexchange.Response{}, &trade.APIError{
+			Category: trade.ErrorAuthentication, Exchange: model.ExchangeHTX,
+			Cause: errors.New("private HTX request requires credentials"),
+		}
+	}
+	if err := client.credentials.RequireEgressRoute(resolved.EgressRouteID); err != nil {
+		return commonexchange.Response{}, &trade.APIError{
+			Category: trade.ErrorAuthorization, Exchange: model.ExchangeHTX,
+			AccountID: client.credentials.AccountID, Cause: err,
+		}
+	}
+	if err := client.credentials.RequirePermission(permission); err != nil {
+		return commonexchange.Response{}, &trade.APIError{
+			Category: trade.ErrorAuthorization, Exchange: model.ExchangeHTX,
+			AccountID: client.credentials.AccountID, Cause: err,
+		}
+	}
+	limit, charges, err := privateRateLimit(
+		client.executor.Limiter(), client.credentials.AccountID, group, quota,
+	)
+	if err != nil {
+		return commonexchange.Response{}, err
+	}
+
+	baseQuery := cloneValues(query)
+	bodyCopy := cloneBytes(body)
+	var material credential.Material
+	defer material.Destroy()
+	response, err := client.executor.Execute(ctx, commonexchange.Execution{
+		Exchange: model.ExchangeHTX, AccountID: client.credentials.AccountID,
+		EgressRouteID: resolved.EgressRouteID, Timeout: resolved.Timeout,
+		Charges: charges, Operation: operation,
+		Build: func(buildContext context.Context) (*http.Request, error) {
+			resolvedMaterial, resolveErr := client.credentialProvider.Resolve(
+				buildContext, client.credentials.SecretRef,
+			)
+			material = resolvedMaterial
+			if resolveErr != nil {
+				return nil, &trade.APIError{
+					Category: trade.ErrorAuthentication, Exchange: model.ExchangeHTX,
+					AccountID: client.credentials.AccountID, Cause: resolveErr,
+				}
+			}
+			if len(material.APIKey) == 0 || len(material.SecretKey) == 0 {
+				return nil, &trade.APIError{
+					Category: trade.ErrorAuthentication, Exchange: model.ExchangeHTX,
+					AccountID: client.credentials.AccountID,
+					Cause:     errors.New("HTX access key and HMAC secret are required"),
+				}
+			}
+			timestamp := client.now().UTC()
+			if timestamp.Unix() <= 0 {
+				return nil, validationError("HTX timestamp must be after the Unix epoch")
+			}
+			signedQuery := cloneValues(baseQuery)
+			signedQuery.Set("AccessKeyId", string(material.APIKey))
+			signedQuery.Set("SignatureMethod", "HmacSHA256")
+			signedQuery.Set("SignatureVersion", "2")
+			signedQuery.Set("Timestamp", timestamp.Format("2006-01-02T15:04:05"))
+			payload := SignaturePayload(
+				method, strings.ToLower(client.baseURL.Host), path, canonicalQuery(signedQuery),
+			)
+			signature, signErr := SignHMACSHA256Base64(material.SecretKey, payload)
+			if signErr != nil {
+				return nil, &trade.APIError{
+					Category: trade.ErrorAuthentication, Exchange: model.ExchangeHTX,
+					AccountID: client.credentials.AccountID, Cause: signErr,
+				}
+			}
+			signedQuery.Set("Signature", signature)
+			return client.newRequestWithBody(method, path, signedQuery, bodyCopy)
+		},
+	})
+	if err == nil {
+		observeRateLimit(client.executor.Limiter(), limit, response.Header, client.now())
+	}
+	return response, err
+}
+
 func (client *Client) newRequest(method, path string, query url.Values) (*http.Request, error) {
+	return client.newRequestWithBody(method, path, query, nil)
+}
+
+func (client *Client) newRequestWithBody(
+	method, path string,
+	query url.Values,
+	body []byte,
+) (*http.Request, error) {
 	requestURL := *client.baseURL
 	requestURL.Path = path
 	requestURL.RawQuery = cloneValues(query).Encode()
-	request, err := http.NewRequest(method, requestURL.String(), nil)
+	var reader io.Reader
+	if len(body) > 0 {
+		reader = bytes.NewReader(body)
+	}
+	request, err := http.NewRequest(method, requestURL.String(), reader)
 	if err != nil {
 		return nil, fmt.Errorf("create HTX request: %w", err)
 	}
@@ -224,6 +366,28 @@ func (client *Client) decodeResponseForOperation(
 		return nil, client.decodeBodyErrorForOperation(response, operation, err)
 	}
 	return cloneBytes(trimmed), nil
+}
+
+func (client *Client) decodeDataForOperation(
+	response commonexchange.Response,
+	operation commonexchange.OperationKind,
+	target any,
+) (json.RawMessage, error) {
+	var envelope struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if _, err := client.decodeResponseForOperation(response, operation, &envelope); err != nil {
+		return nil, err
+	}
+	if len(bytes.TrimSpace(envelope.Data)) == 0 {
+		return nil, client.decodeBodyErrorForOperation(
+			response, operation, errors.New("HTX response data is missing"),
+		)
+	}
+	if err := json.Unmarshal(envelope.Data, target); err != nil {
+		return nil, client.decodeBodyErrorForOperation(response, operation, err)
+	}
+	return cloneBytes(envelope.Data), nil
 }
 
 func (client *Client) apiError(
@@ -297,11 +461,12 @@ func classifyError(
 		}
 		return trade.ErrorExchangeUnavailable, true
 	}
-	if status == http.StatusUnauthorized || code == "require-auth" || code == "base-record-invalid" ||
+	if status == http.StatusUnauthorized || code == "require-auth" || code == "login-required" ||
 		code == "api-signature-not-valid" || code == "1002" || code == "1003" {
 		return trade.ErrorAuthentication, false
 	}
 	if status == http.StatusForbidden || code == "api-key-no-permission" ||
+		code == "base-operation-forbidden" || strings.HasPrefix(code, "operation-forbidden") ||
 		strings.Contains(message, "permission") || strings.Contains(message, "ip address") {
 		return trade.ErrorAuthorization, false
 	}
@@ -309,11 +474,13 @@ func classifyError(
 		strings.Contains(message, "insufficient balance") {
 		return trade.ErrorInsufficientBalance, false
 	}
-	if code == "order-orderstate-error" || code == "1007" ||
+	if code == "not-found" || code == "base-not-found" || code == "base-record-invalid" ||
+		code == "1007" ||
 		strings.Contains(message, "order not found") {
 		return trade.ErrorOrderNotFound, false
 	}
 	if code == "gateway-internal-error" || code == "service-unavailable" ||
+		code == "base-system-error" || code == "order-update-error" ||
 		code == "request-timeout" || code == "500" || strings.Contains(message, "request timeout") {
 		if operation == commonexchange.OperationMutation {
 			return trade.ErrorUnknownExecutionState, false

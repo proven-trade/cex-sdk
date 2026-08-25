@@ -17,6 +17,15 @@ type rateLimit struct {
 	window time.Duration
 }
 
+type rateGroup string
+
+const (
+	rateGroupAccount      rateGroup = "account"
+	rateGroupOrder        rateGroup = "order"
+	rateGroupOrderRead    rateGroup = "order-read"
+	rateGroupTradeHistory rateGroup = "trade-history"
+)
+
 func publicRateLimit(
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
@@ -30,6 +39,27 @@ func publicRateLimit(
 	value := rateLimit{
 		key:   fmt.Sprintf("htx:route:%s:public:%s:1second", routeID, endpoint),
 		limit: requestsPerSecond, window: time.Second,
+	}
+	if err := limiter.SetRule(ratelimit.Rule{
+		Key: value.key, Limit: value.limit, Window: value.window,
+	}); err != nil {
+		return rateLimit{}, nil, err
+	}
+	return value, []ratelimit.Charge{{Key: value.key, Units: 1}}, nil
+}
+
+func privateRateLimit(
+	limiter *ratelimit.Limiter,
+	accountID string,
+	group rateGroup,
+	quota int,
+) (rateLimit, []ratelimit.Charge, error) {
+	if strings.TrimSpace(accountID) == "" || strings.TrimSpace(string(group)) == "" || quota < 1 {
+		return rateLimit{}, nil, fmt.Errorf("invalid HTX private rate limit")
+	}
+	value := rateLimit{
+		key:   fmt.Sprintf("htx:account:%s:%s:2seconds", accountID, group),
+		limit: quota, window: 2 * time.Second,
 	}
 	if err := limiter.SetRule(ratelimit.Rule{
 		Key: value.key, Limit: value.limit, Window: value.window,

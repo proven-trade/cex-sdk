@@ -12,7 +12,7 @@
 
 공식 문서는 testnet이 중단되었다고 명시한다. 따라서 mock 서버 기반 자동 테스트를 구현 완료 기준으로 사용하고, 실제 계정과 지정 EIP가 필요한 검증은 지원 매트릭스의 별도 smoke 상태로 관리한다.
 
-현재 단계는 `exchange/htx`의 공개 REST 구현이다. private REST, 공통 Spot API, WebSocket과 로컬 오더북은 아래 순서대로 후속 구현하며 전체 REST 완료 전까지 지원 매트릭스의 REST 상태는 `예정`으로 유지한다.
+현재 `exchange/htx`의 공개·private REST와 mock 자동 테스트가 구현되어 있다. 공통 Spot API, WebSocket과 로컬 오더북은 아래 순서대로 후속 구현한다. 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
 
 ## 구현 범위
 
@@ -66,14 +66,68 @@ book, err := client.OrderBook(
 
 응답의 HTTP 상태와 `status`, `err-code`, `err-msg`, `code`, `message`를 함께 검사한다. 요청 제한, 인증, 권한, 잔고 부족, 주문 없음, 거래소 장애를 공통 오류로 분류하면서 HTX 원본 코드·메시지와 `request-id`를 보존한다. 성공 HTTP 응답이 비어 있거나 JSON 구조가 깨진 경우 공개 조회는 재시도 가능한 거래소 장애로 분류한다.
 
-### private REST
+## private REST
 
-- 현물 계정 탐색과 잔고
-- 주문 생성·단건 조회·취소
-- 미체결 주문과 주문·체결 이력
-- HMAC SHA-256, Base64 서명과 ASCII 순서 쿼리 정규화
-- API Key에 허용되지 않은 route를 Secret 조회 전에 거부
+- 현물 계정 탐색과 통화별 잔고 구현 완료
+- 사용자 주문 ID를 강제하는 주문 생성과 거래소·사용자 주문 ID 조회·취소 구현 완료
+- 미체결 주문, 최대 48시간 범위의 종료 주문·체결 이력, 주문별 체결 조회 구현 완료
+- HMAC SHA-256, 표준 Base64 서명과 ASCII 순서 쿼리 정규화 구현 완료
+- API Key에 허용되지 않은 route와 권한을 Secret 조회 전에 거부
 - 주문 mutation의 전송 불명확 상태를 `UNKNOWN_EXECUTION_STATE`로 분류
+
+| 영역 | 메서드 | API |
+|---|---|---|
+| 계정 목록 | `Accounts` | `GET /v1/account/accounts` |
+| 계정 잔고 | `AccountBalance` | `GET /v1/account/accounts/{account-id}/balance` |
+| 주문 생성 | `PlaceOrder` | `POST /v1/order/orders/place` |
+| 주문 조회 | `OrderInfo` | `GET /v1/order/orders/{order-id}` 또는 `GET /v1/order/orders/getClientOrder` |
+| 주문 취소 | `CancelOrder` | `POST /v1/order/orders/{order-id}/submitcancel` 또는 `POST /v1/order/orders/submitCancelClientOrder` |
+| 미체결 주문 | `OpenOrders` | `GET /v1/order/openOrders` |
+| 종료 주문 이력 | `OrderHistory` | `GET /v1/order/orders` |
+| 계정 체결 이력 | `MatchResults` | `GET /v1/order/matchresults` |
+| 주문별 체결 | `OrderMatches` | `GET /v1/order/orders/{order-id}/matchresults` |
+
+### 인증과 EIP 허용 목록
+
+private 요청은 `AccessKeyId`, `SignatureMethod=HmacSHA256`, `SignatureVersion=2`, UTC `Timestamp`를 쿼리에 넣는다. HTTP 메서드, 실제 요청 호스트, 경로, 키 순서로 정렬하고 공백을 `%20`으로 인코딩한 쿼리를 줄바꿈으로 결합한 뒤 Secret Key로 HMAC SHA-256하고 표준 Base64 서명을 만든다. POST 주문 인자는 JSON body에 남기며 인증 쿼리와 섞지 않는다.
+
+```go
+client, err := htx.New(htx.Config{
+	Executor: executor,
+	Credentials: &credential.Descriptor{
+		AccountID:             "htx-main",
+		Exchange:              model.ExchangeHTX,
+		SecretRef:             "secret/htx-main",
+		Permissions:           []credential.Permission{credential.PermissionRead, credential.PermissionTrade},
+		AllowedEgressRouteIDs: []transport.EgressRouteID{"seoul-a", "seoul-b"},
+	},
+	CredentialProvider:   provider,
+	DefaultEgressRouteID: "seoul-a",
+})
+if err != nil {
+	return err
+}
+
+order, err := client.PlaceOrder(
+	ctx,
+	htx.PlaceOrderRequest{
+		AccountID: "123456", ClientOrderID: "strategy-20260825-1",
+		Symbol: "btcusdt", Side: htx.SideBuy, Kind: htx.OrderKindLimitMaker,
+		Amount: "0.0001", Price: "50000",
+	},
+	trade.WithEgressRoute("seoul-b"),
+)
+```
+
+`CredentialProvider`는 요청 제한 대기가 끝난 뒤 요청을 만드는 시점에만 호출된다. 허용 route와 `read`·`trade` 권한 검사를 먼저 수행하고 사용이 끝난 key·secret byte slice는 덮어쓴다. HTX는 API Key 하나에 최대 20개 IP 또는 네트워크를 연결할 수 있으므로, 실제 송신 EIP를 거래소 키 허용 목록과 `AllowedEgressRouteIDs` 양쪽에 일치시켜야 한다.
+
+### 주문 안전 계약과 요청 제한
+
+`PlaceOrderRequest.ClientOrderID`는 SDK에서 필수다. HTX가 허용하는 대소문자 영문·숫자·밑줄·하이픈 64자 이내만 받고, 응답이 유실됐을 때 같은 주문을 식별할 수 있게 한다. `buy-market`의 `Amount`는 quote 주문 금액이고 나머지 주문의 `Amount`는 base 수량이다. 시장가는 `Price`를 거부하며 limit·IOC·limit-maker·limit-FOK는 양수 가격을 요구한다.
+
+주문 생성·취소는 mutation으로 실행한다. 전송 오류, 응답 읽기 실패, HTTP 5xx 또는 성공 응답의 손상으로 체결 여부를 확정할 수 없으면 자동 재시도하지 않고 `UNKNOWN_EXECUTION_STATE`를 반환한다. 주문 취소 API의 성공은 접수일 뿐이므로 `OrderInfo`, `OrderMatches` 또는 후속 private stream으로 최종 상태를 확인해야 한다.
+
+공식 2초 요청 제한을 계정 기준의 보수적인 공유 bucket으로 적용한다. 계정 조회와 주문 mutation은 기본 100회/2초, 주문 조회는 50회/2초, 계정 체결 이력은 20회/2초다. 각각 `AccountQuota`, `OrderQuota`, `OrderReadQuota`, `TradeHistoryQuota`로 더 낮은 운영값을 지정할 수 있다. HTX 제한 응답 헤더와 HTTP 429·`Retry-After`도 로컬 limiter 상태에 반영한다.
 
 ### 공통 Spot API
 
@@ -91,7 +145,7 @@ book, err := client.OrderBook(
 ## 구현 순서
 
 1. 공개 REST, 오류 정규화, 요청 제한과 mock 테스트 완료
-2. private REST, signer golden vector와 주문 안전 계약
+2. private REST, signer golden vector와 주문 안전 계약 완료
 3. 공통 Spot API와 적합성 테스트
 4. public/private WebSocket과 gzip·heartbeat 계약
 5. MBP 로컬 오더북과 sequence gap 복구

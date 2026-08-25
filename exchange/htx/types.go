@@ -193,6 +193,113 @@ type Candle struct {
 	Raw         json.RawMessage `json:"-"`
 }
 
+// Account는 현재 사용자의 HTX 계정 한 개다.
+type Account struct {
+	ID      Scalar          `json:"id"`
+	Type    string          `json:"type"`
+	Subtype string          `json:"subtype"`
+	State   string          `json:"state"`
+	Raw     json.RawMessage `json:"-"`
+}
+
+// Balance는 통화별 사용 가능·동결 등 한 종류의 잔고다.
+type Balance struct {
+	Currency string          `json:"currency"`
+	Type     string          `json:"type"`
+	Balance  Decimal         `json:"balance"`
+	Sequence Scalar          `json:"seq-num"`
+	Raw      json.RawMessage `json:"-"`
+}
+
+// AccountBalance는 HTX 계정과 그 계정의 통화별 잔고 목록이다.
+type AccountBalance struct {
+	ID       Scalar
+	Type     string
+	State    string
+	Balances []Balance
+	Raw      json.RawMessage
+}
+
+// OrderReference는 신규 Spot 주문 접수 결과다.
+type OrderReference struct {
+	OrderID       Scalar
+	ClientOrderID string
+	Raw           json.RawMessage
+}
+
+// CancelResult는 주문 ID 또는 사용자 주문 ID 취소 접수 결과다.
+type CancelResult struct {
+	OrderID       Scalar
+	ClientOrderID string
+	StatusCode    *int
+	Raw           json.RawMessage
+}
+
+// Order는 HTX Spot 주문 상태와 누적 체결 금액·수량이다.
+type Order struct {
+	ID               Scalar          `json:"id"`
+	AccountID        Scalar          `json:"account-id"`
+	ClientOrderID    string          `json:"client-order-id"`
+	Symbol           string          `json:"symbol"`
+	Amount           Decimal         `json:"amount"`
+	Price            Decimal         `json:"price"`
+	CreatedAt        int64           `json:"created-at"`
+	FinishedAt       int64           `json:"finished-at"`
+	CanceledAt       int64           `json:"canceled-at"`
+	Type             OrderType       `json:"type"`
+	FilledAmount     Decimal         `json:"field-amount"`
+	FilledCashAmount Decimal         `json:"field-cash-amount"`
+	FilledFees       Decimal         `json:"field-fees"`
+	Source           string          `json:"source"`
+	State            OrderState      `json:"state"`
+	Raw              json.RawMessage `json:"-"`
+}
+
+// UnmarshalJSON은 HTX 주문 API마다 다른 field·filled 누적 필드명을 하나로 정규화한다.
+func (order *Order) UnmarshalJSON(data []byte) error {
+	type orderAlias Order
+	wire := struct {
+		*orderAlias
+		AlternateFilledAmount     Decimal `json:"filled-amount"`
+		AlternateFilledCashAmount Decimal `json:"filled-cash-amount"`
+		AlternateFilledFees       Decimal `json:"filled-fees"`
+	}{orderAlias: (*orderAlias)(order)}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	if order.FilledAmount == "" {
+		order.FilledAmount = wire.AlternateFilledAmount
+	}
+	if order.FilledCashAmount == "" {
+		order.FilledCashAmount = wire.AlternateFilledCashAmount
+	}
+	if order.FilledFees == "" {
+		order.FilledFees = wire.AlternateFilledFees
+	}
+	return nil
+}
+
+// MatchResult는 HTX Spot 주문의 체결 한 건과 수수료 정보다.
+type MatchResult struct {
+	ID                Scalar          `json:"id"`
+	Symbol            string          `json:"symbol"`
+	OrderID           Scalar          `json:"order-id"`
+	MatchID           Scalar          `json:"match-id"`
+	TradeID           Scalar          `json:"trade-id"`
+	Price             Decimal         `json:"price"`
+	CreatedAt         int64           `json:"created-at"`
+	Type              OrderType       `json:"type"`
+	FilledAmount      Decimal         `json:"filled-amount"`
+	FilledFees        Decimal         `json:"filled-fees"`
+	FeeCurrency       string          `json:"fee-currency"`
+	Source            string          `json:"source"`
+	Role              string          `json:"role"`
+	FilledPoints      Decimal         `json:"filled-points"`
+	FeeDeductCurrency string          `json:"fee-deduct-currency"`
+	FeeDeductState    string          `json:"fee-deduct-state"`
+	Raw               json.RawMessage `json:"-"`
+}
+
 func decimalText(raw json.RawMessage) (string, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
