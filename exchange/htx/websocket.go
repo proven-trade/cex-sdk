@@ -14,22 +14,30 @@ import (
 	"time"
 
 	trade "github.com/proven-trade/proven-trade-sdk"
+	"github.com/proven-trade/proven-trade-sdk/credential"
+	"github.com/proven-trade/proven-trade-sdk/model"
 	corestream "github.com/proven-trade/proven-trade-sdk/stream"
 	"github.com/proven-trade/proven-trade-sdk/transport"
 )
 
 const (
-	DefaultPublicWebSocketURL    = "wss://api.huobi.pro/ws"
-	DefaultAWSPublicWebSocketURL = "wss://api-aws.huobi.pro/ws"
-	maximumStreamSubscriptions   = 200
+	DefaultPublicWebSocketURL     = "wss://api.huobi.pro/ws"
+	DefaultAWSPublicWebSocketURL  = "wss://api-aws.huobi.pro/ws"
+	DefaultPrivateWebSocketURL    = "wss://api.huobi.pro/ws/v2"
+	DefaultAWSPrivateWebSocketURL = "wss://api-aws.huobi.pro/ws/v2"
+	maximumStreamSubscriptions    = 200
 )
 
 // StreamClientConfig는 HTX 일반 시세 WebSocket 설정이다.
 type StreamClientConfig struct {
 	Connector              corestream.Connector
+	Credentials            *credential.Descriptor
+	CredentialProvider     credential.Provider
 	DefaultEgressRouteID   transport.EgressRouteID
 	PublicWebSocketURL     string
+	PrivateWebSocketURL    string
 	AllowInsecureWebSocket bool
+	Now                    func() time.Time
 	Observer               corestream.StateObserver
 	ReconnectPolicy        corestream.ReconnectPolicy
 	Backoff                corestream.Backoff
@@ -39,8 +47,12 @@ type StreamClientConfig struct {
 // StreamClient는 HTX 일반 시세 WebSocket 세션을 생성한다.
 type StreamClient struct {
 	connector            corestream.Connector
+	credentials          *credential.Descriptor
+	credentialProvider   credential.Provider
 	defaultRouteID       transport.EgressRouteID
 	publicURL            string
+	privateURL           string
+	now                  func() time.Time
 	observer             corestream.StateObserver
 	reconnectPolicy      corestream.ReconnectPolicy
 	backoff              corestream.Backoff
@@ -60,17 +72,54 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 	if config.PublicWebSocketURL == "" {
 		config.PublicWebSocketURL = DefaultPublicWebSocketURL
 	}
+	if config.PrivateWebSocketURL == "" {
+		config.PrivateWebSocketURL = DefaultPrivateWebSocketURL
+	}
 	publicURL, err := validateStreamURL(
 		config.PublicWebSocketURL, config.AllowInsecureWebSocket,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("invalid HTX public WebSocket URL: %w", err)
 	}
+	privateURL, err := validateStreamURL(
+		config.PrivateWebSocketURL, config.AllowInsecureWebSocket,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("invalid HTX private WebSocket URL: %w", err)
+	}
 	if config.MaxReconnectAttempts < 0 {
 		return nil, fmt.Errorf("HTX maximum reconnect attempts cannot be negative")
 	}
+	if config.Now == nil {
+		config.Now = time.Now
+	}
+
+	var credentialsCopy *credential.Descriptor
+	if config.Credentials != nil {
+		if err := config.Credentials.Validate(); err != nil {
+			return nil, err
+		}
+		if config.Credentials.Exchange != model.ExchangeHTX {
+			return nil, fmt.Errorf("credential exchange must be HTX")
+		}
+		if config.CredentialProvider == nil {
+			return nil, fmt.Errorf("credential provider is required for private HTX streams")
+		}
+		copyValue := *config.Credentials
+		copyValue.Permissions = append([]credential.Permission(nil), config.Credentials.Permissions...)
+		copyValue.AllowedEgressRouteIDs = append(
+			[]transport.EgressRouteID(nil), config.Credentials.AllowedEgressRouteIDs...,
+		)
+		credentialsCopy = &copyValue
+	}
+	if config.Credentials == nil && config.CredentialProvider != nil {
+		return nil, fmt.Errorf("credential descriptor is required with credential provider")
+	}
 	client := &StreamClient{
-		connector: config.Connector, defaultRouteID: defaultRouteID, publicURL: publicURL,
+		connector: config.Connector, credentials: credentialsCopy,
+		credentialProvider: config.CredentialProvider,
+		defaultRouteID:     defaultRouteID, publicURL: publicURL, privateURL: privateURL,
+		now:      config.Now,
 		observer: config.Observer, reconnectPolicy: config.ReconnectPolicy,
 		backoff: config.Backoff, maxReconnectAttempts: config.MaxReconnectAttempts,
 	}
@@ -402,6 +451,9 @@ func validateStreamSubscription(subscription StreamSubscription) error {
 	if err := validateSymbol(subscription.Symbol); err != nil {
 		return err
 	}
+	if subscription.Mode != 0 {
+		return validationError("public WebSocket subscription does not accept private mode")
+	}
 	switch subscription.Channel {
 	case StreamChannelTicker, StreamChannelBBO, StreamChannelTrades:
 		if subscription.DepthType != "" || subscription.CandleInterval != "" {
@@ -448,7 +500,8 @@ func streamSubscriptionTopic(subscription StreamSubscription) string {
 
 func streamSubscriptionKey(subscription StreamSubscription) string {
 	return string(subscription.Channel) + "\x00" + subscription.Symbol + "\x00" +
-		string(subscription.DepthType) + "\x00" + string(subscription.CandleInterval)
+		string(subscription.DepthType) + "\x00" + string(subscription.CandleInterval) +
+		"\x00" + strconv.Itoa(int(subscription.Mode))
 }
 
 func (client *StreamClient) resolveStreamRoute(
@@ -465,7 +518,8 @@ func (client *StreamClient) resolveStreamRoute(
 }
 
 func (client *StreamClient) streamReconnectPolicy(cause error) bool {
-	if errors.Is(cause, trade.ErrValidation) {
+	if errors.Is(cause, trade.ErrValidation) || errors.Is(cause, trade.ErrAuthentication) ||
+		errors.Is(cause, trade.ErrAuthorization) {
 		return false
 	}
 	if client.reconnectPolicy != nil {

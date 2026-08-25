@@ -5,15 +5,29 @@ import (
 	"fmt"
 )
 
-// StreamChannel은 HTX 일반 시세 WebSocket 채널이다.
+// StreamChannel은 HTX 공개 시세 또는 private 계정 WebSocket 채널이다.
 type StreamChannel string
 
 const (
-	StreamChannelTicker  StreamChannel = "ticker"
-	StreamChannelDepth   StreamChannel = "depth"
-	StreamChannelBBO     StreamChannel = "bbo"
-	StreamChannelTrades  StreamChannel = "trades"
-	StreamChannelCandles StreamChannel = "candles"
+	StreamChannelTicker   StreamChannel = "ticker"
+	StreamChannelDepth    StreamChannel = "depth"
+	StreamChannelBBO      StreamChannel = "bbo"
+	StreamChannelTrades   StreamChannel = "trades"
+	StreamChannelCandles  StreamChannel = "candles"
+	StreamChannelOrders   StreamChannel = "orders"
+	StreamChannelClearing StreamChannel = "trade_clearing"
+	StreamChannelAccounts StreamChannel = "accounts"
+)
+
+// StreamMode는 private 체결·취소 또는 계정 잔고 통지 방식이다.
+type StreamMode int
+
+const (
+	StreamModeTradesOnly             StreamMode = 0
+	StreamModeTradesAndCancellations StreamMode = 1
+	StreamModeBalanceOnly            StreamMode = 0
+	StreamModeBalanceOrAvailable     StreamMode = 1
+	StreamModeBalanceAndAvailable    StreamMode = 2
 )
 
 // StreamSubscription은 시세 채널과 거래쌍 및 채널별 선택 값을 정의한다.
@@ -22,9 +36,10 @@ type StreamSubscription struct {
 	Symbol         string
 	DepthType      DepthType
 	CandleInterval CandleInterval
+	Mode           StreamMode
 }
 
-// StreamRequest는 연결 직후 복구할 공개 시세 구독 목록이다.
+// StreamRequest는 연결 직후 복구할 공개 또는 private 구독 목록이다.
 type StreamRequest struct {
 	Subscriptions []StreamSubscription
 }
@@ -35,7 +50,7 @@ type StreamError struct {
 	Message string `json:"message"`
 }
 
-// StreamMessage는 시세 데이터, 구독 응답 또는 heartbeat 한 건이다.
+// StreamMessage는 시세·계정 데이터, 인증·구독 응답 또는 heartbeat 한 건이다.
 type StreamMessage struct {
 	ID           string
 	Status       string
@@ -44,22 +59,38 @@ type StreamMessage struct {
 	Symbol       string
 	Timestamp    int64
 	Ping         *int64
+	Action       string
+	Code         int
+	Message      string
+	Private      bool
+	Mode         StreamMode
 	Subscribed   string
 	Unsubscribed string
 	Error        *StreamError
 	Tick         json.RawMessage
+	Data         json.RawMessage
 	Raw          json.RawMessage
 }
 
-// Decode는 시세 이벤트의 tick을 지정한 타입으로 변환한다.
+// Decode는 공개 tick 또는 private data 이벤트를 지정한 타입으로 변환한다.
 func (message StreamMessage) Decode(target any) error {
 	if target == nil {
 		return fmt.Errorf("HTX stream decode target is nil")
 	}
-	if message.Topic == "" || len(message.Tick) == 0 || message.Error != nil {
+	if message.Error != nil || message.Topic == "" {
 		return fmt.Errorf("HTX stream message does not contain a data event")
 	}
-	if err := json.Unmarshal(message.Tick, target); err != nil {
+	payload := message.Tick
+	if message.Private {
+		if message.Action != "push" && message.Action != "" {
+			return fmt.Errorf("HTX stream message does not contain a data event")
+		}
+		payload = message.Data
+	}
+	if len(payload) == 0 {
+		return fmt.Errorf("HTX stream message does not contain a data event")
+	}
+	if err := json.Unmarshal(payload, target); err != nil {
 		return fmt.Errorf("decode HTX stream event: %w", err)
 	}
 	return nil
@@ -128,4 +159,72 @@ type StreamCandle struct {
 	BaseVolume  Decimal `json:"amount"`
 	QuoteVolume Decimal `json:"vol"`
 	TradeCount  int64   `json:"count"`
+}
+
+// StreamOrderEvent는 주문 생성·체결·취소와 조건부 주문 상태 변경이다.
+type StreamOrderEvent struct {
+	EventType        string    `json:"eventType"`
+	Symbol           string    `json:"symbol"`
+	AccountID        Scalar    `json:"accountId"`
+	OrderID          Scalar    `json:"orderId"`
+	ClientOrderID    string    `json:"clientOrderId"`
+	OrderSource      string    `json:"orderSource"`
+	OrderPrice       *Decimal  `json:"orderPrice"`
+	OrderSize        *Decimal  `json:"orderSize"`
+	OrderValue       *Decimal  `json:"orderValue"`
+	Type             OrderType `json:"type"`
+	OrderSide        Side      `json:"orderSide"`
+	OrderStatus      string    `json:"orderStatus"`
+	OrderCreateTime  int64     `json:"orderCreateTime"`
+	TradePrice       *Decimal  `json:"tradePrice"`
+	TradeVolume      *Decimal  `json:"tradeVolume"`
+	TradeID          Scalar    `json:"tradeId"`
+	TradeTime        int64     `json:"tradeTime"`
+	Aggressor        *bool     `json:"aggressor"`
+	RemainingAmount  *Decimal  `json:"remainAmt"`
+	ExecutedAmount   *Decimal  `json:"execAmt"`
+	LastActivityTime int64     `json:"lastActTime"`
+	ErrorCode        int       `json:"errCode"`
+	ErrorMessage     string    `json:"errMessage"`
+}
+
+// StreamClearingEvent는 주문 체결 또는 청산 후 취소 세부 정보다.
+type StreamClearingEvent struct {
+	EventType       string    `json:"eventType"`
+	Symbol          string    `json:"symbol"`
+	AccountID       Scalar    `json:"accountId"`
+	OrderID         Scalar    `json:"orderId"`
+	ClientOrderID   string    `json:"clientOrderId"`
+	OrderSide       Side      `json:"orderSide"`
+	OrderType       OrderType `json:"orderType"`
+	OrderStatus     string    `json:"orderStatus"`
+	Source          string    `json:"source"`
+	OrderPrice      *Decimal  `json:"orderPrice"`
+	OrderSize       *Decimal  `json:"orderSize"`
+	OrderValue      *Decimal  `json:"orderValue"`
+	OrderCreateTime int64     `json:"orderCreateTime"`
+	TradePrice      *Decimal  `json:"tradePrice"`
+	TradeVolume     *Decimal  `json:"tradeVolume"`
+	TradeID         Scalar    `json:"tradeId"`
+	TradeTime       int64     `json:"tradeTime"`
+	Aggressor       *bool     `json:"aggressor"`
+	TransactionFee  *Decimal  `json:"transactFee"`
+	FeeDeduction    *Decimal  `json:"feeDeduct"`
+	FeeDeductType   string    `json:"feeDeductType"`
+	FeeCurrency     string    `json:"feeCurrency"`
+	StopPrice       *Decimal  `json:"stopPrice"`
+	Operator        string    `json:"operator"`
+	RemainingAmount *Decimal  `json:"remainAmt"`
+}
+
+// StreamAccountEvent는 통화별 총잔고 또는 사용 가능 잔고 변경이다.
+type StreamAccountEvent struct {
+	Currency    string   `json:"currency"`
+	AccountID   Scalar   `json:"accountId"`
+	Balance     *Decimal `json:"balance"`
+	Available   *Decimal `json:"available"`
+	ChangeType  string   `json:"changeType"`
+	AccountType string   `json:"accountType"`
+	Sequence    Scalar   `json:"seqNum"`
+	ChangeTime  int64    `json:"changeTime"`
 }

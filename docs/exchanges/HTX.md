@@ -1,4 +1,4 @@
-# HTX Spot REST·public WebSocket 어댑터
+# HTX Spot REST·WebSocket 어댑터
 
 ## 기준
 
@@ -12,7 +12,7 @@
 
 공식 문서는 testnet이 중단되었다고 명시한다. 따라서 mock 서버 기반 자동 테스트를 구현 완료 기준으로 사용하고, 실제 계정과 지정 EIP가 필요한 검증은 지원 매트릭스의 별도 smoke 상태로 관리한다.
 
-현재 `exchange/htx`의 공개·private REST, public WebSocket, 공통 Spot API와 mock 자동 테스트가 구현되어 있다. private WebSocket과 로컬 오더북은 아래 순서대로 후속 구현한다. 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
+현재 `exchange/htx`의 공개·private REST, public/private WebSocket, 공통 Spot API와 mock 자동 테스트가 구현되어 있다. MBP 로컬 오더북은 아래 순서대로 후속 구현한다. 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
 
 ## 구현 범위
 
@@ -148,7 +148,7 @@ order, err := client.PlaceOrder(
 - 서버가 보내는 JSON `ping` 값과 같은 `pong` 즉시 응답 구현 완료
 - 연결 중 동적 구독·해지와 거절 응답 rollback 구현 완료
 - 재연결 시 같은 EIP 유지와 현재 구독 자동 복구 구현 완료
-- v2 private 인증과 주문·잔고 구독 예정
+- v2 `2.1` HMAC 인증·재인증과 주문·체결·계정 구독 구현 완료
 - MBP 증분의 sequence를 검증하는 로컬 오더북과 같은 EIP REST snapshot 복구
 
 일반 시세 endpoint는 `DefaultPublicWebSocketURL`, AWS 최적화 endpoint는 `DefaultAWSPublicWebSocketURL`로 선택한다. 최초 연결과 자동 재연결은 `PublicStream`을 만들 때 정한 route를 계속 사용한다. HTX가 보내는 binary frame은 최대 16 MiB까지 gzip 해제한 뒤 JSON 객체를 검증하며, handler에는 heartbeat·구독 응답·시세 데이터가 수신 순서대로 전달된다.
@@ -185,13 +185,17 @@ err = marketStream.Run(ctx, func(_ context.Context, message htx.StreamMessage) e
 
 `Subscribe`와 `Unsubscribe`는 실행 중인 연결의 구독 목록을 바꾼다. 서버가 요청을 거절하면 optimistic 상태 변경을 되돌리며, 다음 재연결에는 승인된 현재 목록만 복구한다. `Run`의 context가 연결 수명을 제어하므로 요청별 timeout option은 허용하지 않는다.
 
+private endpoint는 `DefaultPrivateWebSocketURL` 또는 `DefaultAWSPrivateWebSocketURL`로 선택한다. 연결할 때마다 실제 endpoint의 host와 `/ws/v2`, `accessKey`·`signatureMethod`·`signatureVersion=2.1`·UTC `timestamp`를 기준으로 HMAC SHA-256 표준 Base64 서명을 새로 만든다. route 허용 목록과 `read` 권한을 Secret 조회 전에 검사하며, 사용한 key·secret byte slice는 인증 요청을 만든 직후 덮어쓴다.
+
+private stream은 공식 규격대로 압축하지 않은 JSON text frame만 받는다. `orders#symbol`, `trade.clearing#symbol#mode`, `accounts.update#mode`를 지원하고 주문·체결 채널의 `*` wildcard도 허용한다. 서버의 `action=ping`에는 같은 millisecond 값의 `action=pong`을 보낸다. 인증·구독·해지는 연결당 초당 50개 유효 요청 한도를 공유하며, 재연결 때도 인증 완료 후 현재 구독을 제한 안에서 복구한다.
+
 ## 구현 순서
 
 1. 공개 REST, 오류 정규화, 요청 제한과 mock 테스트 완료
 2. private REST, signer golden vector와 주문 안전 계약 완료
 3. 공통 Spot API와 적합성 테스트 완료
 4. public WebSocket과 gzip·heartbeat 계약 완료
-5. private WebSocket 인증과 주문·잔고 구독
+5. private WebSocket 인증과 주문·체결·잔고 구독 완료
 6. MBP 로컬 오더북과 sequence gap 복구
 7. 실제 계정 read-only 및 명시적 소액 주문 smoke
 
