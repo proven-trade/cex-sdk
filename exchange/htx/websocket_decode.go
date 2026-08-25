@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	corestream "github.com/proven-trade/proven-trade-sdk/stream"
@@ -21,9 +22,11 @@ type streamWireMessage struct {
 	Ping      *int64          `json:"ping"`
 	Subbed    string          `json:"subbed"`
 	Unsubbed  string          `json:"unsubbed"`
+	Reply     string          `json:"rep"`
 	ErrorCode string          `json:"err-code"`
 	ErrorText string          `json:"err-msg"`
 	Tick      json.RawMessage `json:"tick"`
+	Data      json.RawMessage `json:"data"`
 }
 
 // DecodeStreamMessage는 HTX text 또는 gzip binary frame을 control과 시세 데이터로 분류한다.
@@ -47,22 +50,41 @@ func DecodeStreamMessage(message corestream.Message) (StreamMessage, error) {
 	}
 	result := StreamMessage{
 		ID: id, Status: wire.Status, Timestamp: wire.Time, Ping: wire.Ping,
-		Subscribed: wire.Subbed, Unsubscribed: wire.Unsubbed,
-		Tick: cloneBytes(wire.Tick), Raw: cloneBytes(trimmed),
+		Subscribed: wire.Subbed, Unsubscribed: wire.Unsubbed, Reply: wire.Reply,
+		Tick: cloneBytes(wire.Tick), Data: cloneBytes(wire.Data), Raw: cloneBytes(trimmed),
 	}
 	if wire.ErrorCode != "" || wire.ErrorText != "" || wire.Status == "error" {
 		result.Error = &StreamError{Code: wire.ErrorCode, Message: wire.ErrorText}
 	}
 	if wire.Ping != nil {
 		if id != "" || wire.Channel != "" || len(wire.Tick) != 0 || wire.Subbed != "" ||
-			wire.Unsubbed != "" || result.Error != nil {
+			wire.Unsubbed != "" || wire.Reply != "" || len(wire.Data) != 0 || result.Error != nil {
 			return StreamMessage{}, fmt.Errorf("HTX heartbeat contains unexpected fields")
 		}
 		return result, nil
 	}
+	if wire.Reply != "" {
+		if id == "" || wire.Status == "" || wire.Channel != "" || len(wire.Tick) != 0 ||
+			wire.Subbed != "" || wire.Unsubbed != "" ||
+			(result.Error == nil && len(wire.Data) == 0) {
+			return StreamMessage{}, fmt.Errorf("HTX refresh response envelope is invalid")
+		}
+		channel, symbol, err := parseStreamTopic(wire.Reply)
+		if err != nil {
+			return StreamMessage{}, err
+		}
+		if channel != StreamChannelMBP {
+			return StreamMessage{}, fmt.Errorf("HTX refresh response is not an MBP topic")
+		}
+		result.Topic = wire.Reply
+		result.Channel = channel
+		result.Symbol = symbol
+		result.MBPDepth = streamTopicMBPDepth(wire.Reply)
+		return result, nil
+	}
 	if wire.Channel != "" {
 		if len(wire.Tick) == 0 || id != "" || wire.Subbed != "" || wire.Unsubbed != "" ||
-			result.Error != nil {
+			len(wire.Data) != 0 || result.Error != nil {
 			return StreamMessage{}, fmt.Errorf("HTX data event envelope is invalid")
 		}
 		channel, symbol, err := parseStreamTopic(wire.Channel)
@@ -72,6 +94,7 @@ func DecodeStreamMessage(message corestream.Message) (StreamMessage, error) {
 		result.Topic = wire.Channel
 		result.Channel = channel
 		result.Symbol = symbol
+		result.MBPDepth = streamTopicMBPDepth(wire.Channel)
 		return result, nil
 	}
 	if id == "" || wire.Status == "" {
@@ -92,6 +115,7 @@ func DecodeStreamMessage(message corestream.Message) (StreamMessage, error) {
 		result.Topic = topic
 		result.Channel = channel
 		result.Symbol = symbol
+		result.MBPDepth = streamTopicMBPDepth(topic)
 	}
 	return result, nil
 }
@@ -146,8 +170,26 @@ func parseStreamTopic(topic string) (StreamChannel, string, error) {
 		channel = StreamChannelTrades
 	case len(parts) == 4 && parts[2] == "kline" && CandleInterval(parts[3]).valid():
 		channel = StreamChannelCandles
+	case len(parts) == 4 && parts[2] == "mbp" && StreamMBPDepth(parseStreamDepth(parts[3])).valid():
+		channel = StreamChannelMBP
 	default:
 		return "", "", fmt.Errorf("unsupported HTX stream topic %q", topic)
 	}
 	return channel, symbol, nil
+}
+
+func parseStreamDepth(value string) int {
+	depth, err := strconv.Atoi(value)
+	if err != nil {
+		return 0
+	}
+	return depth
+}
+
+func streamTopicMBPDepth(topic string) StreamMBPDepth {
+	parts := strings.Split(topic, ".")
+	if len(parts) != 4 || parts[2] != "mbp" {
+		return 0
+	}
+	return StreamMBPDepth(parseStreamDepth(parts[3]))
 }

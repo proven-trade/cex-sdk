@@ -609,7 +609,7 @@ const (
 - 공통 Spot API와 적합성 테스트 구현 완료
 - gzip JSON public WebSocket, 서버 ping 응답과 같은 EIP 재구독 구현 완료
 - v2 HMAC 인증과 private 주문·체결·잔고 WebSocket 구현 완료
-- MBP 증분 stream과 같은 EIP의 REST snapshot을 결합한 로컬 오더북
+- MBP 증분 stream과 같은 `/feed` 연결의 refresh 전체 이미지를 결합한 5·20·150단계 로컬 오더북 구현 완료
 - 공식 testnet이 중단되었으므로 mock 자동 테스트와 production read-only·명시적 소액 주문 smoke를 분리
 - HTX 완료 후 공식 API 유지 상태와 운영 수요를 다시 검토해 다음 P4 거래소를 지원 매트릭스에 등록
 

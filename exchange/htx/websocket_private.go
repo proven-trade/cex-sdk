@@ -519,7 +519,8 @@ func validatePrivateStreamSubscriptions(
 }
 
 func validatePrivateStreamSubscription(subscription StreamSubscription) error {
-	if subscription.DepthType != "" || subscription.CandleInterval != "" {
+	if subscription.DepthType != "" || subscription.CandleInterval != "" ||
+		subscription.MBPDepth != 0 {
 		return validationError("private WebSocket subscription does not accept public interval")
 	}
 	switch subscription.Channel {

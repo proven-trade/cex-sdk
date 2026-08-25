@@ -23,6 +23,8 @@ import (
 const (
 	DefaultPublicWebSocketURL     = "wss://api.huobi.pro/ws"
 	DefaultAWSPublicWebSocketURL  = "wss://api-aws.huobi.pro/ws"
+	DefaultMBPWebSocketURL        = "wss://api.huobi.pro/feed"
+	DefaultAWSMBPWebSocketURL     = "wss://api-aws.huobi.pro/feed"
 	DefaultPrivateWebSocketURL    = "wss://api.huobi.pro/ws/v2"
 	DefaultAWSPrivateWebSocketURL = "wss://api-aws.huobi.pro/ws/v2"
 	maximumStreamSubscriptions    = 200
@@ -35,6 +37,7 @@ type StreamClientConfig struct {
 	CredentialProvider     credential.Provider
 	DefaultEgressRouteID   transport.EgressRouteID
 	PublicWebSocketURL     string
+	MBPWebSocketURL        string
 	PrivateWebSocketURL    string
 	AllowInsecureWebSocket bool
 	Now                    func() time.Time
@@ -51,6 +54,7 @@ type StreamClient struct {
 	credentialProvider   credential.Provider
 	defaultRouteID       transport.EgressRouteID
 	publicURL            string
+	mbpURL               string
 	privateURL           string
 	now                  func() time.Time
 	observer             corestream.StateObserver
@@ -72,6 +76,9 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 	if config.PublicWebSocketURL == "" {
 		config.PublicWebSocketURL = DefaultPublicWebSocketURL
 	}
+	if config.MBPWebSocketURL == "" {
+		config.MBPWebSocketURL = DefaultMBPWebSocketURL
+	}
 	if config.PrivateWebSocketURL == "" {
 		config.PrivateWebSocketURL = DefaultPrivateWebSocketURL
 	}
@@ -80,6 +87,10 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("invalid HTX public WebSocket URL: %w", err)
+	}
+	mbpURL, err := validateStreamURL(config.MBPWebSocketURL, config.AllowInsecureWebSocket)
+	if err != nil {
+		return nil, fmt.Errorf("invalid HTX MBP WebSocket URL: %w", err)
 	}
 	privateURL, err := validateStreamURL(
 		config.PrivateWebSocketURL, config.AllowInsecureWebSocket,
@@ -118,7 +129,8 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 	client := &StreamClient{
 		connector: config.Connector, credentials: credentialsCopy,
 		credentialProvider: config.CredentialProvider,
-		defaultRouteID:     defaultRouteID, publicURL: publicURL, privateURL: privateURL,
+		defaultRouteID:     defaultRouteID, publicURL: publicURL,
+		mbpURL: mbpURL, privateURL: privateURL,
 		now:      config.Now,
 		observer: config.Observer, reconnectPolicy: config.ReconnectPolicy,
 		backoff: config.Backoff, maxReconnectAttempts: config.MaxReconnectAttempts,
@@ -454,6 +466,9 @@ func validateStreamSubscription(subscription StreamSubscription) error {
 	if subscription.Mode != 0 {
 		return validationError("public WebSocket subscription does not accept private mode")
 	}
+	if subscription.MBPDepth != 0 {
+		return validationError("general public WebSocket subscription does not accept MBP depth")
+	}
 	switch subscription.Channel {
 	case StreamChannelTicker, StreamChannelBBO, StreamChannelTrades:
 		if subscription.DepthType != "" || subscription.CandleInterval != "" {
@@ -493,6 +508,9 @@ func streamSubscriptionTopic(subscription StreamSubscription) string {
 		return "market." + subscription.Symbol + ".trade.detail"
 	case StreamChannelCandles:
 		return "market." + subscription.Symbol + ".kline." + string(subscription.CandleInterval)
+	case StreamChannelMBP:
+		return "market." + subscription.Symbol + ".mbp." +
+			strconv.Itoa(int(subscription.MBPDepth))
 	default:
 		return ""
 	}
@@ -501,7 +519,8 @@ func streamSubscriptionTopic(subscription StreamSubscription) string {
 func streamSubscriptionKey(subscription StreamSubscription) string {
 	return string(subscription.Channel) + "\x00" + subscription.Symbol + "\x00" +
 		string(subscription.DepthType) + "\x00" + string(subscription.CandleInterval) +
-		"\x00" + strconv.Itoa(int(subscription.Mode))
+		"\x00" + strconv.Itoa(int(subscription.Mode)) +
+		"\x00" + strconv.Itoa(int(subscription.MBPDepth))
 }
 
 func (client *StreamClient) resolveStreamRoute(

@@ -12,7 +12,7 @@
 
 공식 문서는 testnet이 중단되었다고 명시한다. 따라서 mock 서버 기반 자동 테스트를 구현 완료 기준으로 사용하고, 실제 계정과 지정 EIP가 필요한 검증은 지원 매트릭스의 별도 smoke 상태로 관리한다.
 
-현재 `exchange/htx`의 공개·private REST, public/private WebSocket, 공통 Spot API와 mock 자동 테스트가 구현되어 있다. MBP 로컬 오더북은 아래 순서대로 후속 구현한다. 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
+현재 `exchange/htx`의 공개·private REST, public/private WebSocket, MBP 로컬 오더북, 공통 Spot API와 mock 자동 테스트가 구현되어 있다. 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
 
 ## 구현 범위
 
@@ -149,7 +149,7 @@ order, err := client.PlaceOrder(
 - 연결 중 동적 구독·해지와 거절 응답 rollback 구현 완료
 - 재연결 시 같은 EIP 유지와 현재 구독 자동 복구 구현 완료
 - v2 `2.1` HMAC 인증·재인증과 주문·체결·계정 구독 구현 완료
-- MBP 증분의 sequence를 검증하는 로컬 오더북과 같은 EIP REST snapshot 복구
+- MBP 증분의 sequence를 검증하는 로컬 오더북과 같은 `/feed` 연결의 refresh 재동기화 구현 완료
 
 일반 시세 endpoint는 `DefaultPublicWebSocketURL`, AWS 최적화 endpoint는 `DefaultAWSPublicWebSocketURL`로 선택한다. 최초 연결과 자동 재연결은 `PublicStream`을 만들 때 정한 route를 계속 사용한다. HTX가 보내는 binary frame은 최대 16 MiB까지 gzip 해제한 뒤 JSON 객체를 검증하며, handler에는 heartbeat·구독 응답·시세 데이터가 수신 순서대로 전달된다.
 
@@ -189,6 +189,50 @@ private endpoint는 `DefaultPrivateWebSocketURL` 또는 `DefaultAWSPrivateWebSoc
 
 private stream은 공식 규격대로 압축하지 않은 JSON text frame만 받는다. `orders#symbol`, `trade.clearing#symbol#mode`, `accounts.update#mode`를 지원하고 주문·체결 채널의 `*` wildcard도 허용한다. 서버의 `action=ping`에는 같은 millisecond 값의 `action=pong`을 보낸다. 인증·구독·해지는 연결당 초당 50개 유효 요청 한도를 공유하며, 재연결 때도 인증 완료 후 현재 구독을 제한 안에서 복구한다.
 
+### MBP 로컬 오더북
+
+`MBPStream`은 일반 public endpoint와 분리된 `DefaultMBPWebSocketURL` 또는 `DefaultAWSMBPWebSocketURL`의 `/feed`에 연결한다. 5·20·150·400단계 증분을 구독할 수 있지만, 공식 refresh 요청은 5·20·150단계만 제공하므로 `LocalOrderBook`도 이 세 깊이만 지원한다.
+
+```go
+streamClient, err := htx.NewStreamClient(htx.StreamClientConfig{
+	Connector:            connector,
+	DefaultEgressRouteID: "seoul-a",
+	MBPWebSocketURL:      htx.DefaultAWSMBPWebSocketURL,
+})
+if err != nil {
+	return err
+}
+
+subscription := htx.StreamSubscription{
+	Channel: htx.StreamChannelMBP,
+	Symbol:  "btcusdt",
+	MBPDepth: htx.StreamMBPDepth20,
+}
+mbpStream, err := streamClient.MBPStream(
+	htx.StreamRequest{Subscriptions: []htx.StreamSubscription{subscription}},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+
+book, err := htx.NewLocalOrderBook(htx.LocalOrderBookConfig{
+	Symbol: "btcusdt", Depth: htx.StreamMBPDepth20, EgressRouteID: "seoul-b",
+})
+if err != nil {
+	return err
+}
+
+err = book.Run(ctx, mbpStream, func(_ context.Context, view htx.LocalOrderBookView) error {
+	// 동기화된 상위 호가를 전략 상태에 반영한다.
+	return consume(view)
+})
+```
+
+로컬 장부는 공식 순서대로 증분을 먼저 버퍼링하고 같은 WebSocket에 `req` refresh를 보낸다. refresh의 `seqNum`과 첫 적용 증분의 `prevSeqNum`을 맞춘 뒤, 이후 모든 증분의 `prevSeqNum`이 현재 `seqNum`과 같은지 검사한다. refresh가 현재 버퍼보다 앞서면 연결되는 다음 증분을 기다리고 그전에는 view를 공개하지 않는다. 변경 수량은 증감량이 아닌 새 절대 수량이며 0이면 해당 가격을 삭제한다. 하나의 이벤트에 포함된 양쪽 변경을 모두 적용한 뒤에만 view를 공개한다.
+
+sequence gap, WebSocket 연결 세대 변경 또는 refresh 정렬 실패가 발생하면 불완전한 장부를 공개하지 않고 같은 EIP의 `/feed` 연결에서 refresh를 다시 요청한다. `RequestSnapshot`은 공식 연결당 pull 제한에 맞춰 `req` 사이를 최소 100ms로 직렬화한다. `SynchronizationID`는 성공한 동기화 횟수, `GapCount`는 감지한 증분 공백 누계, `Generation`은 WebSocket 연결 세대를 나타낸다. 기본 증분 버퍼는 4096개이고 기본 view 깊이는 `min(20, MBPDepth)`다. stream과 장부의 symbol·depth·EIP route가 다르면 네트워크 작업 전에 거부한다.
+
 ## 구현 순서
 
 1. 공개 REST, 오류 정규화, 요청 제한과 mock 테스트 완료
@@ -196,7 +240,7 @@ private stream은 공식 규격대로 압축하지 않은 JSON text frame만 받
 3. 공통 Spot API와 적합성 테스트 완료
 4. public WebSocket과 gzip·heartbeat 계약 완료
 5. private WebSocket 인증과 주문·체결·잔고 구독 완료
-6. MBP 로컬 오더북과 sequence gap 복구
+6. MBP 로컬 오더북과 sequence gap 복구 완료
 7. 실제 계정 read-only 및 명시적 소액 주문 smoke
 
 각 코드 단계는 전체 formatter, 생성물 검사, 일반·race 테스트, vet, 한글 주석 검사를 통과한 뒤 별도 커밋으로 푸시한다.

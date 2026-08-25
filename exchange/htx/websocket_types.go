@@ -14,9 +14,20 @@ const (
 	StreamChannelBBO      StreamChannel = "bbo"
 	StreamChannelTrades   StreamChannel = "trades"
 	StreamChannelCandles  StreamChannel = "candles"
+	StreamChannelMBP      StreamChannel = "mbp"
 	StreamChannelOrders   StreamChannel = "orders"
 	StreamChannelClearing StreamChannel = "trade_clearing"
 	StreamChannelAccounts StreamChannel = "accounts"
+)
+
+// StreamMBPDepth는 증분 MBP 장부의 가격 단계 수다.
+type StreamMBPDepth int
+
+const (
+	StreamMBPDepth5   StreamMBPDepth = 5
+	StreamMBPDepth20  StreamMBPDepth = 20
+	StreamMBPDepth150 StreamMBPDepth = 150
+	StreamMBPDepth400 StreamMBPDepth = 400
 )
 
 // StreamMode는 private 체결·취소 또는 계정 잔고 통지 방식이다.
@@ -37,6 +48,7 @@ type StreamSubscription struct {
 	DepthType      DepthType
 	CandleInterval CandleInterval
 	Mode           StreamMode
+	MBPDepth       StreamMBPDepth
 }
 
 // StreamRequest는 연결 직후 복구할 공개 또는 private 구독 목록이다.
@@ -60,10 +72,12 @@ type StreamMessage struct {
 	Timestamp    int64
 	Ping         *int64
 	Action       string
+	Reply        string
 	Code         int
 	Message      string
 	Private      bool
 	Mode         StreamMode
+	MBPDepth     StreamMBPDepth
 	Subscribed   string
 	Unsubscribed string
 	Error        *StreamError
@@ -85,6 +99,8 @@ func (message StreamMessage) Decode(target any) error {
 		if message.Action != "push" && message.Action != "" {
 			return fmt.Errorf("HTX stream message does not contain a data event")
 		}
+		payload = message.Data
+	} else if message.Reply != "" {
 		payload = message.Data
 	}
 	if len(payload) == 0 {
@@ -159,6 +175,21 @@ type StreamCandle struct {
 	BaseVolume  Decimal `json:"amount"`
 	QuoteVolume Decimal `json:"vol"`
 	TradeCount  int64   `json:"count"`
+}
+
+// StreamMBPUpdate는 이전 sequence와 연결되는 절대 수량 기반 호가 변경이다.
+type StreamMBPUpdate struct {
+	Sequence         uint64      `json:"seqNum"`
+	PreviousSequence uint64      `json:"prevSeqNum"`
+	Bids             []BookLevel `json:"bids"`
+	Asks             []BookLevel `json:"asks"`
+}
+
+// StreamMBPSnapshot은 증분 정렬 기준이 되는 refresh 호가 전체 이미지다.
+type StreamMBPSnapshot struct {
+	Sequence uint64      `json:"seqNum"`
+	Bids     []BookLevel `json:"bids"`
+	Asks     []BookLevel `json:"asks"`
 }
 
 // StreamOrderEvent는 주문 생성·체결·취소와 조건부 주문 상태 변경이다.
