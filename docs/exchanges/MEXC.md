@@ -276,7 +276,7 @@ EIP를 바꿔도 UID bucket은 공유됩니다. 다중 EIP 기능은 정상적�
 
 `DefaultSymbols`와 `SelfSymbols`는 공식 문서 예시의 성공 code `200`과 production에서 사용하는 `0`을 모두 허용합니다. 다른 nonzero code, HTTP 오류, JSON 파싱 실패는 `trade.APIError`로 변환합니다. 인증·권한·잔고·주문 없음·요청 제한·거래소 장애 코드를 공통 category로 분류하고 MEXC 원본 code·message와 요청 ID를 함께 보존합니다.
 
-자동 테스트는 HMAC 서명과 실제 query 일치, 요청별 route 선택, route·권한 사전 검사, Secret 덮어쓰기, IP·UID 요청 제한, 주문 검증, 원본 JSON 보존, 오류 분류와 mutation 불명확 상태를 검증합니다. WebSocket 테스트는 공식 Protobuf field 번호별 공개·private 이벤트 해석, 잘못된 wire type·UTF-8 거절, JSON 제어 응답, listenKey 수명주기, JSON PING, 구독 rollback, 동일 EIP 재연결과 race 안전성을 검증합니다. 로컬 오더북 테스트는 공식 snapshot bridge 경계, 엄격한 다음 version, 중복·역행·전방 갭, snapshot 실패·불일치 재시도, 재연결 세대, 버퍼 상한과 동일 EIP REST·WebSocket 통합을 검증합니다. 공통 적합성 테스트는 마켓·시세·잔고·주문 변환, 3분봉 합성, 전체 미체결 5개 묶음과 EIP 전달을 검증합니다. 실제 MEXC 계정과 지정 EIP를 이용한 읽기·주문 smoke는 아직 대기 상태입니다.
+자동 테스트는 HMAC 서명과 실제 query 일치, 요청별 route 선택, route·권한 사전 검사, Secret 덮어쓰기, IP·UID 요청 제한, 주문 검증, 원본 JSON 보존, 오류 분류와 mutation 불명확 상태를 검증합니다. WebSocket 테스트는 공식 Protobuf field 번호별 공개·private 이벤트 해석, 잘못된 wire type·UTF-8 거절, JSON 제어 응답, listenKey 수명주기, JSON PING, 구독 rollback, 동일 EIP 재연결과 race 안전성을 검증합니다. 로컬 오더북 테스트는 공식 snapshot bridge 경계, 엄격한 다음 version, 중복·역행·전방 갭, snapshot 실패·불일치 재시도, 재연결 세대, 버퍼 상한과 동일 EIP REST·WebSocket 통합을 검증합니다. 공통 적합성 테스트는 마켓·시세·잔고·주문 변환, 3분봉 합성, 전체 미체결 5개 묶음과 EIP 전달을 검증합니다. 공통 live smoke CLI 연결은 구현됐으며 실제 MEXC 계정과 지정 EIP를 이용한 읽기·주문 smoke는 아직 대기 상태입니다.
 
 ## 공식 기준
 
