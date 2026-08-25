@@ -31,7 +31,7 @@
 ## 현재 기준
 
 - 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io, MEXC, HTX, Crypto.com REST·WebSocket
-- 다음 구현 대상: Crypto.com Exchange v1 live smoke 연결
+- 다음 구현 대상: Crypto.com Exchange v1 실제 EIP·계정 live smoke 실행
 - 구현 언어: Go
 - 네트워크: 단일 ENI의 여러 secondary private IPv4와 EIP 1:1 연결
 - IP 선택: 클라이언트 기본값과 요청별 `egressRouteId` 재정의
@@ -51,7 +51,7 @@
 | Bitget v3 UTA | Spot·USDT-M 공개 시세, 자산, 포지션, 주문 구현됨 |
 | Upbit Spot REST | 공개 시세, 잔고, 주문 생성·조회·취소·목록 구현됨 |
 | 공통 Spot API·적합성 테스트 | Binance·Bitget·Upbit·Bybit·OKX·Coinbase·Kraken·Bithumb·Coinone·Korbit·KuCoin·Gate.io·MEXC·HTX 구현됨 |
-| Spot live smoke CLI | 12개 Spot 어댑터의 지정 EIP·공개 조회·선택적 잔고 JSON 증적 구현됨 |
+| Spot live smoke CLI | 13개 Spot 어댑터의 지정 EIP·공개 조회·선택적 잔고 JSON 증적 구현됨 |
 | Spot 주문 smoke 안전 계약 | post-only·금액 상한·EIP/호가 선검사·취소 정리 구현됨 |
 | 공통 WebSocket 연결 계층 | route 고정, 재연결, 재구독 훅, heartbeat 구현됨 |
 | Binance Spot WebSocket | public market·private user data stream·로컬 오더북 자동 갭 복구 구현됨 |

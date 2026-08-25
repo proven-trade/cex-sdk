@@ -24,6 +24,7 @@ import (
 	bybitexchange "github.com/proven-trade/proven-trade-sdk/exchange/bybit"
 	coinbaseexchange "github.com/proven-trade/proven-trade-sdk/exchange/coinbase"
 	coinoneexchange "github.com/proven-trade/proven-trade-sdk/exchange/coinone"
+	cryptocomexchange "github.com/proven-trade/proven-trade-sdk/exchange/cryptocom"
 	gateioexchange "github.com/proven-trade/proven-trade-sdk/exchange/gateio"
 	korbitexchange "github.com/proven-trade/proven-trade-sdk/exchange/korbit"
 	krakenexchange "github.com/proven-trade/proven-trade-sdk/exchange/kraken"
@@ -501,6 +502,15 @@ func buildSpotClient(
 			return nil, err
 		}
 		return gateioexchange.NewUnifiedSpot(client)
+	case model.ExchangeCryptoCom:
+		client, err := cryptocomexchange.New(cryptocomexchange.Config{
+			Executor: executor, Credentials: descriptor, CredentialProvider: provider,
+			DefaultEgressRouteID: routeID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return cryptocomexchange.NewUnifiedSpot(client)
 	default:
 		return nil, fmt.Errorf("지원하지 않는 Spot 거래소 %q", exchangeID)
 	}
@@ -511,7 +521,8 @@ func supportedSpotExchange(exchangeID model.ExchangeID) bool {
 	case model.ExchangeBinance, model.ExchangeBitget, model.ExchangeUpbit,
 		model.ExchangeBybit, model.ExchangeOKX, model.ExchangeCoinbase,
 		model.ExchangeKraken, model.ExchangeBithumb, model.ExchangeCoinone,
-		model.ExchangeKorbit, model.ExchangeKuCoin, model.ExchangeGateIO:
+		model.ExchangeKorbit, model.ExchangeKuCoin, model.ExchangeGateIO,
+		model.ExchangeCryptoCom:
 		return true
 	default:
 		return false

@@ -199,6 +199,7 @@ func TestBuildSpotClientSupportsEveryUnifiedExchange(t *testing.T) {
 		model.ExchangeBybit, model.ExchangeOKX, model.ExchangeCoinbase,
 		model.ExchangeKraken, model.ExchangeBithumb, model.ExchangeCoinone,
 		model.ExchangeKorbit, model.ExchangeKuCoin, model.ExchangeGateIO,
+		model.ExchangeCryptoCom,
 	}
 	for _, exchangeID := range exchanges {
 		client, err := buildSpotClient(exchangeID, executor, "route-a", nil, nil)

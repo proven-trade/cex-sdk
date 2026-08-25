@@ -231,7 +231,7 @@ err = book.Run(ctx, public, func(_ context.Context, view cryptocom.LocalOrderBoo
 4. public market WebSocket과 heartbeat·동적 구독 구현 완료
 5. private user WebSocket 인증과 주문·체결·잔고 구독 구현 완료
 6. 10·50단계 로컬 오더북과 sequence gap 복구 구현 완료
-7. UAT·production read-only 및 명시적 소액 주문 smoke
+7. 공통 live smoke CLI 연결 구현 완료, UAT·production 실제 실행 대기
 
 각 단계는 Go formatter, 생성물 검사, 일반·race 테스트, vet, 한글 주석 검사를 통과한 뒤 별도 커밋으로 푸시한다.
 
