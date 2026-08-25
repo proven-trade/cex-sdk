@@ -99,16 +99,20 @@ const (
 type OrderType string
 
 const (
-	OrderTypeBuyMarket      OrderType = "buy-market"
-	OrderTypeSellMarket     OrderType = "sell-market"
-	OrderTypeBuyLimit       OrderType = "buy-limit"
-	OrderTypeSellLimit      OrderType = "sell-limit"
-	OrderTypeBuyIOC         OrderType = "buy-ioc"
-	OrderTypeSellIOC        OrderType = "sell-ioc"
-	OrderTypeBuyLimitMaker  OrderType = "buy-limit-maker"
-	OrderTypeSellLimitMaker OrderType = "sell-limit-maker"
-	OrderTypeBuyLimitFOK    OrderType = "buy-limit-fok"
-	OrderTypeSellLimitFOK   OrderType = "sell-limit-fok"
+	OrderTypeBuyMarket        OrderType = "buy-market"
+	OrderTypeSellMarket       OrderType = "sell-market"
+	OrderTypeBuyLimit         OrderType = "buy-limit"
+	OrderTypeSellLimit        OrderType = "sell-limit"
+	OrderTypeBuyIOC           OrderType = "buy-ioc"
+	OrderTypeSellIOC          OrderType = "sell-ioc"
+	OrderTypeBuyLimitMaker    OrderType = "buy-limit-maker"
+	OrderTypeSellLimitMaker   OrderType = "sell-limit-maker"
+	OrderTypeBuyLimitFOK      OrderType = "buy-limit-fok"
+	OrderTypeSellLimitFOK     OrderType = "sell-limit-fok"
+	OrderTypeBuyStopLimit     OrderType = "buy-stop-limit"
+	OrderTypeSellStopLimit    OrderType = "sell-stop-limit"
+	OrderTypeBuyStopLimitFOK  OrderType = "buy-stop-limit-fok"
+	OrderTypeSellStopLimitFOK OrderType = "sell-stop-limit-fok"
 )
 
 // OrderState는 HTX Spot 주문의 수명주기 상태다.
@@ -464,7 +468,8 @@ func (value OrderType) valid() bool {
 	switch value {
 	case OrderTypeBuyMarket, OrderTypeSellMarket, OrderTypeBuyLimit, OrderTypeSellLimit,
 		OrderTypeBuyIOC, OrderTypeSellIOC, OrderTypeBuyLimitMaker, OrderTypeSellLimitMaker,
-		OrderTypeBuyLimitFOK, OrderTypeSellLimitFOK:
+		OrderTypeBuyLimitFOK, OrderTypeSellLimitFOK, OrderTypeBuyStopLimit,
+		OrderTypeSellStopLimit, OrderTypeBuyStopLimitFOK, OrderTypeSellStopLimitFOK:
 		return true
 	default:
 		return false

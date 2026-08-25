@@ -111,7 +111,6 @@ func (client *Client) CancelOrder(
 	}
 	path := "/v1/order/orders/" + request.OrderID + "/submitcancel"
 	query := make(url.Values)
-	setIfNotEmpty(query, "symbol", request.Symbol)
 	var body []byte
 	if request.ClientOrderID != "" {
 		path = "/v1/order/orders/submitCancelClientOrder"
@@ -122,6 +121,8 @@ func (client *Client) CancelOrder(
 			return CancelResult{}, validationError("encode HTX cancel request: %v", err)
 		}
 		body = encoded
+	} else {
+		setIfNotEmpty(query, "symbol", request.Symbol)
 	}
 	response, err := client.executePrivate(
 		ctx, http.MethodPost, path, query, body,

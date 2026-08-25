@@ -97,6 +97,10 @@ func TestClientPrivateSpotLifecycle(t *testing.T) {
 		case request.URL.Path == "/v1/order/orders/10001" && request.Method == http.MethodGet:
 			_, _ = io.WriteString(writer, `{"status":"ok","data":`+htxOrderJSON("submitted", false)+`}`)
 		case request.URL.Path == "/v1/order/orders/submitCancelClientOrder" && request.Method == http.MethodPost:
+			if request.URL.Query().Get("symbol") != "" {
+				http.Error(writer, `{"status":"error","err-code":"invalid-parameter"}`, http.StatusBadRequest)
+				return
+			}
 			var body struct {
 				ClientOrderID string `json:"client-order-id"`
 			}

@@ -12,7 +12,7 @@
 
 공식 문서는 testnet이 중단되었다고 명시한다. 따라서 mock 서버 기반 자동 테스트를 구현 완료 기준으로 사용하고, 실제 계정과 지정 EIP가 필요한 검증은 지원 매트릭스의 별도 smoke 상태로 관리한다.
 
-현재 `exchange/htx`의 공개·private REST와 mock 자동 테스트가 구현되어 있다. 공통 Spot API, WebSocket과 로컬 오더북은 아래 순서대로 후속 구현한다. 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
+현재 `exchange/htx`의 공개·private REST, 공통 Spot API와 mock 자동 테스트가 구현되어 있다. WebSocket과 로컬 오더북은 아래 순서대로 후속 구현한다. 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
 
 ## 구현 범위
 
@@ -129,11 +129,18 @@ order, err := client.PlaceOrder(
 
 공식 2초 요청 제한을 계정 기준의 보수적인 공유 bucket으로 적용한다. 계정 조회와 주문 mutation은 기본 100회/2초, 주문 조회는 50회/2초, 계정 체결 이력은 20회/2초다. 각각 `AccountQuota`, `OrderQuota`, `OrderReadQuota`, `TradeHistoryQuota`로 더 낮은 운영값을 지정할 수 있다. HTX 제한 응답 헤더와 HTTP 429·`Retry-After`도 로컬 limiter 상태에 반영한다.
 
-### 공통 Spot API
+## 공통 Spot API
 
-- `Base`와 `Quote`를 HTX 소문자 결합 심볼로 변환
-- 상품 규칙, ticker, order book, candle, 잔고, 주문 계약 정규화
+- `Base`와 `Quote`를 HTX 소문자 결합 심볼로 변환 구현 완료
+- 상품 규칙, ticker, order book, 공개 체결, candle, 잔고, 주문 계약 정규화 구현 완료
+- 공통 읽기·주문 적합성 테스트와 요청별 EIP 전달 검증 완료
 - 거래소 원본 상태와 응답은 민감 정보를 제외하고 보존
+
+`NewUnifiedSpot`은 native `Client`를 `unified.SpotClient`로 감싼다. HTX 호가의 5·10·20단계 제약 안에서 공통 요청 깊이만 반환하고, 공개 체결 묶음은 시간 순서를 유지한 단일 목록으로 펼친다. HTX에 없는 3분봉은 1분봉 세 개를 epoch 경계로 합성하며 초 단위 open time을 공통 millisecond 시각으로 바꾼다.
+
+잔고와 신규 주문은 계정 목록에서 유일한 `working` Spot 계정을 먼저 찾는다. `trade` 잔고는 `Available`, `frozen`·`lock`·`bank`는 정밀도 손실 없이 합산한 `Locked`로 변환하며 `loan`·`interest` 부채 항목은 공통 자산 잔고에서 제외한다. 미체결 전체 마켓 조회는 공식 거래쌍 규칙으로 native 심볼을 역매핑하고 500건 cursor를 반복해 끝까지 조회한다.
+
+공통 limit 주문의 GTC·IOC·FOK·post-only는 각각 HTX limit·IOC·limit-FOK·limit-maker로 변환한다. 공통 주문에 사용자 주문 ID가 없으면 `proven-` 접두사와 암호학적 난수로 HTX 64자 제약 안의 ID를 생성한다. native 주문 상태는 new·partially filled·filled·canceled로 정규화하고, 취소 진행 중이거나 모르는 미래 상태는 `unknown`으로 보존한다.
 
 ### WebSocket
 
@@ -146,7 +153,7 @@ order, err := client.PlaceOrder(
 
 1. 공개 REST, 오류 정규화, 요청 제한과 mock 테스트 완료
 2. private REST, signer golden vector와 주문 안전 계약 완료
-3. 공통 Spot API와 적합성 테스트
+3. 공통 Spot API와 적합성 테스트 완료
 4. public/private WebSocket과 gzip·heartbeat 계약
 5. MBP 로컬 오더북과 sequence gap 복구
 6. 실제 계정 read-only 및 명시적 소액 주문 smoke
