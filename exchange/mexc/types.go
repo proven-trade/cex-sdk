@@ -1,4 +1,4 @@
-// Package mexc는 MEXC Spot V3 REST 어댑터를 제공한다.
+// Package mexc는 MEXC Spot V3 REST·Protobuf WebSocket·공통 어댑터를 제공한다.
 package mexc
 
 import (

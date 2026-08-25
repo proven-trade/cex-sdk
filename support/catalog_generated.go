@@ -159,7 +159,7 @@ var catalogData = []ProductSupport{
 	{
 		Exchange: model.ExchangeID("mexc"), DisplayName: "MEXC", Tier: "P3",
 		Product: ProductID("spot"), ProductName: "Spot",
-		REST: Status("implemented"), WebSocketPublic: Status("planned"), WebSocketPrivate: Status("planned"),
+		REST: Status("implemented"), WebSocketPublic: Status("implemented"), WebSocketPrivate: Status("implemented"),
 		Unified: Status("implemented"), AutomatedTests: Status("implemented"),
 		LiveReadSmoke: Status("planned"), LiveTradeSmoke: Status("planned"),
 		Docs: []string{"docs/exchanges/MEXC.md"},

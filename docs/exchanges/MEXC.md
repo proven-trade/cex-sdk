@@ -1,6 +1,6 @@
-# MEXC Spot V3 REST·공통 어댑터
+# MEXC Spot V3 REST·Protobuf WebSocket·공통 어댑터
 
-Go 패키지는 `exchange/mexc`이며 현행 Spot V3 기본 주소 `https://api.mexc.com`을 사용합니다. 공개 시세, signed 계정·주문 REST와 `unified.SpotClient` 공통 API를 구현했습니다. Protobuf WebSocket은 후속 단계에서 추가합니다.
+Go 패키지는 `exchange/mexc`이며 현행 Spot V3 REST 기본 주소 `https://api.mexc.com`과 WebSocket 주소 `wss://wbs-api.mexc.com/ws`를 사용합니다. 공개 시세, signed 계정·주문 REST, public/private Protobuf WebSocket과 `unified.SpotClient` 공통 API를 구현했습니다.
 
 MEXC는 별도 sandbox를 제공하지 않으므로 자동 테스트는 로컬 mock 거래소만 사용합니다. 실제 API 호출은 읽기 요청도 production 환경으로 향한다는 점을 운영 절차에서 구분해야 합니다.
 
@@ -66,6 +66,93 @@ if err != nil {
 `OrderBookRequest.Limit`은 생략하거나 1~5000, 체결·캔들 조회의 `Limit`은 생략하거나 1~1000입니다. 합산 체결의 `Start`와 `End`는 함께 지정해야 합니다. 캔들은 `1m`, `5m`, `15m`, `30m`, `60m`, `4h`, `1d`, `1W`, `1M`을 지원하고 시각은 Unix millisecond query로 변환합니다.
 
 Private 표의 weight는 endpoint 본문과 2025년 공식 제한표가 충돌하는 항목에서 더 보수적인 값인 10을 사용합니다. `AllOrders`는 최대 1000건과 7일 범위, `MyTrades`는 최대 100건과 31일 범위를 로컬에서 검증합니다.
+
+## Protobuf WebSocket
+
+MEXC는 구독·구독 해제·PONG 응답은 JSON text frame으로, 실제 시세와 계정 이벤트는 `PushDataV3ApiWrapper` binary Protobuf frame으로 전송합니다. SDK는 `DecodeStreamMessage`에서 frame 종류를 먼저 확인하고 다음 이벤트 포인터 중 해당하는 값 하나를 채웁니다. 숫자로 계산하면 정밀도를 잃을 수 있는 가격·수량·version·식별자는 문자열로 보존합니다.
+
+| 채널 | 생성 함수 | `StreamMessage` 필드 |
+|---|---|---|
+| 합산 체결 | `AggregateTradesStream` | `AggregateTrades` |
+| 캔들 | `CandleStream` | `Candle` |
+| 증분 호가 | `DiffDepthStream` | `DiffDepth` |
+| 5·10·20단계 완전 호가 | `PartialDepthStream` | `PartialDepth` |
+| 최우선 호가 | `BookTickerStream` | `BookTicker` |
+| private 잔고 변경 | `AccountStream` | `Account` |
+| private 체결 | `AccountDealsStream` | `AccountDeal` |
+| private 주문 | `AccountOrdersStream` | `AccountOrder` |
+
+합산 체결·증분 호가·최우선 호가는 `StreamUpdate10Millis` 또는 `StreamUpdate100Millis`를 요구합니다. 캔들은 `Min1`, `Min5`, `Min15`, `Min30`, `Min60`, `Hour4`, `Hour8`, `Day1`, `Week1`, `Month1`에 대응하는 `StreamCandleInterval` 상수를 사용합니다. 한 연결의 구독은 공식 제한인 30개를 넘길 수 없습니다.
+
+```go
+streamClient, err := mexc.NewStreamClient(mexc.StreamClientConfig{
+	Connector:            connector,
+	RESTClient:           client,
+	DefaultEgressRouteID: "seoul-a",
+})
+if err != nil {
+	return err
+}
+
+trades, err := mexc.AggregateTradesStream(
+	"BTCUSDT",
+	mexc.StreamUpdate100Millis,
+)
+if err != nil {
+	return err
+}
+
+public, err := streamClient.PublicStream(
+	mexc.StreamRequest{Subscriptions: []mexc.StreamSubscription{trades}},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+
+err = public.Run(ctx, func(_ context.Context, message mexc.StreamMessage) error {
+	if message.AggregateTrades == nil {
+		return nil
+	}
+	for _, deal := range message.AggregateTrades.Deals {
+		consume(deal)
+	}
+	return nil
+})
+```
+
+`PublicStream`과 `UserDataStream`은 실행 중 `Subscribe`·`Unsubscribe`를 지원합니다. 성공적으로 보낸 변경은 재연결 복구 목록에 즉시 반영하고, 거래소가 nonzero `code`로 거절하면 해당 변경만 되돌립니다. 연결이 끊기면 같은 EIP route에서 재연결하고 현재 목록을 다시 구독합니다. 데이터가 없는 연결도 유지하도록 기본 20초마다 공식 JSON `PING`을 보내며 PONG은 `StreamMessage.Control`로 전달합니다.
+
+### Private listenKey 수명주기
+
+Private stream은 `RESTClient`의 자격증명을 사용합니다. `UserDataStream` 생성 시 route 허용과 읽기 권한을 Secret 조회 전에 검사하고, `Run`의 최초 연결 직전에 같은 route로 `POST /api/v3/userDataStream`을 호출합니다. listenKey 요청은 공식 계약대로 HMAC Secret 없이 `X-MEXC-APIKEY`만 보내지만 Provider가 반환한 민감 byte slice는 호출 뒤 덮어씁니다.
+
+```go
+private, err := streamClient.UserDataStream(
+	mexc.StreamRequest{Subscriptions: []mexc.StreamSubscription{
+		mexc.AccountStream(),
+		mexc.AccountDealsStream(),
+		mexc.AccountOrdersStream(),
+	}},
+	trade.WithEgressRoute("seoul-b"),
+)
+if err != nil {
+	return err
+}
+
+err = private.Run(ctx, func(_ context.Context, message mexc.StreamMessage) error {
+	if message.AccountOrder != nil {
+		consumeOrder(*message.AccountOrder)
+	}
+	return nil
+})
+```
+
+SDK는 기본 30분마다 같은 EIP로 `PUT /api/v3/userDataStream?listenKey=...`을 보내 60분 유효 시간을 연장합니다. 갱신 실패 시 기존 키를 버리고 같은 route에서 새 키를 발급해 재연결합니다. 일반 WebSocket 재연결은 아직 유효한 키를 재사용합니다. 로컬 `Close`는 연결만 종료하므로 키를 즉시 무효화해야 하면 `Client.CloseUserDataStream`에 `private.ListenKey()`를 전달해야 합니다. 현재 유효 키 목록은 `Client.UserDataStreams`로 확인할 수 있습니다.
+
+listenKey 생성은 응답 유실 시 서버에서 키가 만들어졌는지 알 수 없는 mutation입니다. 전송 오류·5xx·성공 응답 파싱 실패는 `UNKNOWN_EXECUTION_STATE`로 반환하고 자동 재시도하지 않아 키를 무제한 생성하지 않습니다. MEXC의 24시간 연결 상한은 자동 재연결로 처리하며 실제 계정 운영 smoke는 아직 대기 상태입니다.
+
+증분 호가의 `FromVersion`·`ToVersion`과 REST `lastUpdateId`를 결합한 로컬 오더북·version 갭 복구는 다음 별도 단계에서 추가합니다.
 
 ## 공통 Spot API
 
@@ -140,10 +227,11 @@ EIP를 바꿔도 UID bucket은 공유됩니다. 다중 EIP 기능은 정상적�
 
 `DefaultSymbols`와 `SelfSymbols`는 공식 문서 예시의 성공 code `200`과 production에서 사용하는 `0`을 모두 허용합니다. 다른 nonzero code, HTTP 오류, JSON 파싱 실패는 `trade.APIError`로 변환합니다. 인증·권한·잔고·주문 없음·요청 제한·거래소 장애 코드를 공통 category로 분류하고 MEXC 원본 code·message와 요청 ID를 함께 보존합니다.
 
-자동 테스트는 HMAC 서명과 실제 query 일치, 요청별 route 선택, route·권한 사전 검사, Secret 덮어쓰기, IP·UID 요청 제한, 주문 검증, 원본 JSON 보존, 오류 분류와 mutation 불명확 상태를 검증합니다. 공통 적합성 테스트는 마켓·시세·잔고·주문 변환, 3분봉 합성, 전체 미체결 5개 묶음과 EIP 전달을 검증합니다. 실제 MEXC 계정과 지정 EIP를 이용한 읽기·주문 smoke는 아직 대기 상태입니다.
+자동 테스트는 HMAC 서명과 실제 query 일치, 요청별 route 선택, route·권한 사전 검사, Secret 덮어쓰기, IP·UID 요청 제한, 주문 검증, 원본 JSON 보존, 오류 분류와 mutation 불명확 상태를 검증합니다. WebSocket 테스트는 공식 Protobuf field 번호별 공개·private 이벤트 해석, 잘못된 wire type·UTF-8 거절, JSON 제어 응답, listenKey 수명주기, JSON PING, 구독 rollback, 동일 EIP 재연결과 race 안전성을 검증합니다. 공통 적합성 테스트는 마켓·시세·잔고·주문 변환, 3분봉 합성, 전체 미체결 5개 묶음과 EIP 전달을 검증합니다. 실제 MEXC 계정과 지정 EIP를 이용한 읽기·주문 smoke는 아직 대기 상태입니다.
 
 ## 공식 기준
 
 - [MEXC Spot V3 API 문서](https://mexcdevelop.github.io/apidocs/spot_v3_en/)
+- [MEXC WebSocket Protobuf 정의](https://github.com/mexcdevelop/websocket-proto)
 - [MEXC API 안내](https://www.mexc.com/mexc-api)
 - [MEXC 2025 요청 제한표](https://www.mexc.com/en-GB/announcements/article/term-definitions-17827791529303)
