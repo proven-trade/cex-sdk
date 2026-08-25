@@ -71,6 +71,7 @@
 | P1 | Bithumb, Coinone, Korbit | Spot | 국내 거래소 확장 |
 | P2 | KuCoin, Gate.io | Spot, Futures | 수요와 운영 계정 확보 후 |
 | P3 | MEXC | Spot | 네임드 거래소 확대의 첫 대상 |
+| P4 | HTX | Spot | REST·public/private WebSocket과 AWS 전용 호스트 우선 검증 |
 
 목록은 `config/exchange-support.yaml`을 기준 정보로 관리하며 `support` Go catalog와 `docs/SUPPORT_MATRIX.md`를 자동 생성한다. 추가 의존성을 피하기 위해 설정 파일은 YAML과 호환되는 JSON 문법을 사용한다.
 
@@ -600,7 +601,16 @@ const (
 - MEXC Spot 공통 API와 적합성 테스트 구현 완료
 - MEXC Spot protobuf public/private WebSocket 구현 완료
 - MEXC Spot REST snapshot·증분 version 로컬 오더북 구현 완료
-- 운영 수요·거래량·API 안정성을 기준으로 다음 거래소 확장
+
+### Phase 7 — P4 HTX Spot 확장
+
+- 공식 Spot API의 공개 REST와 요청별 EIP·endpoint별 요청 제한·오류 정규화
+- HMAC SHA-256 인증, 현물 계정 조회, 주문 생성·조회·취소·목록
+- 공통 Spot API와 적합성 테스트
+- gzip JSON public WebSocket과 v2 private WebSocket
+- MBP 증분 stream과 같은 EIP의 REST snapshot을 결합한 로컬 오더북
+- 공식 testnet이 중단되었으므로 mock 자동 테스트와 production read-only·명시적 소액 주문 smoke를 분리
+- HTX 완료 후 공식 API 유지 상태와 운영 수요를 다시 검토해 다음 P4 거래소를 지원 매트릭스에 등록
 
 ## 20. 확정 사항과 배포 전 결정 사항
 
@@ -640,6 +650,7 @@ const (
 - [Upbit API 개요](https://docs.upbit.com/kr/reference/api-overview)
 - [Upbit 인증](https://docs.upbit.com/kr/reference/auth)
 - [MEXC Spot V3 API](https://mexcdevelop.github.io/apidocs/spot_v3_en/)
+- [HTX Spot API](https://huobiapi.github.io/docs/spot/v1/en/)
 - [Upbit 요청 수 제한](https://docs.upbit.com/kr/reference/rate-limits)
 - [Bybit V5 요청 제한](https://bybit-exchange.github.io/docs/v5/rate-limit)
 - [OKX V5 API](https://www.okx.com/docs-v5/en/)

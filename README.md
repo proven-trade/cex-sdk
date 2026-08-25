@@ -25,10 +25,12 @@
 - [Gate.io API v4 Spot REST·WebSocket](docs/exchanges/GATEIO.md)
 - [Gate.io API v4 Futures REST·WebSocket](docs/exchanges/GATEIO_FUTURES.md)
 - [MEXC Spot V3 REST·Protobuf WebSocket](docs/exchanges/MEXC.md)
+- [HTX Spot 구현 계획](docs/exchanges/HTX.md)
 
 ## 현재 기준
 
 - 구현 거래소: Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io, MEXC Spot REST·WebSocket
+- 다음 구현 대상: HTX Spot REST·WebSocket
 - 구현 언어: Go
 - 네트워크: 단일 ENI의 여러 secondary private IPv4와 EIP 1:1 연결
 - IP 선택: 클라이언트 기본값과 요청별 `egressRouteId` 재정의
