@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	"github.com/proven-trade/proven-trade-sdk/model"
-	"github.com/proven-trade/proven-trade-sdk/transport"
-	"github.com/proven-trade/proven-trade-sdk/unified"
+	trade "github.com/proven-trade/cex-sdk"
+	"github.com/proven-trade/cex-sdk/model"
+	"github.com/proven-trade/cex-sdk/transport"
+	"github.com/proven-trade/cex-sdk/unified"
 )
 
 // RealOrderConfirmation은 실제 주문 실행을 허용하는 정확한 동의 문자열이다.

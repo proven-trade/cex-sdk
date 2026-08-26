@@ -183,7 +183,7 @@ func renderGo(value catalog) ([]byte, error) {
 	var output bytes.Buffer
 	output.WriteString("// 이 파일은 config/exchange-support.yaml에서 자동 생성됩니다.\n")
 	output.WriteString("package support\n\n")
-	output.WriteString("import \"github.com/proven-trade/proven-trade-sdk/model\"\n\n")
+	output.WriteString("import \"github.com/proven-trade/cex-sdk/model\"\n\n")
 	output.WriteString("var catalogData = []ProductSupport{\n")
 	for _, item := range value.Products {
 		output.WriteString("\t{\n")

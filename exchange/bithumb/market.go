@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk"
+	commonexchange "github.com/proven-trade/cex-sdk/exchange"
 )
 
 // Markets는 빗썸이 지원하는 전체 마켓을 조회한다.

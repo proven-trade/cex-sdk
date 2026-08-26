@@ -6,9 +6,9 @@ import (
 	"errors"
 	"time"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	"github.com/proven-trade/proven-trade-sdk/credential"
-	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk"
+	"github.com/proven-trade/cex-sdk/credential"
+	commonexchange "github.com/proven-trade/cex-sdk/exchange"
 )
 
 // WebSocketToken은 Spot private WebSocket 구독용 token을 발급한다.

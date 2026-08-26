@@ -3,9 +3,9 @@ package korbit
 import (
 	"context"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	"github.com/proven-trade/proven-trade-sdk/credential"
-	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk"
+	"github.com/proven-trade/cex-sdk/credential"
+	commonexchange "github.com/proven-trade/cex-sdk/exchange"
 )
 
 // Balances는 선택한 하위 계정의 일부 또는 전체 자산 잔고를 조회한다.

@@ -1,4 +1,4 @@
-module github.com/proven-trade/proven-trade-sdk
+module github.com/proven-trade/cex-sdk
 
 go 1.25
 

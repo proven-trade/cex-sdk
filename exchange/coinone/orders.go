@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	"github.com/proven-trade/proven-trade-sdk/credential"
-	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk"
+	"github.com/proven-trade/cex-sdk/credential"
+	commonexchange "github.com/proven-trade/cex-sdk/exchange"
 )
 
 // PlaceOrder는 코인원 Spot 주문을 생성한다.

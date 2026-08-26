@@ -2,7 +2,7 @@
 
 ## 목적
 
-Proven Trade SDK는 AWS Elastic IP, Vultr 추가 IPv4 같은 클라우드 상품을 직접 제어하지 않습니다. SDK의 네트워크 계약은 하나입니다.
+CEX SDK는 AWS Elastic IP, Vultr 추가 IPv4 같은 클라우드 상품을 직접 제어하지 않습니다. SDK의 네트워크 계약은 하나입니다.
 
 > 논리적인 `egressRouteId`를 호스트 OS에 할당된 하나의 `localSourceIp`에 연결하고, 그 주소에 소켓을 bind한다.
 

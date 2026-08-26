@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
+	trade "github.com/proven-trade/cex-sdk"
 )
 
 var (

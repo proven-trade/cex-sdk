@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
-	"github.com/proven-trade/proven-trade-sdk/model"
-	"github.com/proven-trade/proven-trade-sdk/ratelimit"
-	"github.com/proven-trade/proven-trade-sdk/transport"
+	trade "github.com/proven-trade/cex-sdk"
+	commonexchange "github.com/proven-trade/cex-sdk/exchange"
+	"github.com/proven-trade/cex-sdk/model"
+	"github.com/proven-trade/cex-sdk/ratelimit"
+	"github.com/proven-trade/cex-sdk/transport"
 )
 
 type directSender struct {
@@ -46,7 +46,7 @@ func TestClientPublicMarketDataLifecycle(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		if request.Method != http.MethodGet || request.Header.Get("Accept") != "application/json" ||
-			request.Header.Get("User-Agent") != "proven-trade-sdk-go/0" {
+			request.Header.Get("User-Agent") != "cex-sdk-go/0" {
 			http.Error(writer, `{"status":"error","err-code":"invalid-request"}`, http.StatusBadRequest)
 			return
 		}

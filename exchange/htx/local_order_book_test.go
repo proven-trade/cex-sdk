@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	"github.com/proven-trade/proven-trade-sdk/transport"
+	trade "github.com/proven-trade/cex-sdk"
+	"github.com/proven-trade/cex-sdk/transport"
 )
 
 func TestHTXLocalOrderBookAlignsOfficialRefreshAndUpdates(t *testing.T) {

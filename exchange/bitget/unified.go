@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strconv"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	"github.com/proven-trade/proven-trade-sdk/model"
-	"github.com/proven-trade/proven-trade-sdk/unified"
+	trade "github.com/proven-trade/cex-sdk"
+	"github.com/proven-trade/cex-sdk/model"
+	"github.com/proven-trade/cex-sdk/unified"
 )
 
 // UnifiedSpot은 Bitget native 클라이언트를 공통 Spot 계약으로 변환한다.

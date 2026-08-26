@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"net/url"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk"
+	commonexchange "github.com/proven-trade/cex-sdk/exchange"
 )
 
 // Contracts는 현재 거래 가능한 모든 KuCoin Futures 계약과 주문 규칙을 조회한다.

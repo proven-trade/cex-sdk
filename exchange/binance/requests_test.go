@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
+	trade "github.com/proven-trade/cex-sdk"
 )
 
 func TestNewOrderRequestValidation(t *testing.T) {

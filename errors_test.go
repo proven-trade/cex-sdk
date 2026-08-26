@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/proven-trade/proven-trade-sdk/model"
+	"github.com/proven-trade/cex-sdk/model"
 )
 
 func TestAPIErrorSupportsCommonAndOriginalErrors(t *testing.T) {

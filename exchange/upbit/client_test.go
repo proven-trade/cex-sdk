@@ -15,12 +15,12 @@ import (
 	"sync"
 	"testing"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	"github.com/proven-trade/proven-trade-sdk/credential"
-	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
-	"github.com/proven-trade/proven-trade-sdk/model"
-	"github.com/proven-trade/proven-trade-sdk/ratelimit"
-	"github.com/proven-trade/proven-trade-sdk/transport"
+	trade "github.com/proven-trade/cex-sdk"
+	"github.com/proven-trade/cex-sdk/credential"
+	commonexchange "github.com/proven-trade/cex-sdk/exchange"
+	"github.com/proven-trade/cex-sdk/model"
+	"github.com/proven-trade/cex-sdk/ratelimit"
+	"github.com/proven-trade/cex-sdk/transport"
 )
 
 type directSender struct {

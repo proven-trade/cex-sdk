@@ -5,9 +5,9 @@ import (
 	"errors"
 	"net/http"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	"github.com/proven-trade/proven-trade-sdk/credential"
-	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk"
+	"github.com/proven-trade/cex-sdk/credential"
+	commonexchange "github.com/proven-trade/cex-sdk/exchange"
 )
 
 // PlaceOrder는 코빗 Spot 주문을 고유한 clientOrderId와 함께 생성한다.

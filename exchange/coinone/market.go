@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/url"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk"
+	commonexchange "github.com/proven-trade/cex-sdk/exchange"
 )
 
 // Markets는 기준 통화로 거래 가능한 Spot 마켓을 조회한다.

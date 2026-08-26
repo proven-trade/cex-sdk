@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk"
+	commonexchange "github.com/proven-trade/cex-sdk/exchange"
 )
 
 // Instruments는 Spot 또는 USDT-M Futures 상품 규칙을 조회한다.

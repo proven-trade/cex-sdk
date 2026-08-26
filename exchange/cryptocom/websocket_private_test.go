@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	"github.com/proven-trade/proven-trade-sdk/credential"
-	"github.com/proven-trade/proven-trade-sdk/model"
-	corestream "github.com/proven-trade/proven-trade-sdk/stream"
-	"github.com/proven-trade/proven-trade-sdk/transport"
+	trade "github.com/proven-trade/cex-sdk"
+	"github.com/proven-trade/cex-sdk/credential"
+	"github.com/proven-trade/cex-sdk/model"
+	corestream "github.com/proven-trade/cex-sdk/stream"
+	"github.com/proven-trade/cex-sdk/transport"
 )
 
 type cryptoComUserAuthentication struct {

@@ -12,11 +12,11 @@ import (
 	"sync/atomic"
 	"testing"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	"github.com/proven-trade/proven-trade-sdk/conformance"
-	"github.com/proven-trade/proven-trade-sdk/model"
-	"github.com/proven-trade/proven-trade-sdk/transport"
-	"github.com/proven-trade/proven-trade-sdk/unified"
+	trade "github.com/proven-trade/cex-sdk"
+	"github.com/proven-trade/cex-sdk/conformance"
+	"github.com/proven-trade/cex-sdk/model"
+	"github.com/proven-trade/cex-sdk/transport"
+	"github.com/proven-trade/cex-sdk/unified"
 )
 
 func TestUnifiedSpotReadConformance(t *testing.T) {

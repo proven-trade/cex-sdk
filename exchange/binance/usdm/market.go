@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk"
+	commonexchange "github.com/proven-trade/cex-sdk/exchange"
 )
 
 // Ping은 USDⓈ-M REST 연결 상태를 확인한다.

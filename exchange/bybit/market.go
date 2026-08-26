@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk"
+	commonexchange "github.com/proven-trade/cex-sdk/exchange"
 )
 
 // ServerTime은 Bybit 서버 시간을 조회하고 로컬 서명 시계 오프셋을 갱신한다.

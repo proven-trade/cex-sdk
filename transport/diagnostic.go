@@ -50,7 +50,7 @@ func (registry *Registry) VerifyPublicIP(
 		return PublicIPCheck{}, fmt.Errorf("create public IP request: %w", err)
 	}
 	request.Header.Set("Accept", "application/json, text/plain")
-	request.Header.Set("User-Agent", "proven-trade-sdk-egressdiag/0")
+	request.Header.Set("User-Agent", "cex-sdk-egressdiag/0")
 
 	response, err := registry.Do(ctx, routeID, request)
 	if err != nil {

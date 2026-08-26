@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/proven-trade/proven-trade-sdk/model"
-	"github.com/proven-trade/proven-trade-sdk/transport"
+	"github.com/proven-trade/cex-sdk/model"
+	"github.com/proven-trade/cex-sdk/transport"
 )
 
 func TestDescriptorRequiresAllowedRoute(t *testing.T) {

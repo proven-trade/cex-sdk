@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	corestream "github.com/proven-trade/proven-trade-sdk/stream"
-	"github.com/proven-trade/proven-trade-sdk/transport"
+	trade "github.com/proven-trade/cex-sdk"
+	corestream "github.com/proven-trade/cex-sdk/stream"
+	"github.com/proven-trade/cex-sdk/transport"
 )
 
 type scriptedMEXCSnapshotLoader struct {

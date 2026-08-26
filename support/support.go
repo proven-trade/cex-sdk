@@ -1,7 +1,7 @@
 // Package support는 거래소와 상품별 구현·검증 상태를 조회하는 기능을 제공한다.
 package support
 
-import "github.com/proven-trade/proven-trade-sdk/model"
+import "github.com/proven-trade/cex-sdk/model"
 
 // Status는 기능의 구현 또는 검증 진행 상태다.
 type Status string

@@ -13,11 +13,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	"github.com/proven-trade/proven-trade-sdk/credential"
-	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
-	"github.com/proven-trade/proven-trade-sdk/model"
-	"github.com/proven-trade/proven-trade-sdk/transport"
+	trade "github.com/proven-trade/cex-sdk"
+	"github.com/proven-trade/cex-sdk/credential"
+	commonexchange "github.com/proven-trade/cex-sdk/exchange"
+	"github.com/proven-trade/cex-sdk/model"
+	"github.com/proven-trade/cex-sdk/transport"
 )
 
 const (
@@ -297,7 +297,7 @@ func (client *Client) newRequest(
 		return nil, fmt.Errorf("create Kraken request: %w", err)
 	}
 	request.Header.Set("Accept", "application/json")
-	request.Header.Set("User-Agent", "proven-trade-sdk-go/0")
+	request.Header.Set("User-Agent", "cex-sdk-go/0")
 	if method == http.MethodPost {
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}

@@ -6,8 +6,8 @@ import (
 	"errors"
 	"net/url"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk"
+	commonexchange "github.com/proven-trade/cex-sdk/exchange"
 )
 
 // Ping은 MEXC Spot V3 REST 연결 가능 여부를 확인한다.

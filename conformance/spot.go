@@ -4,9 +4,9 @@ package conformance
 import (
 	"context"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	"github.com/proven-trade/proven-trade-sdk/model"
-	"github.com/proven-trade/proven-trade-sdk/unified"
+	trade "github.com/proven-trade/cex-sdk"
+	"github.com/proven-trade/cex-sdk/model"
+	"github.com/proven-trade/cex-sdk/unified"
 )
 
 // TestingT는 표준 testing.T와 호환되는 최소 테스트 출력 계약이다.

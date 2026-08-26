@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/proven-trade/proven-trade-sdk/ratelimit"
-	"github.com/proven-trade/proven-trade-sdk/transport"
+	"github.com/proven-trade/cex-sdk/ratelimit"
+	"github.com/proven-trade/cex-sdk/transport"
 )
 
 func TestPrivateRateLimitChargesEndpointCost(t *testing.T) {

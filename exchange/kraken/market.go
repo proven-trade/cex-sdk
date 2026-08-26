@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strconv"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk"
+	commonexchange "github.com/proven-trade/cex-sdk/exchange"
 )
 
 // ServerTime은 Kraken 서버 시간을 조회한다.

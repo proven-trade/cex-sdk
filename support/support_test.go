@@ -3,7 +3,7 @@ package support
 import (
 	"testing"
 
-	"github.com/proven-trade/proven-trade-sdk/model"
+	"github.com/proven-trade/cex-sdk/model"
 )
 
 func TestCatalogLookupAndCopyIsolation(t *testing.T) {

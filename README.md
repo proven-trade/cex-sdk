@@ -1,4 +1,4 @@
-# Proven Trade SDK
+# CEX SDK
 
 여러 중앙화 거래소(CEX)의 REST/WebSocket API를 하나의 일관된 인터페이스로 제공하고, 클라우드 공급자와 무관하게 요청별 공인 송신 IP를 선택할 수 있게 하는 Go SDK 프로젝트입니다.
 

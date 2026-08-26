@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/proven-trade/proven-trade-sdk/transport"
+	"github.com/proven-trade/cex-sdk/transport"
 )
 
 func TestResolveRequestOptions(t *testing.T) {

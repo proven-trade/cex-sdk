@@ -1,7 +1,7 @@
 // 이 파일은 config/exchange-support.yaml에서 자동 생성됩니다.
 package support
 
-import "github.com/proven-trade/proven-trade-sdk/model"
+import "github.com/proven-trade/cex-sdk/model"
 
 var catalogData = []ProductSupport{
 	{

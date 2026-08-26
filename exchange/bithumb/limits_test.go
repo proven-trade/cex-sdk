@@ -3,7 +3,7 @@ package bithumb
 import (
 	"testing"
 
-	"github.com/proven-trade/proven-trade-sdk/ratelimit"
+	"github.com/proven-trade/cex-sdk/ratelimit"
 )
 
 func TestPrivateOrderRateLimitUsesAccountScopes(t *testing.T) {

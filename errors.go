@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/proven-trade/proven-trade-sdk/model"
+	"github.com/proven-trade/cex-sdk/model"
 )
 
 // ErrorCategory는 여러 거래소의 오류를 공통 의미로 분류한다.

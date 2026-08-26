@@ -1,4 +1,4 @@
-# Proven Trade SDK 프로젝트 기획서
+# CEX SDK 프로젝트 기획서
 
 - 상태: 구현 진행 중
 - 작성일: 2026-08-25
@@ -157,7 +157,7 @@ flowchart LR
 단일 Go module 안에서 코어, 전송 계층, 거래소 어댑터를 패키지로 분리한다. 공통 명세와 언어 중립 테스트 벡터는 향후 다른 언어 구현에서도 재사용할 수 있게 보존한다.
 
 ```text
-proven-trade-sdk/
+cex-sdk/
 ├── cmd/
 │   └── egressdiag/           # route별 실제 공인 IP 진단 CLI
 ├── exchange/

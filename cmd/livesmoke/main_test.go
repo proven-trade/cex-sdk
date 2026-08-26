@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/proven-trade/proven-trade-sdk/credential"
-	coreexchange "github.com/proven-trade/proven-trade-sdk/exchange"
-	"github.com/proven-trade/proven-trade-sdk/model"
-	"github.com/proven-trade/proven-trade-sdk/ratelimit"
-	"github.com/proven-trade/proven-trade-sdk/transport"
+	"github.com/proven-trade/cex-sdk/credential"
+	coreexchange "github.com/proven-trade/cex-sdk/exchange"
+	"github.com/proven-trade/cex-sdk/model"
+	"github.com/proven-trade/cex-sdk/ratelimit"
+	"github.com/proven-trade/cex-sdk/transport"
 )
 
 type testSender struct{}

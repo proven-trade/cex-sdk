@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"net/url"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk"
+	commonexchange "github.com/proven-trade/cex-sdk/exchange"
 )
 
 // Contracts는 결제 통화별 Gate.io 무기한 Futures 계약과 주문 규칙 한 페이지를 조회한다.

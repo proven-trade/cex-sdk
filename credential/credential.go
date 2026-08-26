@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/proven-trade/proven-trade-sdk/model"
-	"github.com/proven-trade/proven-trade-sdk/transport"
+	"github.com/proven-trade/cex-sdk/model"
+	"github.com/proven-trade/cex-sdk/transport"
 )
 
 var (

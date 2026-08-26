@@ -3,7 +3,7 @@ package futures
 import (
 	"strings"
 
-	parentkucoin "github.com/proven-trade/proven-trade-sdk/exchange/kucoin"
+	parentkucoin "github.com/proven-trade/cex-sdk/exchange/kucoin"
 )
 
 func signaturePayload(timestamp, method, endpoint string, body []byte) []byte {

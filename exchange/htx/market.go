@@ -6,8 +6,8 @@ import (
 	"errors"
 	"net/url"
 
-	trade "github.com/proven-trade/proven-trade-sdk"
-	commonexchange "github.com/proven-trade/proven-trade-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk"
+	commonexchange "github.com/proven-trade/cex-sdk/exchange"
 )
 
 // ServerTime은 HTX 서버의 Unix millisecond 시각을 조회한다.
