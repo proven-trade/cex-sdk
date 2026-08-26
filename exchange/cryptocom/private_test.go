@@ -190,11 +190,11 @@ func TestClientPrivateSpotLifecycle(t *testing.T) {
 	if calls != 7 || !allZero(apiKey) || !allZero(secret) {
 		t.Fatalf("provider state calls=%d apiKey=%v secret=%v", calls, apiKey, secret)
 	}
-	assertPrivateLimit(t, limiter, "cryptocom:account:cryptocom-main:private:user-balance:100milliseconds", 1, 3)
-	assertPrivateLimit(t, limiter, "cryptocom:account:cryptocom-main:private:create-order:100milliseconds", 1, 15)
-	assertPrivateLimit(t, limiter, "cryptocom:account:cryptocom-main:private:get-order-detail:100milliseconds", 1, 30)
-	assertPrivateLimit(t, limiter, "cryptocom:account:cryptocom-main:private:get-order-history:1second", 1, 1)
-	assertPrivateLimit(t, limiter, "cryptocom:account:cryptocom-main:private:get-trades:1second", 1, 1)
+	assertPrivateLimitRule(t, limiter, "cryptocom:account:cryptocom-main:private:user-balance:100milliseconds", 3, 100*time.Millisecond)
+	assertPrivateLimitRule(t, limiter, "cryptocom:account:cryptocom-main:private:create-order:100milliseconds", 15, 100*time.Millisecond)
+	assertPrivateLimitRule(t, limiter, "cryptocom:account:cryptocom-main:private:get-order-detail:100milliseconds", 30, 100*time.Millisecond)
+	assertPrivateLimitRule(t, limiter, "cryptocom:account:cryptocom-main:private:get-order-history:1second", 1, time.Second)
+	assertPrivateLimitRule(t, limiter, "cryptocom:account:cryptocom-main:private:get-trades:1second", 1, time.Second)
 }
 
 func TestClientRejectsPrivateRouteAndPermissionBeforeSecretResolution(t *testing.T) {
@@ -487,16 +487,16 @@ func newPrivateTestClient(
 	return client, limiter
 }
 
-func assertPrivateLimit(
+func assertPrivateLimitRule(
 	t *testing.T,
 	limiter *ratelimit.Limiter,
 	key string,
-	used int,
 	limit int,
+	window time.Duration,
 ) {
 	t.Helper()
 	snapshot, err := limiter.Snapshot(key)
-	if err != nil || snapshot.Used != used || snapshot.Rule.Limit != limit {
+	if err != nil || snapshot.Rule.Limit != limit || snapshot.Rule.Window != window {
 		t.Fatalf("limiter snapshot %q = %+v, error = %v", key, snapshot, err)
 	}
 }
