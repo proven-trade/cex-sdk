@@ -342,12 +342,17 @@ func toUpbitTimeInForce(value unified.TimeInForce) TimeInForce {
 }
 
 func fromUpbitOrder(native Order, market unified.Market) unified.Order {
+	price, quantity, quoteAmount := native.Price, native.Volume, ""
+	if native.OrderType == OrderTypePrice && native.Side == SideBid {
+		price, quantity, quoteAmount = "", "", native.Price
+	}
 	return unified.Order{
 		Exchange: model.ExchangeUpbit, ID: native.UUID, ClientOrderID: native.Identifier,
 		Market: market, NativeMarket: native.Market,
 		Side: toUnifiedUpbitSide(native.Side), Type: toUnifiedUpbitOrderType(native.OrderType),
-		Status: toUnifiedUpbitStatus(native), Price: native.Price,
-		Quantity: native.Volume, ExecutedQuantity: native.ExecutedVolume, Raw: native.Raw,
+		Status: toUnifiedUpbitStatus(native), Price: price,
+		Quantity: quantity, QuoteAmount: quoteAmount,
+		ExecutedQuantity: native.ExecutedVolume, Raw: native.Raw,
 	}
 }
 

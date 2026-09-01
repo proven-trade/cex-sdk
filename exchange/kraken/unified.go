@@ -55,7 +55,11 @@ func (adapter *UnifiedSpot) Markets(
 		}
 		markets = append(markets, unified.MarketInfo{
 			Exchange: model.ExchangeKraken, Market: market,
-			NativeMarket: pair.AltName, Status: pair.Status, Raw: pair.Raw,
+			NativeMarket: pair.AltName, Status: pair.Status,
+			PriceIncrement:      pair.TickSize,
+			QuantityIncrement:   unified.DecimalIncrement(pair.LotDecimals),
+			MinimumBaseQuantity: pair.MinimumOrder,
+			MinimumQuoteAmount:  pair.MinimumCost, Raw: pair.Raw,
 		})
 	}
 	return markets, nil
@@ -251,8 +255,8 @@ func (adapter *UnifiedSpot) PlaceOrder(
 		Exchange: model.ExchangeKraken, ID: reference.TransactionIDs[0],
 		ClientOrderID: request.ClientOrderID, Market: request.Market,
 		NativeMarket: nativeRequest.Pair, Side: request.Side, Type: request.Type,
-		Status: unified.OrderStatusNew, Price: request.Price,
-		Quantity: nativeRequest.Volume, Raw: reference.Raw,
+		Status: unified.OrderStatusAcknowledged, Price: request.Price,
+		Quantity: request.Quantity, QuoteAmount: request.QuoteAmount, Raw: reference.Raw,
 	}, nil
 }
 
@@ -306,7 +310,7 @@ func (adapter *UnifiedSpot) CancelOrder(
 	return unified.Order{
 		Exchange: model.ExchangeKraken, ID: request.OrderID,
 		ClientOrderID: request.ClientOrderID, Market: request.Market,
-		NativeMarket: krakenPair(request.Market), Status: unified.OrderStatusCanceled, Raw: native.Raw,
+		NativeMarket: krakenPair(request.Market), Status: unified.OrderStatusCancelPending, Raw: native.Raw,
 	}, nil
 }
 
@@ -584,13 +588,20 @@ func fromKrakenOrder(native Order, market unified.Market) unified.Order {
 	if nativeMarket == "" {
 		nativeMarket = krakenPair(market)
 	}
+	quantity, quoteAmount := native.Volume, ""
+	for _, flag := range strings.Split(native.OrderFlags, ",") {
+		if strings.TrimSpace(flag) == "viqc" {
+			quantity, quoteAmount = "", native.Volume
+			break
+		}
+	}
 	return unified.Order{
 		Exchange: model.ExchangeKraken, ID: native.TransactionID, ClientOrderID: native.ClientOrderID,
 		Market: market, NativeMarket: nativeMarket,
 		Side:   toUnifiedKrakenSide(native.Description.Side),
 		Type:   toUnifiedKrakenOrderType(native.Description.OrderType),
 		Status: toUnifiedKrakenStatus(native.Status, native.ExecutedVolume),
-		Price:  native.Description.Price, Quantity: native.Volume,
+		Price:  native.Description.Price, Quantity: quantity, QuoteAmount: quoteAmount,
 		ExecutedQuantity: native.ExecutedVolume, Raw: native.Raw,
 	}
 }

@@ -4,6 +4,8 @@
 
 현재 Go 코어, REST·WebSocket 다중 송신 IP 전송 계층, Binance Spot·USDⓈ-M Futures REST·WebSocket, Bitget v3 UTA REST·WebSocket, Upbit Spot REST·WebSocket, Bybit V5 Spot·Linear REST·WebSocket, OKX V5 Spot·SWAP REST·WebSocket, Coinbase Advanced Trade Spot REST·WebSocket, Kraken Spot·Futures REST·WebSocket, Bithumb Spot REST·WebSocket, Coinone Spot REST·WebSocket, Korbit Spot REST·WebSocket, KuCoin Spot·Futures REST·WebSocket, Gate.io Spot REST·WebSocket·공통 API와 Futures REST·WebSocket, MEXC Spot REST·Protobuf WebSocket·로컬 오더북·공통 API, HTX Spot REST·WebSocket·로컬 오더북·공통 API, Crypto.com Exchange v1 Spot REST·WebSocket·로컬 오더북·공통 API가 구현되어 있습니다.
 
+코드와 자동 테스트가 있어도 실제 계정·배포 송신 IP live smoke가 끝나지 않은 상품은 `experimental`입니다. 운영 투입 판단은 요약 문구가 아니라 [지원 매트릭스](docs/SUPPORT_MATRIX.md)의 smoke 상태를 기준으로 합니다.
+
 ## 문서
 
 - [프로젝트 기획서](docs/PROJECT_PLAN.md)
@@ -11,6 +13,9 @@
 - [거래소 지원 매트릭스](docs/SUPPORT_MATRIX.md)
 - [Live smoke 운영 검증](docs/LIVE_SMOKE.md)
 - [공통 WebSocket 연결 계층](docs/STREAMS.md)
+- [변경 이력](CHANGELOG.md)
+- [보안 정책](SECURITY.md)
+- [MIT License](LICENSE)
 - [Binance Spot WebSocket](docs/exchanges/BINANCE_WEBSOCKET.md)
 - [Binance USDⓈ-M Futures REST·WebSocket](docs/exchanges/BINANCE_USDM.md)
 - [Bybit V5 Spot·Linear REST](docs/exchanges/BYBIT.md)
@@ -213,7 +218,7 @@ defer session.Close()
 - IP·계정 단위 요청 제한과 `Retry-After` 반영
 - 주문 mutation의 불명확한 네트워크 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
 
-현재 지원 범위는 개발 중인 초기 API이며 아직 안정 버전 호환성을 보장하지 않습니다.
+공개 Go API는 v1부터 Semantic Versioning 호환성을 따르며, 이후 호환되지 않는 API 변경은 새 major version에서 제공합니다. 거래소 자체 응답·정책 변경과 `experimental` 상품의 운영 검증 수준은 지원 매트릭스와 변경 이력에 별도로 기록합니다.
 
 ## Binance USDⓈ-M Futures REST·WebSocket 범위
 

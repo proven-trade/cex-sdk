@@ -87,7 +87,7 @@ func (private *PrivateStream) Run(
 	return private.managed.session.Run(ctx, func(ctx context.Context, message corestream.Message) error {
 		decoded, err := DecodeStreamMessage(message)
 		if err != nil {
-			return err
+			return corestream.ReconnectOnMessageError(err)
 		}
 		if decoded.Subscription != "" && !decoded.Private {
 			return fmt.Errorf("Crypto.com private stream received public market data")

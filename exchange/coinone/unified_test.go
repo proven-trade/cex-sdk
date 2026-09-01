@@ -86,6 +86,7 @@ func TestUnifiedSpotOrderConformance(t *testing.T) {
 	conformance.RunSpotOrderSuite(t, conformance.SpotOrderScenario{
 		Client: adapter, Exchange: model.ExchangeCoinone, Request: request,
 		OrderID: "order-1", ClientOrderID: "client-1", NativeMarket: "KRW-BTC",
+		Status: unified.OrderStatusAcknowledged,
 	})
 }
 
@@ -101,7 +102,7 @@ func TestUnifiedCoinoneOrderAndMarketMappings(t *testing.T) {
 	got := fromCoinoneOrderDetail(native, market)
 	if got.ID != "order-1" || got.NativeMarket != "KRW-BTC" || got.Side != unified.SideBuy ||
 		got.Type != unified.OrderTypeMarket || got.Status != unified.OrderStatusCanceled ||
-		got.Quantity != "100000" || got.ExecutedQuantity != "0.001" {
+		got.Quantity != "" || got.QuoteAmount != "100000" || got.ExecutedQuantity != "0.001" {
 		t.Fatalf("fromCoinoneOrderDetail() = %+v", got)
 	}
 	if got := coinoneMarketStatus(Market{TradeState: 2}); got != "sell_only" {
@@ -173,10 +174,10 @@ func TestUnifiedSpotRejectsUnsupportedLimitTimeInForce(t *testing.T) {
 	_, err := adapter.PlaceOrder(context.Background(), unified.PlaceOrderRequest{
 		Market: unified.Market{Base: "BTC", Quote: "KRW"}, Side: unified.SideBuy,
 		Type: unified.OrderTypeLimit, TimeInForce: unified.TimeInForceIOC,
-		Quantity: "0.01", Price: "64000000",
+		Quantity: "0.01", Price: "64000000", ClientOrderID: "client-1",
 	})
-	if !errors.Is(err, trade.ErrValidation) {
-		t.Fatalf("PlaceOrder() error = %v, want ErrValidation", err)
+	if !errors.Is(err, trade.ErrUnsupportedCapability) {
+		t.Fatalf("PlaceOrder() error = %v, want ErrUnsupportedCapability", err)
 	}
 }
 

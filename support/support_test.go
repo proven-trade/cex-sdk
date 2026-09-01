@@ -10,7 +10,7 @@ func TestCatalogLookupAndCopyIsolation(t *testing.T) {
 	t.Parallel()
 
 	entry, ok := Lookup(model.ExchangeKorbit, ProductSpot)
-	if !ok || !entry.REST.Implemented() || !entry.WebSocketPublic.Implemented() ||
+	if !ok || !entry.REST.CodeAvailable() || !entry.WebSocketPublic.CodeAvailable() ||
 		entry.OperationallyVerified() || len(entry.Docs) != 1 {
 		t.Fatalf("Korbit Spot support = %+v, found = %v", entry, ok)
 	}
@@ -34,7 +34,8 @@ func TestCatalogCoversBuiltInExchangesAndHasUniqueProducts(t *testing.T) {
 		model.ExchangeBinance, model.ExchangeBitget, model.ExchangeUpbit,
 		model.ExchangeBybit, model.ExchangeOKX, model.ExchangeCoinbase,
 		model.ExchangeKraken, model.ExchangeBithumb, model.ExchangeCoinone,
-		model.ExchangeKorbit,
+		model.ExchangeKorbit, model.ExchangeKuCoin, model.ExchangeGateIO,
+		model.ExchangeMEXC, model.ExchangeHTX, model.ExchangeCryptoCom,
 	}
 	entries := All()
 	seen := make(map[string]struct{}, len(entries))
@@ -45,7 +46,7 @@ func TestCatalogCoversBuiltInExchangesAndHasUniqueProducts(t *testing.T) {
 			t.Fatalf("duplicate catalog entry %s", key)
 		}
 		seen[key] = struct{}{}
-		if entry.REST.Implemented() {
+		if entry.REST.CodeAvailable() {
 			covered[entry.Exchange] = true
 		}
 	}
@@ -62,9 +63,12 @@ func TestStatusImplemented(t *testing.T) {
 	if !StatusImplemented.Implemented() {
 		t.Fatal("implemented status returned false")
 	}
-	for _, status := range []Status{StatusPlanned, StatusPending, StatusNotApplicable} {
+	for _, status := range []Status{StatusExperimental, StatusPlanned, StatusPending, StatusNotApplicable} {
 		if status.Implemented() {
 			t.Fatalf("status %q returned true", status)
 		}
+	}
+	if !StatusExperimental.CodeAvailable() || !StatusImplemented.CodeAvailable() || StatusPlanned.CodeAvailable() {
+		t.Fatal("CodeAvailable() returned an unexpected value")
 	}
 }

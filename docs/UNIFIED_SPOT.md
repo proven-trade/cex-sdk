@@ -2,7 +2,7 @@
 
 ## 목적
 
-`unified.SpotClient`는 Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io와 MEXC의 공통 현물 기능을 한 인터페이스로 제공합니다. 거래소 고유 기능과 원본 필드는 각 `exchange/<거래소>` native 클라이언트를 사용합니다.
+`unified.SpotClient`는 Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io, MEXC, HTX와 Crypto.com의 공통 현물 기능을 한 인터페이스로 제공합니다. 거래소 고유 기능과 원본 필드는 각 `exchange/<거래소>` native 클라이언트를 사용합니다.
 
 공통 인터페이스가 제공하는 기능은 다음과 같습니다.
 
@@ -28,6 +28,8 @@ korbitSpot, err := korbit.NewUnifiedSpot(korbitClient)
 kuCoinSpot, err := kucoin.NewUnifiedSpot(kuCoinClient)
 gateIOSpot, err := gateio.NewUnifiedSpot(gateIOClient)
 mexcSpot, err := mexc.NewUnifiedSpot(mexcClient)
+htxSpot, err := htx.NewUnifiedSpot(htxClient)
+cryptoComSpot, err := cryptocom.NewUnifiedSpot(cryptoComClient)
 ```
 
 각 값은 모두 `unified.SpotClient`를 구현합니다.
@@ -51,6 +53,8 @@ mexcSpot, err := mexc.NewUnifiedSpot(mexcClient)
 | KuCoin | `BTC-USDT` |
 | Gate.io | `BTC_USDT` |
 | MEXC | `BTCUSDT` |
+| HTX | `btcusdt` |
+| Crypto.com | `BTC_USDT` |
 
 응답에는 공통 `Market`과 거래소 원문인 `NativeMarket`을 함께 둡니다. 전체 마켓 미체결 주문처럼 구분자가 없는 native 심볼만 응답되는 경우에는 공통 자산을 안전하게 역추론할 수 없어 `Market`이 비어 있을 수 있으므로 `NativeMarket`을 확인해야 합니다.
 
@@ -66,7 +70,9 @@ mexcSpot, err := mexc.NewUnifiedSpot(mexcClient)
 | 시장가 매도 | `Quantity` | 매도할 기준 자산 수량 |
 | 지정가 매수·매도 | `Quantity`, `Price` | 기준 자산 수량과 단가 |
 
-이 구분은 Binance와 MEXC의 `quoteOrderQty`, Bitget Spot 시장가 매수 수량, Upbit `price`, Bybit `marketUnit`, OKX `tgtCcy`, Coinbase 주문 설정 객체, Kraken `viqc` 플래그, Bithumb `price` 주문, Coinone과 Korbit의 주문 금액 필드 차이를 어댑터 내부에서 변환합니다. 값의 자동 반올림은 하지 않으며 거래소 상품 규칙에 맞지 않으면 거래소가 거절합니다. 정밀도 사전 검증은 후속 공통 상품 규칙 단계에서 추가합니다.
+이 구분은 Binance와 MEXC의 `quoteOrderQty`, Bitget Spot 시장가 매수 수량, Upbit `price`, Bybit `marketUnit`, OKX `tgtCcy`, Coinbase 주문 설정 객체, Kraken `viqc` 플래그, Bithumb `price` 주문, Coinone과 Korbit의 주문 금액 필드 차이를 어댑터 내부에서 변환합니다. 공통 응답의 `Order.Quantity`는 항상 기준 자산 수량이고 견적 자산 주문금액은 `Order.QuoteAmount`에만 저장합니다.
+
+`Markets` 응답의 `PriceIncrement`, `QuantityIncrement`, `QuoteAmountIncrement`, `MinimumBaseQuantity`, `MinimumQuoteAmount`는 거래소가 제공하는 범위에서 채워집니다. `MarketInfo.ValidateOrder`는 이 규칙을 `float64` 없이 정확한 decimal 연산으로 검사하며 값을 자동 반올림하지 않습니다. Upbit·Bithumb처럼 마켓 목록 API가 규칙을 제공하지 않거나 Korbit처럼 가격 구간별 tick size가 달라 단일 값으로 표현할 수 없으면 해당 필드는 비어 있습니다.
 
 Bybit UNIFIED 계정은 `availableToWithdraw`가 폐기되어 항상 빈 문자열이므로 공통 `Available`을 `walletBalance - spotBorrow - locked`로 계산합니다. 이는 차입금을 제외한 비잠금 자기자산이며 cross/portfolio margin의 주문 가능 증거금이나 추가 차입 가능액이 아닙니다. margin buying power가 필요한 전략은 Bybit native 계정 API를 사용해야 합니다.
 
@@ -84,18 +90,20 @@ Coinbase, Kraken, Korbit, Gate.io와 MEXC는 native 3분봉이 없으므로 같�
 
 공통 어댑터는 native 클라이언트의 오류를 그대로 보존합니다. 주문 생성·취소 중 전송 결과가 불명확하면 `trade.ErrUnknownExecutionState`가 반환되며 자동 재시도하지 않습니다.
 
-가능하면 `ClientOrderID`를 지정하고, 오류 후 단건 조회로 최종 상태를 조정해야 합니다. 전체 미체결 주문 조회는 의도하지 않은 고비용 요청을 막기 위해 `AllMarkets: true`를 명시해야 합니다.
+`ClientOrderID`는 모든 공통 주문 생성에 필수입니다. 오류 후 이 ID로 단건 조회해 최종 상태를 조정해야 합니다. 전체 미체결 주문 조회는 의도하지 않은 고비용 요청을 막기 위해 `AllMarkets: true`를 명시해야 합니다.
 
-MEXC에서 사용자 주문 ID를 생략하면 어댑터가 `proven-` 접두사의 암호학적 난수 ID를 생성합니다. MEXC 전체 미체결은 API Key 허용 심볼을 공식 최대치인 5개씩 묶어 요청하며 `ExchangeInfo`로 구분자 없는 심볼의 base/quote를 검증합니다.
+주문 생성 응답이 거래소 주문 상태를 포함하지 않으면 공통 상태는 `acknowledged`입니다. 취소 endpoint가 접수 사실만 반환하면 `cancel_pending`입니다. 두 상태를 `new` 또는 `canceled`로 간주하지 말고 `Order` 조회로 조정합니다. MEXC 전체 미체결은 API Key 허용 심볼을 공식 최대치인 5개씩 묶어 요청하며 `ExchangeInfo`로 구분자 없는 심볼의 base/quote를 검증합니다.
 
 ## 적합성 테스트
 
-`conformance.RunSpotReadSuite`는 모든 공통 어댑터에 같은 시나리오를 실행해 다음 계약을 검사합니다.
+`conformance.RunSpotReadSuite`와 주문·시장 데이터 suite는 공통 어댑터에 같은 시나리오를 실행해 다음 계약을 검사합니다.
 
 - 거래소 ID
 - 공통 마켓과 native 마켓 변환
 - 가격 문자열과 원본 응답 보존
 - 자산 잔고 변환
 - 요청별 송신 경로 옵션 전달
+- 시장가 매수의 기준 수량·견적 금액 분리
+- ACK 상태와 확정 상태 구분
 
 각 어댑터는 컴파일 시 `unified.SpotClient` 구현 여부도 검사합니다.

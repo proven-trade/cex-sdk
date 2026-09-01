@@ -308,7 +308,7 @@ func (managed *managedSpotStream) run(
 	return managed.session.Run(ctx, func(ctx context.Context, message corestream.Message) error {
 		decoded, err := DecodeSpotStreamMessage(message)
 		if err != nil {
-			return err
+			return corestream.ReconnectOnMessageError(err)
 		}
 		if decoded.Success != nil && !*decoded.Success {
 			return &SpotStreamRequestError{

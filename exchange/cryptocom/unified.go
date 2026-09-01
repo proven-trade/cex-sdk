@@ -65,7 +65,9 @@ func (adapter *UnifiedSpot) Markets(
 		}
 		markets = append(markets, unified.MarketInfo{
 			Exchange: model.ExchangeCryptoCom, Market: market,
-			NativeMarket: instrument.Symbol, Status: status, Raw: instrument.Raw,
+			NativeMarket: instrument.Symbol, Status: status,
+			PriceIncrement:    instrument.PriceTickSize.String(),
+			QuantityIncrement: instrument.QuantityTickSize.String(), Raw: instrument.Raw,
 		})
 	}
 	return markets, nil
@@ -277,8 +279,8 @@ func (adapter *UnifiedSpot) PlaceOrder(
 	return unified.Order{
 		Exchange: model.ExchangeCryptoCom, ID: string(receipt.OrderID), ClientOrderID: clientOrderID,
 		Market: request.Market, NativeMarket: nativeRequest.InstrumentName,
-		Side: request.Side, Type: request.Type, Status: unified.OrderStatusNew,
-		Price: request.Price, Quantity: request.Quantity, Raw: receipt.Raw,
+		Side: request.Side, Type: request.Type, Status: unified.OrderStatusAcknowledged,
+		Price: request.Price, Quantity: request.Quantity, QuoteAmount: request.QuoteAmount, Raw: receipt.Raw,
 	}, nil
 }
 
@@ -492,8 +494,9 @@ func fromCryptoComOrder(native Order, market unified.Market) (unified.Order, err
 		Exchange: model.ExchangeCryptoCom, ID: string(native.OrderID),
 		ClientOrderID: native.ClientOrderID, Market: market, NativeMarket: native.InstrumentName,
 		Side: side, Type: orderType, Status: status, Price: native.LimitPrice.String(),
-		Quantity: native.Quantity.String(), ExecutedQuantity: native.CumulativeQuantity.String(),
-		Raw: native.Raw,
+		Quantity: native.Quantity.String(), QuoteAmount: native.OrderValue.String(),
+		ExecutedQuantity: native.CumulativeQuantity.String(),
+		Raw:              native.Raw,
 	}, nil
 }
 

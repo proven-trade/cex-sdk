@@ -68,6 +68,22 @@ type ConnectHook func(context.Context, Connection) error
 // MessageHandler는 수신 메시지를 순서대로 처리한다.
 type MessageHandler func(context.Context, Message) error
 
+type reconnectMessageError struct {
+	cause error
+}
+
+func (err *reconnectMessageError) Error() string { return err.cause.Error() }
+func (err *reconnectMessageError) Unwrap() error { return err.cause }
+
+// ReconnectOnMessageError는 handler의 메시지 decode 오류를 세션 전체의
+// 영구 실패가 아니라 현재 연결의 protocol 손상으로 표시한다.
+func ReconnectOnMessageError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &reconnectMessageError{cause: err}
+}
+
 // ReconnectPolicy는 연결 오류 후 재연결 여부를 결정한다.
 type ReconnectPolicy func(error) bool
 

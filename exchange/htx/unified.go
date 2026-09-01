@@ -58,7 +58,11 @@ func (adapter *UnifiedSpot) Markets(
 		}
 		markets[index] = unified.MarketInfo{
 			Exchange: model.ExchangeHTX, Market: market, NativeMarket: symbol.Symbol,
-			Status: fromHTXMarketStatus(symbol), Raw: symbol.Raw,
+			Status:              fromHTXMarketStatus(symbol),
+			PriceIncrement:      unified.DecimalIncrement(symbol.PricePrecision),
+			QuantityIncrement:   unified.DecimalIncrement(symbol.AmountPrecision),
+			MinimumBaseQuantity: symbol.MinimumOrderAmount.String(),
+			MinimumQuoteAmount:  symbol.MinimumOrderValue.String(), Raw: symbol.Raw,
 		}
 	}
 	return markets, nil
@@ -300,8 +304,8 @@ func (adapter *UnifiedSpot) PlaceOrder(
 	return unified.Order{
 		Exchange: model.ExchangeHTX, ID: string(reference.OrderID), ClientOrderID: clientOrderID,
 		Market: request.Market, NativeMarket: nativeRequest.Symbol,
-		Side: request.Side, Type: request.Type, Status: unified.OrderStatusNew,
-		Price: request.Price, Quantity: request.Quantity, Raw: reference.Raw,
+		Side: request.Side, Type: request.Type, Status: unified.OrderStatusAcknowledged,
+		Price: request.Price, Quantity: request.Quantity, QuoteAmount: request.QuoteAmount, Raw: reference.Raw,
 	}, nil
 }
 
@@ -350,7 +354,7 @@ func (adapter *UnifiedSpot) CancelOrder(
 	return unified.Order{
 		Exchange: model.ExchangeHTX, ID: orderID, ClientOrderID: clientOrderID,
 		Market: request.Market, NativeMarket: htxSymbol(request.Market),
-		Status: unified.OrderStatusCanceled, Raw: reference.Raw,
+		Status: unified.OrderStatusCancelPending, Raw: reference.Raw,
 	}, nil
 }
 
@@ -531,11 +535,16 @@ func fromHTXOrder(native Order, market unified.Market) (unified.Order, error) {
 	if err != nil {
 		return unified.Order{}, err
 	}
+	quantity, quoteAmount := native.Amount.String(), ""
+	if orderType == unified.OrderTypeMarket && side == unified.SideBuy {
+		quantity, quoteAmount = "", native.Amount.String()
+	}
 	return unified.Order{
 		Exchange: model.ExchangeHTX, ID: string(native.ID), ClientOrderID: native.ClientOrderID,
 		Market: market, NativeMarket: native.Symbol, Side: side, Type: orderType,
 		Status: fromHTXOrderStatus(native.State), Price: native.Price.String(),
-		Quantity: native.Amount.String(), ExecutedQuantity: native.FilledAmount.String(), Raw: native.Raw,
+		Quantity: quantity, QuoteAmount: quoteAmount,
+		ExecutedQuantity: native.FilledAmount.String(), Raw: native.Raw,
 	}, nil
 }
 

@@ -59,7 +59,11 @@ func (adapter *UnifiedSpot) Markets(
 		}
 		markets[index] = unified.MarketInfo{
 			Exchange: model.ExchangeKuCoin, Market: market,
-			NativeMarket: symbol.Symbol, Status: status, Raw: symbol.Raw,
+			NativeMarket: symbol.Symbol, Status: status,
+			PriceIncrement: symbol.PriceIncrement, QuantityIncrement: symbol.BaseIncrement,
+			QuoteAmountIncrement: symbol.QuoteIncrement,
+			MinimumBaseQuantity:  symbol.BaseMinimumSize,
+			MinimumQuoteAmount:   symbol.MinimumFunds, Raw: symbol.Raw,
 		}
 	}
 	return markets, nil
@@ -238,15 +242,12 @@ func (adapter *UnifiedSpot) PlaceOrder(
 	if err != nil {
 		return unified.Order{}, err
 	}
-	quantity := request.Quantity
-	if request.Type == unified.OrderTypeMarket && request.Side == unified.SideBuy {
-		quantity = request.QuoteAmount
-	}
 	return unified.Order{
 		Exchange: model.ExchangeKuCoin, ID: reference.OrderID,
 		ClientOrderID: clientOrderID, Market: request.Market,
 		NativeMarket: nativeRequest.Symbol, Side: request.Side, Type: request.Type,
-		Status: unified.OrderStatusNew, Price: request.Price, Quantity: quantity, Raw: reference.Raw,
+		Status: unified.OrderStatusAcknowledged, Price: request.Price,
+		Quantity: request.Quantity, QuoteAmount: request.QuoteAmount, Raw: reference.Raw,
 	}, nil
 }
 
@@ -296,7 +297,7 @@ func (adapter *UnifiedSpot) CancelOrder(
 	return unified.Order{
 		Exchange: model.ExchangeKuCoin, ID: orderID, ClientOrderID: clientOrderID,
 		Market: request.Market, NativeMarket: kucoinSymbol(request.Market),
-		Status: unified.OrderStatusCanceled, Raw: reference.Raw,
+		Status: unified.OrderStatusCancelPending, Raw: reference.Raw,
 	}, nil
 }
 
@@ -462,17 +463,19 @@ func fromKuCoinOrder(native Order, market unified.Market) (unified.Order, error)
 	}
 	orderType := unified.OrderTypeLimit
 	quantity := native.Size
+	quoteAmount := ""
 	if native.Type == OrderTypeMarket {
 		orderType = unified.OrderTypeMarket
 		if native.Side == SideBuy {
-			quantity = native.Funds
+			quantity, quoteAmount = "", native.Funds
 		}
 	}
 	return unified.Order{
 		Exchange: model.ExchangeKuCoin, ID: native.ID, ClientOrderID: native.ClientOrderID,
 		Market: market, NativeMarket: native.Symbol, Side: toUnifiedKuCoinSide(native.Side),
 		Type: orderType, Status: status, Price: native.Price,
-		Quantity: quantity, ExecutedQuantity: native.DealSize, Raw: native.Raw,
+		Quantity: quantity, QuoteAmount: quoteAmount,
+		ExecutedQuantity: native.DealSize, Raw: native.Raw,
 	}, nil
 }
 

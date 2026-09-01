@@ -7,6 +7,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -205,7 +207,7 @@ func TestRegistryRejectsRequestsAfterClose(t *testing.T) {
 	}
 }
 
-func TestRegistryHTTPClientUsesBoundRouteAndRejectsRedirect(t *testing.T) {
+func TestRegistryClientsUseBoundRouteAndRejectRedirect(t *testing.T) {
 	t.Parallel()
 
 	var (
@@ -254,11 +256,44 @@ func TestRegistryHTTPClientUsesBoundRouteAndRejectsRedirect(t *testing.T) {
 	}
 	_ = response.Body.Close()
 	observedMu.Lock()
-	defer observedMu.Unlock()
 	if response.StatusCode != http.StatusFound || destinationCalled || sourceIP != "127.0.0.1" {
+		observedMu.Unlock()
 		t.Fatalf("status = %d, destination called = %v, source IP = %q", response.StatusCode, destinationCalled, sourceIP)
 	}
+	observedMu.Unlock()
+
+	request, err := http.NewRequest(http.MethodGet, "http://"+redirectListener.Addr().String(), nil)
+	if err != nil {
+		t.Fatalf("http.NewRequest() error = %v", err)
+	}
+	request.Header.Set("X-MBX-APIKEY", "must-not-be-forwarded")
+	response, err = registry.Do(context.Background(), "route-a", request)
+	if err != nil {
+		t.Fatalf("registry.Do() error = %v", err)
+	}
+	_ = response.Body.Close()
+	observedMu.Lock()
+	if response.StatusCode != http.StatusFound || destinationCalled {
+		observedMu.Unlock()
+		t.Fatalf("REST status = %d, destination called = %v", response.StatusCode, destinationCalled)
+	}
+	observedMu.Unlock()
+
 	if _, err := registry.HTTPClient("missing"); !errors.Is(err, ErrUnknownEgressRoute) {
 		t.Fatalf("HTTPClient(missing) error = %v", err)
+	}
+}
+
+func TestSanitizedTransportCauseDropsSignedURL(t *testing.T) {
+	t.Parallel()
+
+	secretURL := "https://example.test/order?clientOrderId=secret-id&signature=secret-signature"
+	cause := errors.New("connection reset")
+	sanitized := sanitizedTransportCause(&url.Error{Op: "Post", URL: secretURL, Err: cause})
+	if !errors.Is(sanitized, cause) {
+		t.Fatalf("sanitized error = %v, want original network cause", sanitized)
+	}
+	if strings.Contains(sanitized.Error(), "signature") || strings.Contains(sanitized.Error(), "clientOrderId") {
+		t.Fatalf("sanitized error leaked signed URL: %v", sanitized)
 	}
 }

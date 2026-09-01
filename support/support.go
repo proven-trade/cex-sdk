@@ -8,6 +8,7 @@ type Status string
 
 const (
 	StatusImplemented   Status = "implemented"
+	StatusExperimental  Status = "experimental"
 	StatusPlanned       Status = "planned"
 	StatusPending       Status = "pending"
 	StatusNotApplicable Status = "not_applicable"
@@ -68,7 +69,13 @@ func (status Status) Implemented() bool {
 	return status == StatusImplemented
 }
 
+// CodeAvailable은 자동 테스트된 구현 또는 운영 검증 전 실험 구현인지 반환한다.
+func (status Status) CodeAvailable() bool {
+	return status == StatusImplemented || status == StatusExperimental
+}
+
 // OperationallyVerified는 읽기와 거래 live smoke가 모두 끝났는지 반환한다.
 func (entry ProductSupport) OperationallyVerified() bool {
-	return entry.LiveReadSmoke == StatusImplemented && entry.LiveTradeSmoke == StatusImplemented
+	return entry.REST == StatusImplemented && entry.AutomatedTests == StatusImplemented &&
+		entry.LiveReadSmoke == StatusImplemented && entry.LiveTradeSmoke == StatusImplemented
 }

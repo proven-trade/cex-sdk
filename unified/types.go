@@ -68,13 +68,19 @@ const (
 type OrderStatus string
 
 const (
+	// OrderStatusAcknowledged means the exchange accepted the request but did not
+	// return an authoritative working-order state. Call Order to reconcile it.
+	OrderStatusAcknowledged    OrderStatus = "acknowledged"
 	OrderStatusNew             OrderStatus = "new"
 	OrderStatusPartiallyFilled OrderStatus = "partially_filled"
 	OrderStatusFilled          OrderStatus = "filled"
 	OrderStatusCanceled        OrderStatus = "canceled"
 	OrderStatusRejected        OrderStatus = "rejected"
 	OrderStatusExpired         OrderStatus = "expired"
-	OrderStatusUnknown         OrderStatus = "unknown"
+	// OrderStatusCancelPending means cancellation was accepted but the returned
+	// payload did not prove that the order reached a terminal canceled state.
+	OrderStatusCancelPending OrderStatus = "cancel_pending"
+	OrderStatusUnknown       OrderStatus = "unknown"
 )
 
 // Ticker는 마켓의 최신 체결 가격이다.
@@ -88,11 +94,16 @@ type Ticker struct {
 
 // MarketInfo는 거래 가능한 공통 마켓과 거래소 원본 상태를 제공한다.
 type MarketInfo struct {
-	Exchange     model.ExchangeID
-	Market       Market
-	NativeMarket string
-	Status       string
-	Raw          json.RawMessage
+	Exchange             model.ExchangeID
+	Market               Market
+	NativeMarket         string
+	Status               string
+	PriceIncrement       string
+	QuantityIncrement    string
+	QuoteAmountIncrement string
+	MinimumBaseQuantity  string
+	MinimumQuoteAmount   string
+	Raw                  json.RawMessage
 }
 
 // BookLevel은 호가 한 단계의 가격과 수량이다.
@@ -154,16 +165,21 @@ type Balance struct {
 
 // Order는 공통 주문 상태와 거래소 원본 응답을 함께 보존한다.
 type Order struct {
-	Exchange         model.ExchangeID
-	ID               string
-	ClientOrderID    string
-	Market           Market
-	NativeMarket     string
-	Side             Side
-	Type             OrderType
-	Status           OrderStatus
-	Price            string
-	Quantity         string
+	Exchange      model.ExchangeID
+	ID            string
+	ClientOrderID string
+	Market        Market
+	NativeMarket  string
+	Side          Side
+	Type          OrderType
+	Status        OrderStatus
+	Price         string
+	// Quantity is always denominated in the market's base asset.
+	Quantity string
+	// QuoteAmount is always denominated in the market's quote asset. It is
+	// populated for quote-sized market buys when the exchange provides it or
+	// when the acknowledged request value is the only known amount.
+	QuoteAmount      string
 	ExecutedQuantity string
 	Raw              json.RawMessage
 }
@@ -267,6 +283,9 @@ func (request PlaceOrderRequest) Validate() error {
 	if request.Side != SideBuy && request.Side != SideSell {
 		return validationError("side must be buy or sell")
 	}
+	if request.ClientOrderID == "" {
+		return validationError("client order ID is required for safe reconciliation")
+	}
 	if strings.TrimSpace(request.ClientOrderID) != request.ClientOrderID {
 		return validationError("client order ID cannot have surrounding whitespace")
 	}
@@ -365,4 +384,13 @@ func validatePositiveDecimal(name, value string) error {
 
 func validationError(format string, values ...any) error {
 	return fmt.Errorf("%w: %s", trade.ErrValidation, fmt.Sprintf(format, values...))
+}
+
+// UnsupportedCapabilityError returns a consistently categorized adapter error.
+func UnsupportedCapabilityError(exchange model.ExchangeID, format string, values ...any) error {
+	return &trade.APIError{
+		Category: trade.ErrorUnsupportedCapability,
+		Exchange: exchange,
+		Cause:    fmt.Errorf("%w: %s", trade.ErrUnsupportedCapability, fmt.Sprintf(format, values...)),
+	}
 }

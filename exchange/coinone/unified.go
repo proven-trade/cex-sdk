@@ -51,7 +51,10 @@ func (adapter *UnifiedSpot) Markets(
 		}
 		markets[index] = unified.MarketInfo{
 			Exchange: model.ExchangeCoinone, Market: market,
-			NativeMarket: coinoneMarket(market), Status: coinoneMarketStatus(item), Raw: item.Raw,
+			NativeMarket: coinoneMarket(market), Status: coinoneMarketStatus(item),
+			PriceIncrement: string(item.PriceUnit), QuantityIncrement: string(item.QuantityUnit),
+			MinimumBaseQuantity: string(item.MinimumQuantity),
+			MinimumQuoteAmount:  string(item.MinimumAmount), Raw: item.Raw,
 		}
 	}
 	return markets, nil
@@ -203,7 +206,9 @@ func (adapter *UnifiedSpot) PlaceOrder(
 	}
 	if request.Type == unified.OrderTypeLimit {
 		if request.TimeInForce == unified.TimeInForceIOC || request.TimeInForce == unified.TimeInForceFOK {
-			return unified.Order{}, validationError("Coinone unified limit orders do not support %s", request.TimeInForce)
+			return unified.Order{}, unified.UnsupportedCapabilityError(
+				model.ExchangeCoinone, "Coinone unified limit orders do not support %s", request.TimeInForce,
+			)
 		}
 		nativeRequest.Type = OrderTypeLimit
 		nativeRequest.Price = request.Price
@@ -221,15 +226,12 @@ func (adapter *UnifiedSpot) PlaceOrder(
 	if err != nil {
 		return unified.Order{}, err
 	}
-	quantity := request.Quantity
-	if request.Type == unified.OrderTypeMarket && request.Side == unified.SideBuy {
-		quantity = request.QuoteAmount
-	}
 	return unified.Order{
 		Exchange: model.ExchangeCoinone, ID: reference.OrderID,
 		ClientOrderID: request.ClientOrderID, Market: request.Market,
 		NativeMarket: coinoneMarket(request.Market), Side: request.Side, Type: request.Type,
-		Status: unified.OrderStatusNew, Price: request.Price, Quantity: quantity, Raw: reference.Raw,
+		Status: unified.OrderStatusAcknowledged, Price: request.Price,
+		Quantity: request.Quantity, QuoteAmount: request.QuoteAmount, Raw: reference.Raw,
 	}, nil
 }
 
@@ -272,7 +274,7 @@ func (adapter *UnifiedSpot) CancelOrder(
 		Exchange: model.ExchangeCoinone, ID: native.OrderID,
 		ClientOrderID: request.ClientOrderID, Market: request.Market,
 		NativeMarket: coinoneMarket(request.Market), Side: toUnifiedCoinoneSide(native.Side),
-		Status: unified.OrderStatusCanceled, Price: string(native.Price),
+		Status: unified.OrderStatusCancelPending, Price: string(native.Price),
 		Quantity: string(native.OriginalQuantity), ExecutedQuantity: string(native.TradedQuantity), Raw: native.Raw,
 	}, nil
 }
@@ -388,15 +390,17 @@ func toUnifiedCoinoneOrderType(orderType OrderType) unified.OrderType {
 
 func fromCoinoneOrderDetail(native OrderDetail, market unified.Market) unified.Order {
 	quantity := string(native.OriginalQuantity)
+	quoteAmount := ""
 	if native.Type == OrderTypeMarket && native.Side == SideBuy {
-		quantity = string(native.OriginalAmount)
+		quantity, quoteAmount = "", string(native.OriginalAmount)
 	}
 	return unified.Order{
 		Exchange: model.ExchangeCoinone, ID: native.OrderID, ClientOrderID: native.UserOrderID,
 		Market: market, NativeMarket: coinonePair(native.QuoteCurrency, native.TargetCurrency),
 		Side: toUnifiedCoinoneSide(native.Side), Type: toUnifiedCoinoneOrderType(native.Type),
 		Status: toUnifiedCoinoneStatus(native.Status), Price: string(native.Price),
-		Quantity: quantity, ExecutedQuantity: string(native.ExecutedQuantity), Raw: native.Raw,
+		Quantity: quantity, QuoteAmount: quoteAmount,
+		ExecutedQuantity: string(native.ExecutedQuantity), Raw: native.Raw,
 	}
 }
 

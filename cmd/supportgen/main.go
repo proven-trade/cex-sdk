@@ -152,7 +152,7 @@ func validateCatalog(value catalog, root string) error {
 				return fmt.Errorf("products[%d]에 올바르지 않은 상태 %q가 있습니다", index, status)
 			}
 		}
-		if item.REST == "implemented" && item.AutomatedTests != "implemented" {
+		if (item.REST == "implemented" || item.REST == "experimental") && item.AutomatedTests != "implemented" {
 			return fmt.Errorf("products[%d] REST 구현에는 자동 테스트 완료가 필요합니다", index)
 		}
 		for _, doc := range item.Docs {
@@ -175,7 +175,7 @@ func tierNumber(tier string) (int, error) {
 }
 
 func validStatus(status string) bool {
-	return status == "implemented" || status == "planned" ||
+	return status == "implemented" || status == "experimental" || status == "planned" ||
 		status == "pending" || status == "not_applicable"
 }
 
@@ -218,7 +218,7 @@ func renderMarkdown(value catalog) []byte {
 	var output strings.Builder
 	output.WriteString("# 거래소 지원 매트릭스\n\n")
 	output.WriteString("이 문서는 `config/exchange-support.yaml`에서 자동 생성됩니다. 직접 수정하지 않습니다.\n\n")
-	output.WriteString("`구현`은 코드·자동 테스트·문서가 저장소에 있다는 뜻이며 운영 검증 완료를 뜻하지 않습니다. `읽기 smoke`와 `거래 smoke`가 모두 `구현`이어야 실제 계정과 지정 송신 경로를 이용한 운영 검증까지 끝난 상태입니다.\n\n")
+	output.WriteString("`실험`은 코드·자동 테스트·문서가 저장소에 있지만 운영 검증 전이라는 뜻입니다. REST·WebSocket·Unified와 `읽기 smoke`·`거래 smoke`가 모두 `구현`이어야 실제 계정과 지정 송신 경로를 이용한 운영 검증까지 끝난 상태입니다.\n\n")
 	output.WriteString("| 등급 | 거래소 | 상품 | REST | WS public | WS private | Unified | 자동 테스트 | 읽기 smoke | 거래 smoke | 문서 |\n")
 	output.WriteString("|---|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, item := range value.Products {
@@ -228,16 +228,18 @@ func renderMarkdown(value catalog) []byte {
 			statusLabel(item.Unified), statusLabel(item.AutomatedTests),
 			statusLabel(item.LiveReadSmoke), statusLabel(item.LiveTradeSmoke), docsLabel(item.Docs))
 	}
-	implemented, planned := 0, 0
+	implemented, experimental, planned := 0, 0, 0
 	for _, item := range value.Products {
 		if item.REST == "implemented" {
 			implemented++
+		} else if item.REST == "experimental" {
+			experimental++
 		} else if item.REST == "planned" {
 			planned++
 		}
 	}
-	_, _ = fmt.Fprintf(&output, "\n현재 REST 구현 상품군은 %d개이고 계획 상품군은 %d개입니다.\n\n", implemented, planned)
-	output.WriteString("상태 의미: `구현`은 저장소 구현 완료, `예정`은 계획됨, `대기`는 외부 환경이나 실제 계정 검증 대기, `해당 없음`은 공통 계약의 대상이 아님을 뜻합니다.\n")
+	_, _ = fmt.Fprintf(&output, "\n현재 REST 운영 검증 완료 상품군은 %d개, 실험 상품군은 %d개, 계획 상품군은 %d개입니다.\n\n", implemented, experimental, planned)
+	output.WriteString("상태 의미: `구현`은 코드와 실제 환경 검증 완료, `실험`은 코드·자동 테스트 완료 후 실제 계정 검증 전, `예정`은 계획됨, `대기`는 외부 환경이나 실제 계정 검증 대기, `해당 없음`은 공통 계약의 대상이 아님을 뜻합니다.\n")
 	return []byte(output.String())
 }
 
@@ -245,6 +247,8 @@ func statusLabel(status string) string {
 	switch status {
 	case "implemented":
 		return "구현"
+	case "experimental":
+		return "실험"
 	case "planned":
 		return "예정"
 	case "pending":

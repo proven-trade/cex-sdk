@@ -69,7 +69,7 @@ err = session.Run(ctx, func(ctx context.Context, message stream.Message) error {
 })
 ```
 
-`Run`은 연결이 끝날 때까지 블로킹하며 한 세션에서 한 번만 호출할 수 있습니다. handler는 메시지 순서를 보존하기 위해 직렬로 실행됩니다. 처리 시간이 긴 작업은 애플리케이션이 크기가 제한된 큐와 자체 backpressure 정책을 사용해야 합니다. handler가 오류를 반환하면 데이터 처리 실패로 간주하고 자동 재연결하지 않습니다.
+`Run`은 연결이 끝날 때까지 블로킹하며 한 세션에서 한 번만 호출할 수 있습니다. handler는 메시지 순서를 보존하기 위해 직렬로 실행됩니다. 처리 시간이 긴 작업은 애플리케이션이 크기가 제한된 큐와 자체 backpressure 정책을 사용해야 합니다. 일반 handler 오류는 데이터 처리 실패로 간주해 종료합니다. 거래소 decoder가 `stream.ReconnectOnMessageError(err)`를 반환하면 현재 frame·연결만 손상된 것으로 보고 같은 route로 재연결합니다.
 
 ## 임시 인증 정보 갱신
 
@@ -96,13 +96,14 @@ RequestSource: func(ctx context.Context) (stream.DialRequest, error) {
 
 기본 정책은 네트워크 오류와 서버 오류를 재시도하고, 영구적인 HTTP 4xx handshake 오류는 재시도하지 않습니다. 예외적으로 일시적일 수 있는 `408`, `418`, `429`는 재시도합니다.
 
-- 기본 backoff: `250ms`에서 시작해 `30s`까지 증가
+- 기본 backoff: `250ms`에서 시작해 `30s`까지 증가하는 full jitter
 - `Retry-After`: 숫자 초 또는 HTTP 날짜 형식을 인식하고 backoff보다 길면 우선 적용
+- `MaxReconnectDelay`: 기본 `5m`; 과도한 `Retry-After`와 사용자 backoff의 최종 상한
 - `MaxReconnectAttempts`: `0`이면 제한 없음, 양수이면 연속 실패 횟수 제한
 - 성공적으로 연결되면 실패 횟수 초기화
 - `context` 취소 또는 `Session.Close` 호출 시 재연결 중단
 
-운영 환경에서 jitter 또는 거래소별 정책이 필요하면 `Backoff`와 `ReconnectPolicy`를 주입합니다.
+다른 jitter 또는 거래소별 정책이 필요하면 `Backoff`와 `ReconnectPolicy`를 주입합니다. `Session.Close`는 활성 read뿐 아니라 진행 중인 dial, token source와 재연결 backoff context도 취소합니다.
 
 ## 상태 관측
 

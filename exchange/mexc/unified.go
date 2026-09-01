@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -54,12 +55,46 @@ func (adapter *UnifiedSpot) Markets(
 		if parseErr != nil {
 			return nil, parseErr
 		}
+		priceIncrement, quantityIncrement, minimumBase, minimumQuote, parseErr := mexcSpotRules(symbol.Filters)
+		if parseErr != nil {
+			return nil, fmt.Errorf("decode MEXC rules for %q: %w", symbol.Symbol, parseErr)
+		}
+		if quantityIncrement == "" {
+			quantityIncrement = symbol.BaseSizePrecision
+		}
 		markets[index] = unified.MarketInfo{
 			Exchange: model.ExchangeMEXC, Market: market, NativeMarket: symbol.Symbol,
-			Status: fromMEXCMarketStatus(symbol), Raw: symbol.Raw,
+			Status:         fromMEXCMarketStatus(symbol),
+			PriceIncrement: priceIncrement, QuantityIncrement: quantityIncrement,
+			MinimumBaseQuantity: minimumBase, MinimumQuoteAmount: minimumQuote, Raw: symbol.Raw,
 		}
 	}
 	return markets, nil
+}
+
+func mexcSpotRules(filters []json.RawMessage) (string, string, string, string, error) {
+	var priceIncrement, quantityIncrement, minimumBase, minimumQuote string
+	for _, raw := range filters {
+		filter := struct {
+			Type        string `json:"filterType"`
+			TickSize    string `json:"tickSize"`
+			StepSize    string `json:"stepSize"`
+			MinimumQty  string `json:"minQty"`
+			MinimumCost string `json:"minNotional"`
+		}{}
+		if err := json.Unmarshal(raw, &filter); err != nil {
+			return "", "", "", "", err
+		}
+		switch filter.Type {
+		case "PRICE_FILTER":
+			priceIncrement = filter.TickSize
+		case "LOT_SIZE":
+			quantityIncrement, minimumBase = filter.StepSize, filter.MinimumQty
+		case "MIN_NOTIONAL", "NOTIONAL":
+			minimumQuote = filter.MinimumCost
+		}
+	}
+	return priceIncrement, quantityIncrement, minimumBase, minimumQuote, nil
 }
 
 // Ticker는 공통 마켓의 MEXC 최신 가격을 조회한다.
@@ -250,8 +285,8 @@ func (adapter *UnifiedSpot) PlaceOrder(
 	return unified.Order{
 		Exchange: model.ExchangeMEXC, ID: string(reference.OrderID),
 		ClientOrderID: clientOrderID, Market: request.Market, NativeMarket: nativeRequest.Symbol,
-		Side: request.Side, Type: request.Type, Status: unified.OrderStatusNew,
-		Price: request.Price, Quantity: request.Quantity, Raw: reference.Raw,
+		Side: request.Side, Type: request.Type, Status: unified.OrderStatusAcknowledged,
+		Price: request.Price, Quantity: request.Quantity, QuoteAmount: request.QuoteAmount, Raw: reference.Raw,
 	}, nil
 }
 
@@ -479,6 +514,7 @@ func fromMEXCOrder(native Order, market unified.Market) (unified.Order, error) {
 		Exchange: model.ExchangeMEXC, ID: string(native.OrderID), ClientOrderID: clientOrderID,
 		Market: market, NativeMarket: native.Symbol, Side: side, Type: orderType, Status: status,
 		Price: native.Price, Quantity: native.OriginalQuantity,
+		QuoteAmount:      native.OriginalQuoteOrderQuantity,
 		ExecutedQuantity: native.ExecutedQuantity, Raw: native.Raw,
 	}, nil
 }

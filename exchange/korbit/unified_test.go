@@ -94,6 +94,7 @@ func TestUnifiedSpotOrderConformance(t *testing.T) {
 	conformance.RunSpotOrderSuite(t, conformance.SpotOrderScenario{
 		Client: adapter, Exchange: model.ExchangeKorbit, Request: request,
 		OrderID: "1234", ClientOrderID: "client-1", NativeMarket: "btc_krw",
+		Status: unified.OrderStatusAcknowledged,
 	})
 }
 
@@ -109,7 +110,7 @@ func TestUnifiedKorbitOrderMapping(t *testing.T) {
 	got := fromKorbitOrder(native, market)
 	if got.ID != "1234" || got.NativeMarket != "btc_krw" || got.Side != unified.SideBuy ||
 		got.Type != unified.OrderTypeMarket || got.Status != unified.OrderStatusCanceled ||
-		got.Quantity != "100000" || got.ExecutedQuantity != "0.001" {
+		got.Quantity != "" || got.QuoteAmount != "100000" || got.ExecutedQuantity != "0.001" {
 		t.Fatalf("fromKorbitOrder() = %+v", got)
 	}
 }

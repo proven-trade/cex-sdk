@@ -2,9 +2,11 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"sync"
 	"time"
@@ -64,6 +66,28 @@ type routeTransport struct {
 	route     EgressRoute
 	client    *http.Client
 	transport *http.Transport
+}
+
+// RequestError는 전송 오류에서 요청 URL과 query를 제거한 오류다.
+// 원본 *url.Error는 서명, 주문 식별자 같은 민감한 query를 보유할 수 있으므로
+// SDK 오류 체인에 그대로 저장하지 않는다.
+type RequestError struct {
+	RouteID EgressRouteID
+	Cause   error
+}
+
+func (requestError *RequestError) Error() string {
+	if requestError == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("send request through route %q failed", requestError.RouteID)
+}
+
+func (requestError *RequestError) Unwrap() error {
+	if requestError == nil {
+		return nil
+	}
+	return requestError.Cause
 }
 
 // Registry는 로컬 송신 원본 IP마다 장기 재사용하는 HTTP transport 하나를 관리한다.
@@ -135,7 +159,10 @@ func NewRegistry(routes []EgressRoute, options ...RegistryOption) (*Registry, er
 		registry.routes[route.ID] = &routeTransport{
 			route:     route,
 			transport: httpTransport,
-			client:    &http.Client{Transport: httpTransport},
+			client: &http.Client{
+				Transport:     httpTransport,
+				CheckRedirect: rejectRedirect,
+			},
 		}
 	}
 
@@ -180,7 +207,7 @@ func (registry *Registry) Do(
 
 	response, err := entry.client.Do(request.Clone(ctx))
 	if err != nil {
-		return nil, fmt.Errorf("send request through route %q: %w", routeID, err)
+		return nil, &RequestError{RouteID: routeID, Cause: sanitizedTransportCause(err)}
 	}
 	return response, nil
 }
@@ -193,11 +220,23 @@ func (registry *Registry) HTTPClient(routeID EgressRouteID) (*http.Client, error
 		return nil, err
 	}
 	return &http.Client{
-		Transport: &boundRoundTripper{registry: registry, routeID: routeID},
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
+		Transport:     &boundRoundTripper{registry: registry, routeID: routeID},
+		CheckRedirect: rejectRedirect,
 	}, nil
+}
+
+func rejectRedirect(*http.Request, []*http.Request) error {
+	return http.ErrUseLastResponse
+}
+
+func sanitizedTransportCause(err error) error {
+	var urlError *url.Error
+	if errors.As(err, &urlError) {
+		// url.Error.URL에는 전체 signed query가 들어갈 수 있다. 하위 원인만
+		// 보존하면 context/net 오류의 errors.Is/errors.As 계약은 유지된다.
+		return urlError.Err
+	}
+	return err
 }
 
 func (roundTripper *boundRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {

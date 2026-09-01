@@ -35,7 +35,36 @@ type SpotOrderScenario struct {
 	OrderID       string
 	ClientOrderID string
 	NativeMarket  string
+	Status        unified.OrderStatus
 	Options       []trade.RequestOption
+}
+
+// SpotMarketDataScenario는 Markets·OrderBook·RecentTrades·Candles 공통 계약 fixture다.
+type SpotMarketDataScenario struct {
+	Client      unified.SpotClient
+	Exchange    model.ExchangeID
+	Market      unified.Market
+	MarketInfo  unified.MarketInfo
+	OrderBook   unified.OrderBook
+	Trades      []unified.PublicTrade
+	Candles     []unified.Candle
+	BookLimit   int
+	TradeLimit  int
+	CandleLimit int
+	Interval    unified.CandleInterval
+	Options     []trade.RequestOption
+}
+
+// SpotLifecycleScenario는 주문 조회·취소·미체결 목록 공통 계약 fixture다.
+type SpotLifecycleScenario struct {
+	Client            unified.SpotClient
+	OrderRequest      unified.OrderRequest
+	CancelRequest     unified.OrderRequest
+	OpenOrdersRequest unified.OpenOrdersRequest
+	Order             unified.Order
+	CanceledOrder     unified.Order
+	OpenOrders        []unified.Order
+	Options           []trade.RequestOption
 }
 
 // RunSpotReadSuite는 어댑터의 거래소 식별자, 현재가, 원본 응답, 잔고 매핑을 검증한다.
@@ -87,4 +116,138 @@ func RunSpotOrderSuite(t TestingT, scenario SpotOrderScenario) {
 		order.NativeMarket != scenario.NativeMarket || len(order.Raw) == 0 {
 		t.Fatalf("PlaceOrder() = %+v", order)
 	}
+	if scenario.Status != "" && order.Status != scenario.Status {
+		t.Fatalf("PlaceOrder().Status = %q, want %q", order.Status, scenario.Status)
+	}
+	if scenario.Request.Type == unified.OrderTypeMarket && scenario.Request.Side == unified.SideBuy {
+		if order.Quantity != "" || order.QuoteAmount != scenario.Request.QuoteAmount {
+			t.Fatalf("PlaceOrder() amount mapping = quantity %q, quote amount %q", order.Quantity, order.QuoteAmount)
+		}
+	} else if order.Quantity != scenario.Request.Quantity {
+		t.Fatalf("PlaceOrder().Quantity = %q, want %q", order.Quantity, scenario.Request.Quantity)
+	}
+}
+
+// RunSpotMarketDataSuite는 공통 마켓 규칙·호가·체결·캔들 매핑을 검증한다.
+func RunSpotMarketDataSuite(t TestingT, scenario SpotMarketDataScenario) {
+	t.Helper()
+	if scenario.Client == nil {
+		t.Fatalf("공통 Spot 클라이언트가 nil이다")
+	}
+	markets, err := scenario.Client.Markets(context.Background(), scenario.Options...)
+	if err != nil {
+		t.Fatalf("Markets() error = %v", err)
+	}
+	var found *unified.MarketInfo
+	for index := range markets {
+		if markets[index].Market == scenario.Market {
+			found = &markets[index]
+			break
+		}
+	}
+	if found == nil || !sameMarketInfo(*found, scenario.MarketInfo) {
+		t.Fatalf("Markets() did not contain expected market: got %+v, want %+v", markets, scenario.MarketInfo)
+	}
+	book, err := scenario.Client.OrderBook(context.Background(), unified.OrderBookRequest{
+		Market: scenario.Market, Limit: scenario.BookLimit,
+	}, scenario.Options...)
+	if err != nil || !sameOrderBook(book, scenario.OrderBook) {
+		t.Fatalf("OrderBook() = %+v, error = %v", book, err)
+	}
+	trades, err := scenario.Client.RecentTrades(context.Background(), unified.RecentTradesRequest{
+		Market: scenario.Market, Limit: scenario.TradeLimit,
+	}, scenario.Options...)
+	if err != nil || !sameTrades(trades, scenario.Trades) {
+		t.Fatalf("RecentTrades() = %+v, error = %v", trades, err)
+	}
+	candles, err := scenario.Client.Candles(context.Background(), unified.CandlesRequest{
+		Market: scenario.Market, Interval: scenario.Interval, Limit: scenario.CandleLimit,
+	}, scenario.Options...)
+	if err != nil || !sameCandles(candles, scenario.Candles) {
+		t.Fatalf("Candles() = %+v, error = %v", candles, err)
+	}
+}
+
+// RunSpotLifecycleSuite는 주문 조회·취소·미체결 목록 매핑을 검증한다.
+func RunSpotLifecycleSuite(t TestingT, scenario SpotLifecycleScenario) {
+	t.Helper()
+	if scenario.Client == nil {
+		t.Fatalf("공통 Spot 클라이언트가 nil이다")
+	}
+	order, err := scenario.Client.Order(context.Background(), scenario.OrderRequest, scenario.Options...)
+	if err != nil || !sameOrder(order, scenario.Order) {
+		t.Fatalf("Order() = %+v, error = %v", order, err)
+	}
+	canceled, err := scenario.Client.CancelOrder(context.Background(), scenario.CancelRequest, scenario.Options...)
+	if err != nil || !sameOrder(canceled, scenario.CanceledOrder) {
+		t.Fatalf("CancelOrder() = %+v, error = %v", canceled, err)
+	}
+	open, err := scenario.Client.OpenOrders(context.Background(), scenario.OpenOrdersRequest, scenario.Options...)
+	if err != nil || len(open) != len(scenario.OpenOrders) {
+		t.Fatalf("OpenOrders() = %+v, error = %v", open, err)
+	}
+	for index := range open {
+		if !sameOrder(open[index], scenario.OpenOrders[index]) {
+			t.Fatalf("OpenOrders()[%d] = %+v, want %+v", index, open[index], scenario.OpenOrders[index])
+		}
+	}
+}
+
+func sameMarketInfo(got, want unified.MarketInfo) bool {
+	return got.Exchange == want.Exchange && got.Market == want.Market &&
+		got.NativeMarket == want.NativeMarket && got.Status == want.Status &&
+		got.PriceIncrement == want.PriceIncrement && got.QuantityIncrement == want.QuantityIncrement &&
+		got.QuoteAmountIncrement == want.QuoteAmountIncrement &&
+		got.MinimumBaseQuantity == want.MinimumBaseQuantity && got.MinimumQuoteAmount == want.MinimumQuoteAmount &&
+		len(got.Raw) > 0
+}
+
+func sameOrderBook(got, want unified.OrderBook) bool {
+	if got.Exchange != want.Exchange || got.Market != want.Market || got.NativeMarket != want.NativeMarket ||
+		got.Timestamp != want.Timestamp || len(got.Raw) == 0 || len(got.Bids) != len(want.Bids) || len(got.Asks) != len(want.Asks) {
+		return false
+	}
+	for index := range got.Bids {
+		if got.Bids[index] != want.Bids[index] {
+			return false
+		}
+	}
+	for index := range got.Asks {
+		if got.Asks[index] != want.Asks[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func sameTrades(got, want []unified.PublicTrade) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for index := range got {
+		if got[index] != want[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func sameCandles(got, want []unified.Candle) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for index := range got {
+		if got[index] != want[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func sameOrder(got, want unified.Order) bool {
+	return got.Exchange == want.Exchange && got.ID == want.ID && got.ClientOrderID == want.ClientOrderID &&
+		got.Market == want.Market && got.NativeMarket == want.NativeMarket && got.Side == want.Side &&
+		got.Type == want.Type && got.Status == want.Status && got.Price == want.Price &&
+		got.Quantity == want.Quantity && got.QuoteAmount == want.QuoteAmount &&
+		got.ExecutedQuantity == want.ExecutedQuantity && len(got.Raw) > 0
 }

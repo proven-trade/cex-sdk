@@ -413,22 +413,20 @@ SDK 또는 별도 readiness check가 다음을 확인한다.
 | 상황 | 기본 처리 |
 |---|---|
 | DNS/TCP/TLS 실패, 요청 전송 전 확인 가능 | 멱등 조회만 제한적 재시도 |
-| GET/조회 429 | 서버 힌트 기반 대기 후 제한적 재시도 |
+| GET/조회 429 | 서버 힌트를 limiter에 반영하고 호출자에게 반환; 다음 요청부터 대기 |
 | GET 5xx | jitter를 포함한 exponential backoff |
 | 주문 생성 4xx | 재시도하지 않고 정규화된 오류 반환 |
 | 주문 생성 후 응답 전 timeout/connection reset | `UNKNOWN_EXECUTION_STATE`, clientOrderId로 조회 |
 | 취소 요청의 불명확한 결과 | 주문 조회로 최종 상태 조정 |
 | 인증/서명/시간 오류 | clock sync 후 안전한 요청만 한 번 재시도 |
 
-모든 mutation에 가능한 경우 SDK가 충돌 가능성이 낮은 `clientOrderId` 생성을 지원한다. 사용자가 직접 제공한 ID는 그대로 보존한다.
+공통 Spot mutation은 사후 조정 가능한 사용자 제공 `clientOrderId`를 필수로 요구한다. native API는 거래소 고유 계약을 따른다.
 
 ## 13. 시간 동기화
 
 - 시스템 NTP/chrony 정상 상태를 배포 전제조건으로 둔다.
-- 거래소 server time과 로컬 시간의 offset을 거래소별로 측정한다.
-- 왕복 시간의 중간값을 이용해 offset을 추정하고 오래된 측정치는 폐기한다.
-- 허용 timestamp window를 거래소별 메타데이터로 관리한다.
-- clock drift가 임계값을 넘으면 private mutation을 fail-closed 처리한다.
+- server-time endpoint가 있는 거래소는 native API로 측정할 수 있고 모든 서명 클라이언트는 보정된 `Now` 함수 주입을 지원한다.
+- 자동 offset 추정·오래된 측정 폐기·private mutation drift guard는 아직 공통 구현이 아니므로 운영 환경에서 NTP/chrony와 drift alert를 필수로 둔다.
 
 ## 14. 오류 모델
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -133,6 +134,82 @@ func TestExecuteReturnsBodyAndClonedHeaders(t *testing.T) {
 	}
 	if got := string(response.Body); got != `{"ok":true}` {
 		t.Fatalf("response body = %q", got)
+	}
+}
+
+func TestExecuteRetriesReadsAndRebuildsAfterEachCharge(t *testing.T) {
+	t.Parallel()
+	var builds, sends int
+	observations := make([]ExecutionObservation, 0, 2)
+	executor, err := NewExecutor(ExecutorConfig{
+		Sender: senderFunc(func(context.Context, transport.EgressRouteID, *http.Request) (*http.Response, error) {
+			sends++
+			if sends == 1 {
+				return nil, errors.New("temporary disconnect")
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK, Header: make(http.Header),
+				Body: io.NopCloser(strings.NewReader(`{"ok":true}`)),
+			}, nil
+		}),
+		Limiter:         emptyLimiter(t),
+		ReadRetryPolicy: &ReadRetryPolicy{MaxAttempts: 2},
+		Observer: ExecutionObserverFunc(func(value ExecutionObservation) {
+			observations = append(observations, value)
+		}),
+	})
+	if err != nil {
+		t.Fatalf("NewExecutor() error = %v", err)
+	}
+	execution := validExecution(OperationRead)
+	execution.Build = func(context.Context) (*http.Request, error) {
+		builds++
+		return http.NewRequest(http.MethodGet, "https://example.com/ticker?signature=secret", nil)
+	}
+	response, err := executor.Execute(context.Background(), execution)
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatalf("Execute() = %+v, %v", response, err)
+	}
+	if builds != 2 || sends != 2 {
+		t.Fatalf("builds = %d, sends = %d, want 2, 2", builds, sends)
+	}
+	if len(observations) != 2 || observations[0].ErrorCategory != trade.ErrorNetwork ||
+		observations[1].StatusCode != http.StatusOK || observations[1].EndpointID != "GET /ticker" {
+		t.Fatalf("observations = %+v", observations)
+	}
+}
+
+func TestExecuteRetriesSelectedReadStatusesButNotMutations(t *testing.T) {
+	t.Parallel()
+	for _, operation := range []OperationKind{OperationRead, OperationMutation} {
+		operation := operation
+		t.Run(strconv.Itoa(int(operation)), func(t *testing.T) {
+			calls := 0
+			executor, err := NewExecutor(ExecutorConfig{
+				Sender: senderFunc(func(context.Context, transport.EgressRouteID, *http.Request) (*http.Response, error) {
+					calls++
+					return &http.Response{
+						StatusCode: http.StatusServiceUnavailable, Header: make(http.Header),
+						Body: io.NopCloser(strings.NewReader(`{"error":"busy"}`)),
+					}, nil
+				}),
+				Limiter: emptyLimiter(t), ReadRetryPolicy: &ReadRetryPolicy{MaxAttempts: 2},
+			})
+			if err != nil {
+				t.Fatalf("NewExecutor() error = %v", err)
+			}
+			response, err := executor.Execute(context.Background(), validExecution(operation))
+			if err != nil || response.StatusCode != http.StatusServiceUnavailable {
+				t.Fatalf("Execute() = %+v, %v", response, err)
+			}
+			wantCalls := 2
+			if operation == OperationMutation {
+				wantCalls = 1
+			}
+			if calls != wantCalls {
+				t.Fatalf("calls = %d, want %d", calls, wantCalls)
+			}
+		})
 	}
 }
 

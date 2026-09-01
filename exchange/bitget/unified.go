@@ -41,13 +41,35 @@ func (adapter *UnifiedSpot) Markets(
 	}
 	markets := make([]unified.MarketInfo, len(native))
 	for index, instrument := range native {
+		priceIncrement, parseErr := bitgetPrecisionIncrement(instrument.PricePrecision)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid Bitget price precision for %q: %w", instrument.Symbol, parseErr)
+		}
+		quantityIncrement, parseErr := bitgetPrecisionIncrement(instrument.QuantityPrecision)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid Bitget quantity precision for %q: %w", instrument.Symbol, parseErr)
+		}
 		markets[index] = unified.MarketInfo{
 			Exchange:     model.ExchangeBitget,
 			Market:       unified.Market{Base: instrument.BaseCoin, Quote: instrument.QuoteCoin},
-			NativeMarket: instrument.Symbol, Status: instrument.Status, Raw: instrument.Raw,
+			NativeMarket: instrument.Symbol, Status: instrument.Status,
+			PriceIncrement: priceIncrement, QuantityIncrement: quantityIncrement,
+			MinimumBaseQuantity: instrument.MinimumOrderQuantity,
+			MinimumQuoteAmount:  instrument.MinimumOrderAmount, Raw: instrument.Raw,
 		}
 	}
 	return markets, nil
+}
+
+func bitgetPrecisionIncrement(value string) (string, error) {
+	if value == "" {
+		return "", nil
+	}
+	precision, err := strconv.Atoi(value)
+	if err != nil || precision < 0 {
+		return "", fmt.Errorf("precision %q must be a non-negative integer", value)
+	}
+	return unified.DecimalIncrement(precision), nil
 }
 
 // Ticker는 공통 마켓의 최신 가격을 조회한다.
@@ -202,7 +224,8 @@ func (adapter *UnifiedSpot) PlaceOrder(
 		Exchange: model.ExchangeBitget, ID: native.OrderID,
 		ClientOrderID: native.ClientOrderID, Market: request.Market,
 		NativeMarket: bitgetSymbol(request.Market),
-		Side:         request.Side, Type: request.Type, Status: unified.OrderStatusNew, Raw: native.Raw,
+		Side:         request.Side, Type: request.Type, Status: unified.OrderStatusAcknowledged,
+		Quantity: request.Quantity, QuoteAmount: request.QuoteAmount, Raw: native.Raw,
 	}, nil
 }
 
@@ -243,7 +266,7 @@ func (adapter *UnifiedSpot) CancelOrder(
 		Exchange: model.ExchangeBitget, ID: native.OrderID,
 		ClientOrderID: native.ClientOrderID, Market: request.Market,
 		NativeMarket: bitgetSymbol(request.Market),
-		Status:       unified.OrderStatusCanceled, Raw: native.Raw,
+		Status:       unified.OrderStatusCancelPending, Raw: native.Raw,
 	}, nil
 }
 
@@ -328,12 +351,20 @@ func toBitgetTimeInForce(value unified.TimeInForce) TimeInForce {
 }
 
 func fromBitgetOrder(native Order, market unified.Market) unified.Order {
+	quantity, quoteAmount := native.Quantity, ""
+	if native.OrderType == OrderTypeMarket && native.Side == SideBuy {
+		quantity, quoteAmount = "", native.Amount
+		if quoteAmount == "" {
+			quoteAmount = native.Quantity
+		}
+	}
 	return unified.Order{
 		Exchange: model.ExchangeBitget, ID: native.OrderID, ClientOrderID: native.ClientOrderID,
 		Market: market, NativeMarket: native.Symbol,
 		Side: toUnifiedBitgetSide(native.Side), Type: toUnifiedBitgetOrderType(native.OrderType),
 		Status: toUnifiedBitgetStatus(native.Status), Price: native.Price,
-		Quantity: native.Quantity, ExecutedQuantity: native.ExecutedQuantity, Raw: native.Raw,
+		Quantity: quantity, QuoteAmount: quoteAmount,
+		ExecutedQuantity: native.ExecutedQuantity, Raw: native.Raw,
 	}
 }
 

@@ -59,10 +59,21 @@ func (adapter *UnifiedSpot) Markets(
 		}
 		markets[index] = unified.MarketInfo{
 			Exchange: model.ExchangeGateIO, Market: market, NativeMarket: pair.ID,
-			Status: fromGateIOTradeStatus(pair.TradeStatus), Raw: pair.Raw,
+			Status:              fromGateIOTradeStatus(pair.TradeStatus),
+			PriceIncrement:      unified.DecimalIncrement(pair.PricePrecision),
+			QuantityIncrement:   unified.DecimalIncrement(pair.AmountPrecision),
+			MinimumBaseQuantity: gateIOOptionalString(pair.MinimumBaseAmount),
+			MinimumQuoteAmount:  gateIOOptionalString(pair.MinimumQuoteAmount), Raw: pair.Raw,
 		}
 	}
 	return markets, nil
+}
+
+func gateIOOptionalString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 // Ticker는 공통 마켓의 Gate.io 최신 가격을 조회한다.
@@ -310,7 +321,6 @@ func (adapter *UnifiedSpot) CancelOrder(
 	if order.ClientOrderID == "" {
 		order.ClientOrderID = request.ClientOrderID
 	}
-	order.Status = unified.OrderStatusCanceled
 	return order, nil
 }
 
@@ -504,11 +514,7 @@ func fromGateIOPlacedOrder(
 			"Gate.io order client ID %q does not match %q", native.ClientOrderID, clientOrderID,
 		)
 	}
-	quantity := request.Quantity
-	if request.Type == unified.OrderTypeMarket && request.Side == unified.SideBuy {
-		quantity = request.QuoteAmount
-	}
-	status := unified.OrderStatusNew
+	status := unified.OrderStatusAcknowledged
 	if native.Status != "" {
 		var err error
 		status, err = toUnifiedGateIOOrderStatus(native)
@@ -521,7 +527,8 @@ func fromGateIOPlacedOrder(
 		Exchange: model.ExchangeGateIO, ID: native.ID, ClientOrderID: clientOrderID,
 		Market: request.Market, NativeMarket: nativeMarket, Side: request.Side,
 		Type: request.Type, Status: status, Price: request.Price,
-		Quantity: quantity, ExecutedQuantity: executed, Raw: native.Raw,
+		Quantity: request.Quantity, QuoteAmount: request.QuoteAmount,
+		ExecutedQuantity: executed, Raw: native.Raw,
 	}, nil
 }
 
@@ -544,11 +551,16 @@ func fromGateIOOrder(native Order, expectedMarket unified.Market) (unified.Order
 	if err != nil {
 		return unified.Order{}, err
 	}
+	quantity, quoteAmount := native.Amount, ""
+	if orderType == unified.OrderTypeMarket && side == unified.SideBuy {
+		quantity, quoteAmount = "", native.Amount
+	}
 	return unified.Order{
 		Exchange: model.ExchangeGateIO, ID: native.ID, ClientOrderID: native.ClientOrderID,
 		Market: expectedMarket, NativeMarket: native.CurrencyPair, Side: side,
 		Type: orderType, Status: status, Price: native.Price,
-		Quantity: native.Amount, ExecutedQuantity: native.FilledAmount, Raw: native.Raw,
+		Quantity: quantity, QuoteAmount: quoteAmount,
+		ExecutedQuantity: native.FilledAmount, Raw: native.Raw,
 	}, nil
 }
 

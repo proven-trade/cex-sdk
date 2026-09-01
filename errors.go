@@ -66,10 +66,24 @@ func (apiError *APIError) Error() string {
 	if apiError.ExchangeMessage != "" {
 		message += ": " + apiError.ExchangeMessage
 	}
-	if apiError.ExchangeMessage == "" && apiError.Cause != nil {
+	if apiError.ExchangeMessage == "" && apiError.Cause != nil && apiError.safeToRenderCause() {
 		message += ": " + apiError.Cause.Error()
+	} else if apiError.ExchangeMessage == "" && apiError.Category != "" {
+		// 인증·전송·불명확한 실행 오류의 Cause는 credential provider나 net/http에서
+		// 왔을 수 있다. 문자열에는 allowlist된 공통 분류만 사용하고 Cause는
+		// errors.Is/errors.As 용도로만 보존한다.
+		message += ": " + string(apiError.Category)
 	}
 	return message
+}
+
+func (apiError *APIError) safeToRenderCause() bool {
+	switch apiError.Category {
+	case ErrorValidation, ErrorUnsupportedCapability:
+		return true
+	default:
+		return false
+	}
 }
 
 // Unwrap은 공통 분류 오류와 원본 원인을 errors.Is/errors.As에 노출한다.

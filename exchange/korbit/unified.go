@@ -56,7 +56,8 @@ func (adapter *UnifiedSpot) Markets(
 		}
 		markets[index] = unified.MarketInfo{
 			Exchange: model.ExchangeKorbit, Market: market,
-			NativeMarket: item.Symbol, Status: item.Status, Raw: item.Raw,
+			NativeMarket: item.Symbol, Status: item.Status,
+			MinimumQuoteAmount: item.MinimumOrderValue, Raw: item.Raw,
 		}
 	}
 	return markets, nil
@@ -244,15 +245,12 @@ func (adapter *UnifiedSpot) PlaceOrder(
 	if err != nil {
 		return unified.Order{}, err
 	}
-	quantity := request.Quantity
-	if request.Type == unified.OrderTypeMarket && request.Side == unified.SideBuy {
-		quantity = request.QuoteAmount
-	}
 	return unified.Order{
 		Exchange: model.ExchangeKorbit, ID: strconv.FormatInt(reference.OrderID, 10),
 		ClientOrderID: clientOrderID, Market: request.Market,
 		NativeMarket: nativeRequest.Symbol, Side: request.Side, Type: request.Type,
-		Status: unified.OrderStatusNew, Price: request.Price, Quantity: quantity, Raw: reference.Raw,
+		Status: unified.OrderStatusAcknowledged, Price: request.Price,
+		Quantity: request.Quantity, QuoteAmount: request.QuoteAmount, Raw: reference.Raw,
 	}, nil
 }
 
@@ -300,7 +298,7 @@ func (adapter *UnifiedSpot) CancelOrder(
 	return unified.Order{
 		Exchange: model.ExchangeKorbit, ID: request.OrderID,
 		ClientOrderID: request.ClientOrderID, Market: request.Market,
-		NativeMarket: korbitSymbol(request.Market), Status: unified.OrderStatusCanceled, Raw: native.Raw,
+		NativeMarket: korbitSymbol(request.Market), Status: unified.OrderStatusCancelPending, Raw: native.Raw,
 	}, nil
 }
 
@@ -463,15 +461,17 @@ func toKorbitTimeInForce(value unified.TimeInForce) TimeInForce {
 
 func fromKorbitOrder(native Order, market unified.Market) unified.Order {
 	quantity := native.Qty
+	quoteAmount := ""
 	if native.OrderType != OrderTypeLimit && native.Side == SideBuy {
-		quantity = native.Amount
+		quantity, quoteAmount = "", native.Amount
 	}
 	return unified.Order{
 		Exchange: model.ExchangeKorbit, ID: strconv.FormatInt(native.OrderID, 10),
 		ClientOrderID: native.ClientOrderID, Market: market, NativeMarket: native.Symbol,
 		Side: toUnifiedKorbitSide(native.Side), Type: toUnifiedKorbitOrderType(native.OrderType),
 		Status: toUnifiedKorbitStatus(native.Status), Price: native.Price,
-		Quantity: quantity, ExecutedQuantity: native.FilledQty, Raw: native.Raw,
+		Quantity: quantity, QuoteAmount: quoteAmount,
+		ExecutedQuantity: native.FilledQty, Raw: native.Raw,
 	}
 }
 

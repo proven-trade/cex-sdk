@@ -187,6 +187,7 @@ func TestUnifiedSpotOrderConformance(t *testing.T) {
 	conformance.RunSpotOrderSuite(t, conformance.SpotOrderScenario{
 		Client: adapter, Exchange: model.ExchangeGateIO, Request: request,
 		OrderID: "order-1", ClientOrderID: "t-client-1", NativeMarket: "BTC_USDT",
+		Status: unified.OrderStatusNew,
 	})
 }
 

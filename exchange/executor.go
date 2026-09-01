@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,6 +19,12 @@ import (
 )
 
 const defaultMaxResponseBodyBytes int64 = 32 << 20
+
+var defaultReadRetryPolicy = ReadRetryPolicy{
+	MaxAttempts: 2,
+	BaseDelay:   50 * time.Millisecond,
+	MaxDelay:    500 * time.Millisecond,
+}
 
 // Sender는 선택한 송신 경로로 HTTP 요청을 보낼 수 있는 전송 계층이다.
 type Sender interface {
@@ -38,12 +45,45 @@ type BuildRequest func(context.Context) (*http.Request, error)
 // Execution은 HTTP 요청 한 건의 공통 실행 정보를 담는다.
 type Execution struct {
 	Exchange      model.ExchangeID
+	EndpointID    string
 	AccountID     string
 	EgressRouteID transport.EgressRouteID
 	Timeout       time.Duration
 	Charges       []ratelimit.Charge
 	Operation     OperationKind
 	Build         BuildRequest
+}
+
+// ReadRetryPolicy는 읽기 전용 REST 요청에만 적용되는 제한적 재시도 정책이다.
+// mutation은 이 정책과 무관하게 자동 재시도하지 않는다.
+type ReadRetryPolicy struct {
+	MaxAttempts int
+	BaseDelay   time.Duration
+	MaxDelay    time.Duration
+}
+
+// ExecutionObservation은 credential이나 query를 포함하지 않는 실행 관측값이다.
+type ExecutionObservation struct {
+	Exchange      model.ExchangeID
+	EndpointID    string
+	EgressRouteID transport.EgressRouteID
+	Operation     OperationKind
+	Attempt       int
+	Duration      time.Duration
+	StatusCode    int
+	ErrorCategory trade.ErrorCategory
+}
+
+// ExecutionObserver는 REST attempt별 latency, status와 공통 오류 분류를 수집한다.
+type ExecutionObserver interface {
+	ObserveExecution(ExecutionObservation)
+}
+
+// ExecutionObserverFunc는 함수를 ExecutionObserver로 사용하게 한다.
+type ExecutionObserverFunc func(ExecutionObservation)
+
+func (observe ExecutionObserverFunc) ObserveExecution(value ExecutionObservation) {
+	observe(value)
 }
 
 // Response는 거래소 어댑터가 해석할 원본 HTTP 응답이다.
@@ -64,6 +104,8 @@ type ExecutorConfig struct {
 	Sender               Sender
 	Limiter              *ratelimit.Limiter
 	MaxResponseBodyBytes int64
+	ReadRetryPolicy      *ReadRetryPolicy
+	Observer             ExecutionObserver
 }
 
 // Executor는 timeout, limiter, 전송, 응답 크기 제한을 공통 처리한다.
@@ -71,6 +113,8 @@ type Executor struct {
 	sender               Sender
 	limiter              *ratelimit.Limiter
 	maxResponseBodyBytes int64
+	readRetryPolicy      ReadRetryPolicy
+	observer             ExecutionObserver
 }
 
 // NewExecutor는 검증된 공통 실행 파이프라인을 생성한다.
@@ -87,10 +131,19 @@ func NewExecutor(config ExecutorConfig) (*Executor, error) {
 	if config.MaxResponseBodyBytes < 0 {
 		return nil, fmt.Errorf("maximum response body size cannot be negative")
 	}
+	retryPolicy := defaultReadRetryPolicy
+	if config.ReadRetryPolicy != nil {
+		retryPolicy = *config.ReadRetryPolicy
+	}
+	if err := retryPolicy.validate(); err != nil {
+		return nil, err
+	}
 	return &Executor{
 		sender:               config.Sender,
 		limiter:              config.Limiter,
 		maxResponseBodyBytes: config.MaxResponseBodyBytes,
+		readRetryPolicy:      retryPolicy,
+		observer:             config.Observer,
 	}, nil
 }
 
@@ -119,6 +172,32 @@ func (executor *Executor) Execute(ctx context.Context, execution Execution) (Res
 	}
 	defer cancel()
 
+	maxAttempts := 1
+	if execution.Operation == OperationRead {
+		maxAttempts = executor.readRetryPolicy.MaxAttempts
+	}
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		response, retry, err := executor.executeAttempt(requestCtx, execution, attempt)
+		if err == nil && !retry {
+			return response, nil
+		}
+		if !retry || attempt == maxAttempts {
+			return response, err
+		}
+		if waitErr := executor.waitBeforeRetry(requestCtx, attempt); waitErr != nil {
+			return Response{}, execution.transportError(waitErr)
+		}
+	}
+	return Response{}, fmt.Errorf("execution retry loop exhausted")
+}
+
+func (executor *Executor) executeAttempt(
+	requestCtx context.Context,
+	execution Execution,
+	attempt int,
+) (Response, bool, error) {
+	started := time.Now()
+	endpointID := execution.EndpointID
 	if err := executor.limiter.Wait(requestCtx, execution.Charges...); err != nil {
 		category := trade.ErrorInternal
 		retryable := false
@@ -126,38 +205,54 @@ func (executor *Executor) Execute(ctx context.Context, execution Execution) (Res
 			category = trade.ErrorTimeout
 			retryable = true
 		}
-		return Response{}, &trade.APIError{
+		apiError := &trade.APIError{
 			Category:  category,
 			Exchange:  execution.Exchange,
 			AccountID: execution.AccountID,
 			Retryable: retryable,
 			Cause:     err,
 		}
+		executor.observe(execution, endpointID, attempt, started, 0, apiError)
+		return Response{}, false, apiError
 	}
 
 	request, err := execution.Build(requestCtx)
 	if err != nil {
-		return Response{}, err
+		executor.observe(execution, endpointID, attempt, started, 0, err)
+		return Response{}, false, err
 	}
 	if request == nil {
-		return Response{}, fmt.Errorf("request builder returned nil request")
+		err = fmt.Errorf("request builder returned nil request")
+		executor.observe(execution, endpointID, attempt, started, 0, err)
+		return Response{}, false, err
+	}
+	if endpointID == "" && request.URL != nil {
+		endpointID = request.Method + " " + request.URL.Path
 	}
 
 	httpResponse, err := executor.sender.Do(requestCtx, execution.EgressRouteID, request)
 	if err != nil {
-		return Response{}, execution.transportError(err)
+		apiError := execution.transportError(err)
+		retry := execution.Operation == OperationRead && retryableAPIError(apiError) && requestCtx.Err() == nil
+		executor.observe(execution, endpointID, attempt, started, 0, apiError)
+		return Response{}, retry, apiError
 	}
-	defer httpResponse.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(httpResponse.Body, executor.maxResponseBodyBytes+1))
+	_ = httpResponse.Body.Close()
 	if err != nil {
-		return Response{}, execution.responseError(fmt.Errorf("read response body: %w", err))
+		apiError := execution.responseError(fmt.Errorf("read response body: %w", err))
+		retry := execution.Operation == OperationRead && requestCtx.Err() == nil
+		executor.observe(execution, endpointID, attempt, started, httpResponse.StatusCode, apiError)
+		return Response{}, retry, apiError
 	}
 	if int64(len(body)) > executor.maxResponseBodyBytes {
-		return Response{}, execution.responseError(fmt.Errorf(
+		apiError := execution.responseError(fmt.Errorf(
 			"response body exceeds %d bytes",
 			executor.maxResponseBodyBytes,
 		))
+		executor.observe(execution, endpointID, attempt, started, httpResponse.StatusCode, apiError)
+		return Response{}, false, apiError
 	}
 
 	response := Response{
@@ -168,7 +263,86 @@ func (executor *Executor) Execute(ctx context.Context, execution Execution) (Res
 	if httpResponse.StatusCode == http.StatusTooManyRequests || httpResponse.StatusCode == http.StatusTeapot {
 		executor.applyRetryAfter(response.Header, execution.Charges)
 	}
-	return response, nil
+	retry := execution.Operation == OperationRead && retryableReadStatus(response.StatusCode)
+	executor.observe(execution, endpointID, attempt, started, response.StatusCode, nil)
+	return response, retry, nil
+}
+
+func (policy ReadRetryPolicy) validate() error {
+	if policy.MaxAttempts < 1 || policy.MaxAttempts > 5 {
+		return fmt.Errorf("read retry max attempts must be between 1 and 5")
+	}
+	if policy.BaseDelay < 0 || policy.MaxDelay < 0 || policy.MaxDelay < policy.BaseDelay {
+		return fmt.Errorf("read retry delays must be non-negative and max delay must be at least base delay")
+	}
+	return nil
+}
+
+func (executor *Executor) waitBeforeRetry(ctx context.Context, attempt int) error {
+	delay := executor.readRetryPolicy.BaseDelay
+	for retry := 1; retry < attempt && delay < executor.readRetryPolicy.MaxDelay; retry++ {
+		if delay > executor.readRetryPolicy.MaxDelay/2 {
+			delay = executor.readRetryPolicy.MaxDelay
+			break
+		}
+		delay *= 2
+	}
+	if delay > executor.readRetryPolicy.MaxDelay {
+		delay = executor.readRetryPolicy.MaxDelay
+	}
+	if delay > 0 {
+		delay = time.Duration(rand.Int64N(int64(delay) + 1))
+	}
+	if delay == 0 {
+		return nil
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func retryableReadStatus(status int) bool {
+	switch status {
+	case http.StatusRequestTimeout, http.StatusTooEarly, http.StatusInternalServerError,
+		http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
+	}
+}
+
+func retryableAPIError(err error) bool {
+	var apiError *trade.APIError
+	return errors.As(err, &apiError) && apiError.Retryable
+}
+
+func (executor *Executor) observe(
+	execution Execution,
+	endpointID string,
+	attempt int,
+	started time.Time,
+	statusCode int,
+	err error,
+) {
+	if executor.observer == nil {
+		return
+	}
+	category := trade.ErrorCategory("")
+	var apiError *trade.APIError
+	if errors.As(err, &apiError) {
+		category = apiError.Category
+	}
+	executor.observer.ObserveExecution(ExecutionObservation{
+		Exchange: execution.Exchange, EndpointID: endpointID,
+		EgressRouteID: execution.EgressRouteID, Operation: execution.Operation,
+		Attempt: attempt, Duration: time.Since(started), StatusCode: statusCode,
+		ErrorCategory: category,
+	})
 }
 
 func (execution Execution) transportError(err error) error {

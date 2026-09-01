@@ -164,6 +164,7 @@ func TestUnifiedSpotOrderConformance(t *testing.T) {
 	conformance.RunSpotOrderSuite(t, conformance.SpotOrderScenario{
 		Client: adapter, Exchange: model.ExchangeKuCoin, Request: request,
 		OrderID: "order-1", ClientOrderID: "client-1", NativeMarket: "BTC-USDT",
+		Status: unified.OrderStatusAcknowledged,
 	})
 }
 
@@ -206,7 +207,7 @@ func TestUnifiedKuCoinOrderByClientIDAndCancel(t *testing.T) {
 	}
 	canceled, err := adapter.CancelOrder(context.Background(), request)
 	if err != nil || canceled.ClientOrderID != "client-1" ||
-		canceled.Status != unified.OrderStatusCanceled || len(canceled.Raw) == 0 {
+		canceled.Status != unified.OrderStatusCancelPending || len(canceled.Raw) == 0 {
 		t.Fatalf("CancelOrder() = %+v, error = %v", canceled, err)
 	}
 }

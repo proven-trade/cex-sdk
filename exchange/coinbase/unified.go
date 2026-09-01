@@ -64,7 +64,11 @@ func (adapter *UnifiedSpot) Markets(
 			}
 			markets = append(markets, unified.MarketInfo{
 				Exchange: model.ExchangeCoinbase, Market: market,
-				NativeMarket: product.ProductID, Status: product.Status, Raw: product.Raw,
+				NativeMarket: product.ProductID, Status: product.Status,
+				PriceIncrement: product.PriceIncrement, QuantityIncrement: product.BaseIncrement,
+				QuoteAmountIncrement: product.QuoteIncrement,
+				MinimumBaseQuantity:  product.BaseMinimumSize,
+				MinimumQuoteAmount:   product.QuoteMinimumSize, Raw: product.Raw,
 			})
 		}
 		if len(products) < pageLimit {
@@ -261,15 +265,12 @@ func (adapter *UnifiedSpot) PlaceOrder(
 	if err != nil {
 		return unified.Order{}, err
 	}
-	quantity := request.Quantity
-	if request.Type == unified.OrderTypeMarket && request.Side == unified.SideBuy {
-		quantity = request.QuoteAmount
-	}
 	return unified.Order{
 		Exchange: model.ExchangeCoinbase, ID: reference.OrderID,
 		ClientOrderID: reference.ClientOrderID, Market: request.Market,
 		NativeMarket: reference.ProductID, Side: request.Side, Type: request.Type,
-		Status: unified.OrderStatusNew, Price: request.Price, Quantity: quantity, Raw: reference.Raw,
+		Status: unified.OrderStatusAcknowledged, Price: request.Price,
+		Quantity: request.Quantity, QuoteAmount: request.QuoteAmount, Raw: reference.Raw,
 	}, nil
 }
 
@@ -323,7 +324,7 @@ func (adapter *UnifiedSpot) CancelOrder(
 	return unified.Order{
 		Exchange: model.ExchangeCoinbase, ID: orderID, ClientOrderID: clientOrderID,
 		Market: request.Market, NativeMarket: coinbaseProductID(request.Market),
-		Status: unified.OrderStatusCanceled, Raw: results[0].Raw,
+		Status: unified.OrderStatusCancelPending, Raw: results[0].Raw,
 	}, nil
 }
 
@@ -580,34 +581,32 @@ func toUnifiedCoinbaseSide(side Side) unified.Side {
 }
 
 func fromCoinbaseOrder(native Order, market unified.Market) unified.Order {
-	price, quantity, orderType := coinbaseOrderValues(native)
+	price, quantity, quoteAmount, orderType := coinbaseOrderValues(native)
 	return unified.Order{
 		Exchange: model.ExchangeCoinbase, ID: native.OrderID, ClientOrderID: native.ClientOrderID,
 		Market: market, NativeMarket: native.ProductID, Side: toUnifiedCoinbaseSide(native.Side),
 		Type: orderType, Status: toUnifiedCoinbaseStatus(native.Status, native.FilledSize),
-		Price: price, Quantity: quantity, ExecutedQuantity: native.FilledSize, Raw: native.Raw,
+		Price: price, Quantity: quantity, QuoteAmount: quoteAmount,
+		ExecutedQuantity: native.FilledSize, Raw: native.Raw,
 	}
 }
 
-func coinbaseOrderValues(native Order) (string, string, unified.OrderType) {
+func coinbaseOrderValues(native Order) (string, string, string, unified.OrderType) {
 	configuration := native.OrderConfiguration
 	switch {
 	case configuration.MarketMarketIOC != nil:
-		quantity := configuration.MarketMarketIOC.BaseSize
-		if quantity == "" {
-			quantity = configuration.MarketMarketIOC.QuoteSize
-		}
-		return "", quantity, unified.OrderTypeMarket
+		return "", configuration.MarketMarketIOC.BaseSize,
+			configuration.MarketMarketIOC.QuoteSize, unified.OrderTypeMarket
 	case configuration.SORLimitIOC != nil:
-		return configuration.SORLimitIOC.LimitPrice, configuration.SORLimitIOC.BaseSize, unified.OrderTypeLimit
+		return configuration.SORLimitIOC.LimitPrice, configuration.SORLimitIOC.BaseSize, "", unified.OrderTypeLimit
 	case configuration.LimitLimitFOK != nil:
-		return configuration.LimitLimitFOK.LimitPrice, configuration.LimitLimitFOK.BaseSize, unified.OrderTypeLimit
+		return configuration.LimitLimitFOK.LimitPrice, configuration.LimitLimitFOK.BaseSize, "", unified.OrderTypeLimit
 	case configuration.LimitLimitGTC != nil:
-		return configuration.LimitLimitGTC.LimitPrice, configuration.LimitLimitGTC.BaseSize, unified.OrderTypeLimit
+		return configuration.LimitLimitGTC.LimitPrice, configuration.LimitLimitGTC.BaseSize, "", unified.OrderTypeLimit
 	case native.OrderType == "MARKET":
-		return "", "", unified.OrderTypeMarket
+		return "", "", "", unified.OrderTypeMarket
 	default:
-		return "", "", unified.OrderTypeLimit
+		return "", "", "", unified.OrderTypeLimit
 	}
 }
 

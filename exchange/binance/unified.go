@@ -2,6 +2,7 @@ package binance
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -44,13 +45,45 @@ func (adapter *UnifiedSpot) Markets(
 		if !symbol.SpotTradingAllowed {
 			continue
 		}
+		priceIncrement, quantityIncrement, minimumBase, minimumQuote, parseErr := binanceSpotRules(symbol.Filters)
+		if parseErr != nil {
+			return nil, fmt.Errorf("decode Binance rules for %q: %w", symbol.Symbol, parseErr)
+		}
 		markets = append(markets, unified.MarketInfo{
 			Exchange:     model.ExchangeBinance,
 			Market:       unified.Market{Base: symbol.BaseAsset, Quote: symbol.QuoteAsset},
 			NativeMarket: symbol.Symbol, Status: symbol.Status,
+			PriceIncrement: priceIncrement, QuantityIncrement: quantityIncrement,
+			MinimumBaseQuantity: minimumBase, MinimumQuoteAmount: minimumQuote,
+			Raw: info.Raw,
 		})
 	}
 	return markets, nil
+}
+
+func binanceSpotRules(filters []json.RawMessage) (string, string, string, string, error) {
+	var priceIncrement, quantityIncrement, minimumBase, minimumQuote string
+	for _, raw := range filters {
+		filter := struct {
+			Type        string `json:"filterType"`
+			TickSize    string `json:"tickSize"`
+			StepSize    string `json:"stepSize"`
+			MinimumQty  string `json:"minQty"`
+			MinimumCost string `json:"minNotional"`
+		}{}
+		if err := json.Unmarshal(raw, &filter); err != nil {
+			return "", "", "", "", err
+		}
+		switch filter.Type {
+		case "PRICE_FILTER":
+			priceIncrement = filter.TickSize
+		case "LOT_SIZE":
+			quantityIncrement, minimumBase = filter.StepSize, filter.MinimumQty
+		case "MIN_NOTIONAL", "NOTIONAL":
+			minimumQuote = filter.MinimumCost
+		}
+	}
+	return priceIncrement, quantityIncrement, minimumBase, minimumQuote, nil
 }
 
 // Ticker는 공통 마켓의 최신 가격을 조회한다.
@@ -333,7 +366,8 @@ func fromBinanceOrder(native Order, market unified.Market) unified.Order {
 		ClientOrderID: clientOrderID, Market: market, NativeMarket: native.Symbol,
 		Side: toUnifiedBinanceSide(native.Side), Type: toUnifiedBinanceOrderType(native.Type),
 		Status: toUnifiedBinanceStatus(native.Status), Price: native.Price,
-		Quantity: native.OriginalQuantity, ExecutedQuantity: native.ExecutedQuantity, Raw: native.Raw,
+		Quantity: native.OriginalQuantity, QuoteAmount: native.OriginalQuoteQuantity,
+		ExecutedQuantity: native.ExecutedQuantity, Raw: native.Raw,
 	}
 }
 

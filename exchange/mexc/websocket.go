@@ -346,7 +346,7 @@ func (managed *managedStream) run(
 	err := managed.session.Run(ctx, func(ctx context.Context, message corestream.Message) error {
 		decoded, err := DecodeStreamMessage(message)
 		if err != nil {
-			return err
+			return corestream.ReconnectOnMessageError(err)
 		}
 		managed.handleControl(decoded)
 		return handler(ctx, decoded)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"sync"
@@ -13,9 +14,10 @@ import (
 )
 
 const (
-	closeNormal        = 1000
-	closeGoingAway     = 1001
-	defaultPingTimeout = 5 * time.Second
+	closeNormal              = 1000
+	closeGoingAway           = 1001
+	defaultPingTimeout       = 5 * time.Second
+	defaultMaxReconnectDelay = 5 * time.Minute
 )
 
 var errReconnectRequested = errors.New("stream reconnect requested")
@@ -31,6 +33,7 @@ type SessionConfig struct {
 	ReconnectPolicy      ReconnectPolicy
 	Backoff              Backoff
 	MaxReconnectAttempts int
+	MaxReconnectDelay    time.Duration
 	PingInterval         time.Duration
 	PingTimeout          time.Duration
 }
@@ -46,6 +49,7 @@ type Session struct {
 	started    bool
 	closed     bool
 	reconnect  bool
+	cancel     context.CancelFunc
 }
 
 type permanentError struct {
@@ -76,6 +80,12 @@ func NewSession(config SessionConfig) (*Session, error) {
 	if config.PingInterval < 0 || config.PingTimeout < 0 {
 		return nil, fmt.Errorf("ping durations cannot be negative")
 	}
+	if config.MaxReconnectDelay < 0 {
+		return nil, fmt.Errorf("maximum reconnect delay cannot be negative")
+	}
+	if config.MaxReconnectDelay == 0 {
+		config.MaxReconnectDelay = defaultMaxReconnectDelay
+	}
 	if config.PingInterval > 0 && config.PingTimeout == 0 {
 		config.PingTimeout = defaultPingTimeout
 	}
@@ -83,7 +93,7 @@ func NewSession(config SessionConfig) (*Session, error) {
 		config.ReconnectPolicy = DefaultReconnectPolicy
 	}
 	if config.Backoff == nil {
-		config.Backoff = ExponentialBackoff(250*time.Millisecond, 30*time.Second)
+		config.Backoff = FullJitterBackoff(250*time.Millisecond, 30*time.Second)
 	}
 	config.Request.Header = config.Request.Header.Clone()
 	return &Session{config: config}, nil
@@ -97,10 +107,12 @@ func (session *Session) Run(ctx context.Context, handler MessageHandler) error {
 	if handler == nil {
 		return fmt.Errorf("stream message handler is required")
 	}
-	if err := session.start(); err != nil {
+	runContext, err := session.start(ctx)
+	if err != nil {
 		return err
 	}
 	defer session.finish()
+	ctx = runContext
 
 	attempt := 0
 	for {
@@ -220,33 +232,44 @@ func (session *Session) Close() error {
 	}
 	session.closed = true
 	session.reconnect = false
+	cancel := session.cancel
 	connection := session.connection
 	session.connection = nil
 	session.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 	if connection != nil {
 		return connection.Close(closeNormal, "session closed")
 	}
 	return nil
 }
 
-func (session *Session) start() error {
+func (session *Session) start(ctx context.Context) (context.Context, error) {
 	session.mu.Lock()
 	defer session.mu.Unlock()
 	if session.closed {
-		return ErrSessionClosed
+		return nil, ErrSessionClosed
 	}
 	if session.started {
-		return ErrSessionAlreadyRun
+		return nil, ErrSessionAlreadyRun
 	}
 	session.started = true
-	return nil
+	runContext, cancel := context.WithCancel(ctx)
+	session.cancel = cancel
+	return runContext, nil
 }
 
 func (session *Session) finish() {
 	session.mu.Lock()
 	connection := session.connection
 	session.connection = nil
+	cancel := session.cancel
+	session.cancel = nil
 	session.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 	if connection != nil {
 		_ = connection.Close(closeNormal, "session finished")
 	}
@@ -333,14 +356,15 @@ func (session *Session) consume(ctx context.Context, connection Connection, hand
 		case <-ctx.Done():
 			cancel()
 			_ = connection.Close(closeNormal, "context finished")
-			return ctx.Err(), false
+			return session.stopError(ctx), false
 		case result := <-results:
 			if result.err != nil {
 				return result.err, false
 			}
 			if err := handler(ctx, result.message); err != nil {
 				cancel()
-				return err, true
+				var reconnect *reconnectMessageError
+				return err, !errors.As(err, &reconnect)
 			}
 		case <-ping:
 			pingContext, pingCancel := context.WithTimeout(ctx, session.config.PingTimeout)
@@ -355,6 +379,9 @@ func (session *Session) consume(ctx context.Context, connection Connection, hand
 }
 
 func (session *Session) waitToReconnect(ctx context.Context, cause error, attempt int) error {
+	if stopErr := session.stopError(ctx); stopErr != nil {
+		return stopErr
+	}
 	if !session.config.ReconnectPolicy(cause) {
 		return cause
 	}
@@ -365,6 +392,9 @@ func (session *Session) waitToReconnect(ctx context.Context, cause error, attemp
 	if retryDelay := handshakeRetryAfter(cause, time.Now()); retryDelay > delay {
 		delay = retryDelay
 	}
+	if delay > session.config.MaxReconnectDelay {
+		delay = session.config.MaxReconnectDelay
+	}
 	if delay < 0 {
 		delay = 0
 	}
@@ -372,21 +402,21 @@ func (session *Session) waitToReconnect(ctx context.Context, cause error, attemp
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return session.stopError(ctx)
 	case <-timer.C:
 		return session.stopError(ctx)
 	}
 }
 
 func (session *Session) stopError(ctx context.Context) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
 	session.mu.RLock()
 	closed := session.closed
 	session.mu.RUnlock()
 	if closed {
 		return ErrSessionClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -437,6 +467,19 @@ func ExponentialBackoff(minimum, maximum time.Duration) Backoff {
 			return maximum
 		}
 		return delay
+	}
+}
+
+// FullJitterBackoff는 지수 상한 안에서 균등 난수 지연을 반환해 여러
+// 세션이 동시에 재연결하는 현상을 줄인다.
+func FullJitterBackoff(minimum, maximum time.Duration) Backoff {
+	exponential := ExponentialBackoff(minimum, maximum)
+	return func(attempt int) time.Duration {
+		ceiling := exponential(attempt)
+		if ceiling <= 0 {
+			return 0
+		}
+		return time.Duration(rand.Int64N(int64(ceiling) + 1))
 	}
 }
 

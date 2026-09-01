@@ -97,6 +97,7 @@ func TestUnifiedSpotOrderConformance(t *testing.T) {
 	conformance.RunSpotOrderSuite(t, conformance.SpotOrderScenario{
 		Client: adapter, Exchange: model.ExchangeOKX, Request: request,
 		OrderID: "42", ClientOrderID: "client1", NativeMarket: "BTC-USDT",
+		Status: unified.OrderStatusAcknowledged,
 	})
 }
 

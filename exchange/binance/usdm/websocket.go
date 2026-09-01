@@ -214,7 +214,7 @@ func (market *MarketStream) Run(
 	return market.session.Run(ctx, func(ctx context.Context, message corestream.Message) error {
 		decoded, err := DecodeMarketStreamMessage(message)
 		if err != nil {
-			return err
+			return corestream.ReconnectOnMessageError(err)
 		}
 		market.handleControl(decoded)
 		return handler(ctx, decoded)
@@ -521,7 +521,7 @@ func (userData *UserDataStream) Run(
 	return userData.session.Run(ctx, func(ctx context.Context, message corestream.Message) error {
 		decoded, err := DecodeUserDataStreamMessage(message)
 		if err != nil {
-			return err
+			return corestream.ReconnectOnMessageError(err)
 		}
 		if decoded.EventType == "listenKeyExpired" {
 			_ = userData.session.Reconnect()

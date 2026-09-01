@@ -536,7 +536,9 @@ func TestSpotWebSocketTokenRejectsIncompleteResponse(t *testing.T) {
 		}, []transport.EgressRouteID{"route-a"}, time.Now(),
 	)
 	_, err := client.WebSocketToken(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "token response is incomplete") {
+	var apiError *trade.APIError
+	if !errors.As(err, &apiError) || apiError.Cause == nil ||
+		!strings.Contains(apiError.Cause.Error(), "token response is incomplete") {
 		t.Fatalf("WebSocketToken() error = %v", err)
 	}
 }

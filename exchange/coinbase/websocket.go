@@ -213,7 +213,7 @@ func (stream *PublicStream) Run(ctx context.Context, handler func(context.Contex
 	return stream.managed.session.Run(ctx, func(messageContext context.Context, message corestream.Message) error {
 		decoded, err := DecodeStreamMessage(message)
 		if err != nil {
-			return err
+			return corestream.ReconnectOnMessageError(err)
 		}
 		return handler(messageContext, decoded)
 	})
@@ -334,7 +334,7 @@ func (stream *UserStream) Run(ctx context.Context, handler func(context.Context,
 	return stream.session.Run(ctx, func(messageContext context.Context, message corestream.Message) error {
 		decoded, err := DecodeStreamMessage(message)
 		if err != nil {
-			return err
+			return corestream.ReconnectOnMessageError(err)
 		}
 		if decoded.Type == "error" && isStreamAuthenticationMessage(decoded.Message) {
 			return &StreamAuthenticationError{Message: decoded.Message}

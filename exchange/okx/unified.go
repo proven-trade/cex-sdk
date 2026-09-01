@@ -50,6 +50,8 @@ func (adapter *UnifiedSpot) Markets(
 				Base: instrument.BaseCurrency, Quote: instrument.QuoteCurrency,
 			},
 			NativeMarket: instrument.InstrumentID, Status: instrument.State, Raw: instrument.Raw,
+			PriceIncrement: instrument.TickSize, QuantityIncrement: instrument.LotSize,
+			MinimumBaseQuantity: instrument.MinimumSize,
 		}
 	}
 	return markets, nil
@@ -234,8 +236,8 @@ func (adapter *UnifiedSpot) PlaceOrder(
 		Exchange: model.ExchangeOKX, ID: reference.OrderID,
 		ClientOrderID: reference.ClientOrderID, Market: request.Market,
 		NativeMarket: nativeRequest.InstrumentID, Side: request.Side, Type: request.Type,
-		Status: unified.OrderStatusNew, Price: request.Price,
-		Quantity: nativeRequest.Quantity, Raw: reference.Raw,
+		Status: unified.OrderStatusAcknowledged, Price: request.Price,
+		Quantity: request.Quantity, QuoteAmount: request.QuoteAmount, Raw: reference.Raw,
 	}, nil
 }
 
@@ -277,7 +279,7 @@ func (adapter *UnifiedSpot) CancelOrder(
 	return unified.Order{
 		Exchange: model.ExchangeOKX, ID: reference.OrderID,
 		ClientOrderID: reference.ClientOrderID, Market: request.Market,
-		NativeMarket: nativeMarket, Status: unified.OrderStatusCanceled, Raw: reference.Raw,
+		NativeMarket: nativeMarket, Status: unified.OrderStatusCancelPending, Raw: reference.Raw,
 	}, nil
 }
 
@@ -412,12 +414,17 @@ func toOKXLimitOrderType(value unified.TimeInForce) OrderType {
 }
 
 func fromOKXOrder(native Order, market unified.Market) unified.Order {
+	quantity, quoteAmount := native.Quantity, ""
+	if native.OrderType == OrderTypeMarket && native.Side == SideBuy && native.TargetCurrency != TargetCurrencyBase {
+		quantity, quoteAmount = "", native.Quantity
+	}
 	return unified.Order{
 		Exchange: model.ExchangeOKX, ID: native.OrderID, ClientOrderID: native.ClientOrderID,
 		Market: market, NativeMarket: native.InstrumentID,
 		Side: toUnifiedOKXSide(native.Side), Type: toUnifiedOKXOrderType(native.OrderType),
 		Status: toUnifiedOKXStatus(native.State), Price: native.Price,
-		Quantity: native.Quantity, ExecutedQuantity: native.ExecutedQuantity, Raw: native.Raw,
+		Quantity: quantity, QuoteAmount: quoteAmount,
+		ExecutedQuantity: native.ExecutedQuantity, Raw: native.Raw,
 	}
 }
 

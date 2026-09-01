@@ -254,7 +254,7 @@ func (managed *managedStream) run(
 	return managed.session.Run(ctx, func(ctx context.Context, message corestream.Message) error {
 		decoded, err := DecodeStreamMessage(message)
 		if err != nil {
-			return err
+			return corestream.ReconnectOnMessageError(err)
 		}
 		if decoded.Ping != nil {
 			payload, err := json.Marshal(struct {

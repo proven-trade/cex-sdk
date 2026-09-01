@@ -100,3 +100,24 @@ func TestBlockForHonorsContextCancellation(t *testing.T) {
 		t.Fatalf("Wait() error = %v, want context deadline", err)
 	}
 }
+
+func TestMemoryBackendDoesNotBurstAcrossWallClockBoundary(t *testing.T) {
+	t.Parallel()
+	backend := newMemoryBackend()
+	rule := Rule{Key: "weight", Limit: 1, Window: time.Second}
+	if err := backend.SetRule(rule); err != nil {
+		t.Fatalf("SetRule() error = %v", err)
+	}
+	first := time.Unix(100, 999*int64(time.Millisecond))
+	if waitUntil, err := backend.tryAcquire(first, []Charge{{Key: "weight", Units: 1}}); err != nil || !waitUntil.IsZero() {
+		t.Fatalf("first tryAcquire() = %v, %v", waitUntil, err)
+	}
+	second := first.Add(2 * time.Millisecond)
+	waitUntil, err := backend.tryAcquire(second, []Charge{{Key: "weight", Units: 1}})
+	if err != nil {
+		t.Fatalf("second tryAcquire() error = %v", err)
+	}
+	if want := first.Add(time.Second); !waitUntil.Equal(want) {
+		t.Fatalf("second tryAcquire() wait = %v, want %v", waitUntil, want)
+	}
+}

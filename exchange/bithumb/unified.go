@@ -223,15 +223,12 @@ func (adapter *UnifiedSpot) PlaceOrder(
 	if err != nil {
 		return unified.Order{}, err
 	}
-	quantity := request.Quantity
-	if request.Type == unified.OrderTypeMarket && request.Side == unified.SideBuy {
-		quantity = request.QuoteAmount
-	}
 	return unified.Order{
 		Exchange: model.ExchangeBithumb, ID: reference.OrderID,
 		ClientOrderID: reference.ClientOrderID, Market: request.Market,
 		NativeMarket: reference.Market, Side: request.Side, Type: request.Type,
-		Status: unified.OrderStatusNew, Price: request.Price, Quantity: quantity, Raw: reference.Raw,
+		Status: unified.OrderStatusAcknowledged, Price: request.Price,
+		Quantity: request.Quantity, QuoteAmount: request.QuoteAmount, Raw: reference.Raw,
 	}, nil
 }
 
@@ -271,7 +268,7 @@ func (adapter *UnifiedSpot) CancelOrder(
 	return unified.Order{
 		Exchange: model.ExchangeBithumb, ID: reference.OrderID,
 		ClientOrderID: reference.ClientOrderID, Market: request.Market,
-		NativeMarket: bithumbMarket(request.Market), Status: unified.OrderStatusCanceled, Raw: reference.Raw,
+		NativeMarket: bithumbMarket(request.Market), Status: unified.OrderStatusCancelPending, Raw: reference.Raw,
 	}, nil
 }
 
@@ -376,22 +373,32 @@ func toBithumbTimeInForce(value unified.TimeInForce) TimeInForce {
 }
 
 func fromBithumbOrderDetail(native OrderDetail, market unified.Market) unified.Order {
+	price, quantity, quoteAmount := native.Price, native.Volume, ""
+	if native.OrderType == OrderTypePrice && native.Side == SideBid {
+		price, quantity, quoteAmount = "", "", native.Price
+	}
 	return unified.Order{
 		Exchange: model.ExchangeBithumb, ID: native.UUID, ClientOrderID: native.ClientOrderID,
 		Market: market, NativeMarket: native.Market,
 		Side: toUnifiedBithumbSide(native.Side), Type: toUnifiedBithumbOrderType(native.OrderType),
-		Status: toUnifiedBithumbStatus(native.State, native.ExecutedVolume), Price: native.Price,
-		Quantity: native.Volume, ExecutedQuantity: native.ExecutedVolume, Raw: native.Raw,
+		Status: toUnifiedBithumbStatus(native.State, native.ExecutedVolume), Price: price,
+		Quantity: quantity, QuoteAmount: quoteAmount,
+		ExecutedQuantity: native.ExecutedVolume, Raw: native.Raw,
 	}
 }
 
 func fromBithumbOrderSummary(native OrderSummary, market unified.Market) unified.Order {
+	price, quantity, quoteAmount := native.Price, native.Volume, ""
+	if native.OrderType == OrderTypePrice && native.Side == SideBid {
+		price, quantity, quoteAmount = "", "", native.Price
+	}
 	return unified.Order{
 		Exchange: model.ExchangeBithumb, ID: native.OrderID, ClientOrderID: native.ClientOrderID,
 		Market: market, NativeMarket: native.Market,
 		Side: toUnifiedBithumbSide(native.Side), Type: toUnifiedBithumbOrderType(native.OrderType),
-		Status: toUnifiedBithumbStatus(native.State, native.ExecutedVolume), Price: native.Price,
-		Quantity: native.Volume, ExecutedQuantity: native.ExecutedVolume, Raw: native.Raw,
+		Status: toUnifiedBithumbStatus(native.State, native.ExecutedVolume), Price: price,
+		Quantity: quantity, QuoteAmount: quoteAmount,
+		ExecutedQuantity: native.ExecutedVolume, Raw: native.Raw,
 	}
 }
 

@@ -108,7 +108,7 @@ func (stream *ProOrderBookStream) Run(ctx context.Context, handler ProOrderBookH
 	return stream.session.Run(ctx, func(handlerContext context.Context, message corestream.Message) error {
 		decoded, err := DecodeProOrderBookMessage(message)
 		if err != nil {
-			return err
+			return corestream.ReconnectOnMessageError(err)
 		}
 		return handler(handlerContext, decoded)
 	})

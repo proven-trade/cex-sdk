@@ -371,6 +371,71 @@ func TestSessionReturnsHandlerErrorWithoutReconnect(t *testing.T) {
 	}
 }
 
+func TestSessionReconnectsOnRecoverableMessageError(t *testing.T) {
+	t.Parallel()
+	first := newFakeConnection(fakeReadResult{message: Message{Type: MessageText, Data: []byte("malformed")}})
+	second := newFakeConnection(fakeReadResult{message: Message{Type: MessageText, Data: []byte("valid")}})
+	connector := &scriptedConnector{steps: []connectStep{{connection: first}, {connection: second}}}
+	session, err := NewSession(SessionConfig{
+		Connector: connector, EgressRouteID: "route-a",
+		Request: DialRequest{Endpoint: "wss://stream.example.test/ws"},
+		Backoff: func(int) time.Duration { return 0 },
+	})
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err = session.Run(ctx, func(_ context.Context, message Message) error {
+		if string(message.Data) == "malformed" {
+			return ReconnectOnMessageError(errors.New("decode failed"))
+		}
+		cancel()
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) || session.Generation() != 2 {
+		t.Fatalf("Run() error = %v, generation = %d", err, session.Generation())
+	}
+}
+
+func TestSessionCloseInterruptsReconnectBackoff(t *testing.T) {
+	t.Parallel()
+	disconnected := make(chan struct{})
+	var once sync.Once
+	connector := &scriptedConnector{steps: []connectStep{{err: errors.New("dial failed")}}}
+	session, err := NewSession(SessionConfig{
+		Connector: connector, EgressRouteID: "route-a",
+		Request: DialRequest{Endpoint: "wss://stream.example.test/ws"},
+		Backoff: func(int) time.Duration { return time.Hour },
+		Observer: func(change StateChange) {
+			if change.State == StateDisconnected {
+				once.Do(func() { close(disconnected) })
+			}
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- session.Run(context.Background(), func(context.Context, Message) error { return nil }) }()
+	select {
+	case <-disconnected:
+	case <-time.After(time.Second):
+		t.Fatal("session did not enter reconnect backoff")
+	}
+	if err := session.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	select {
+	case runErr := <-done:
+		if !errors.Is(runErr, ErrSessionClosed) {
+			t.Fatalf("Run() error = %v, want ErrSessionClosed", runErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Close() did not interrupt reconnect backoff")
+	}
+}
+
 func TestSessionStopsAfterMaximumReconnectAttempts(t *testing.T) {
 	t.Parallel()
 
@@ -441,5 +506,18 @@ func TestExponentialBackoffAndRetryAfter(t *testing.T) {
 	retryAt := now.Add(5 * time.Second).Format(http.TimeFormat)
 	if got := handshakeRetryAfter(&HandshakeError{RetryAfter: retryAt}, now); got != 5*time.Second {
 		t.Fatalf("date Retry-After = %s, want 5s", got)
+	}
+}
+
+func TestFullJitterBackoffStaysWithinExponentialCeiling(t *testing.T) {
+	t.Parallel()
+	backoff := FullJitterBackoff(100*time.Millisecond, time.Second)
+	for attempt, ceiling := range []time.Duration{100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond, time.Second} {
+		for range 20 {
+			got := backoff(attempt + 1)
+			if got < 0 || got > ceiling {
+				t.Fatalf("backoff(%d) = %v, ceiling %v", attempt+1, got, ceiling)
+			}
+		}
 	}
 }

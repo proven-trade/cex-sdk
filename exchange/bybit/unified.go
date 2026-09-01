@@ -53,7 +53,12 @@ func (adapter *UnifiedSpot) Markets(
 				Market: unified.Market{
 					Base: instrument.BaseCoin, Quote: instrument.QuoteCoin,
 				},
-				NativeMarket: instrument.Symbol, Status: instrument.Status, Raw: instrument.Raw,
+				NativeMarket: instrument.Symbol, Status: instrument.Status,
+				PriceIncrement:      instrument.PriceFilter.TickSize,
+				QuantityIncrement:   instrument.LotSizeFilter.QuantityStep,
+				MinimumBaseQuantity: instrument.LotSizeFilter.MinimumOrderQuantity,
+				MinimumQuoteAmount:  instrument.LotSizeFilter.MinimumNotionalValue,
+				Raw:                 instrument.Raw,
 			})
 		}
 		if page.NextPageCursor == "" {
@@ -246,8 +251,8 @@ func (adapter *UnifiedSpot) PlaceOrder(
 		Exchange: model.ExchangeBybit, ID: reference.OrderID,
 		ClientOrderID: reference.OrderLinkID, Market: request.Market,
 		NativeMarket: nativeRequest.Symbol, Side: request.Side, Type: request.Type,
-		Status: unified.OrderStatusNew, Price: request.Price,
-		Quantity: nativeRequest.Quantity, Raw: reference.Raw,
+		Status: unified.OrderStatusAcknowledged, Price: request.Price,
+		Quantity: request.Quantity, QuoteAmount: request.QuoteAmount, Raw: reference.Raw,
 	}, nil
 }
 
@@ -289,7 +294,7 @@ func (adapter *UnifiedSpot) CancelOrder(
 	return unified.Order{
 		Exchange: model.ExchangeBybit, ID: reference.OrderID,
 		ClientOrderID: reference.OrderLinkID, Market: request.Market,
-		NativeMarket: bybitSpotSymbol(request.Market), Status: unified.OrderStatusCanceled,
+		NativeMarket: bybitSpotSymbol(request.Market), Status: unified.OrderStatusCancelPending,
 		Raw: reference.Raw,
 	}, nil
 }
@@ -453,12 +458,17 @@ func toBybitTimeInForce(value unified.TimeInForce) TimeInForce {
 }
 
 func fromBybitOrder(native Order, market unified.Market) unified.Order {
+	quantity, quoteAmount := native.Quantity, ""
+	if native.OrderType == OrderTypeMarket && native.Side == SideBuy {
+		quantity, quoteAmount = "", native.Quantity
+	}
 	return unified.Order{
 		Exchange: model.ExchangeBybit, ID: native.OrderID, ClientOrderID: native.OrderLinkID,
 		Market: market, NativeMarket: native.Symbol,
 		Side: toUnifiedBybitSide(native.Side), Type: toUnifiedBybitOrderType(native.OrderType),
 		Status: toUnifiedBybitStatus(native.OrderStatus), Price: native.Price,
-		Quantity: native.Quantity, ExecutedQuantity: native.CumulativeExecutedQuantity, Raw: native.Raw,
+		Quantity: quantity, QuoteAmount: quoteAmount,
+		ExecutedQuantity: native.CumulativeExecutedQuantity, Raw: native.Raw,
 	}
 }
 

@@ -124,6 +124,7 @@ func TestUnifiedSpotOrderConformance(t *testing.T) {
 			Quantity:    "0.1", Price: "64000", ClientOrderID: "strategy-1",
 		},
 		OrderID: "10001", ClientOrderID: "strategy-1", NativeMarket: "btcusdt",
+		Status:  unified.OrderStatusAcknowledged,
 		Options: []trade.RequestOption{trade.WithEgressRoute("route-b")},
 	})
 	if routes := sender.snapshot(); len(routes) != 2 || routes[0] != "route-b" || routes[1] != "route-b" {
@@ -262,7 +263,7 @@ func TestUnifiedHTXOrderMapping(t *testing.T) {
 	canceled, err := adapter.CancelOrder(context.Background(), unified.OrderRequest{
 		Market: market, OrderID: "10001",
 	}, trade.WithEgressRoute("route-b"))
-	if err != nil || canceled.ID != "10001" || canceled.Status != unified.OrderStatusCanceled ||
+	if err != nil || canceled.ID != "10001" || canceled.Status != unified.OrderStatusCancelPending ||
 		len(canceled.Raw) == 0 {
 		t.Fatalf("CancelOrder() = %+v, error = %v", canceled, err)
 	}

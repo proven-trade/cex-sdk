@@ -18,7 +18,7 @@ var (
 	ErrUnknownRule = errors.New("unknown rate limit rule")
 )
 
-// Rule은 하나의 고정 구간 요청 제한을 정의한다.
+// Rule은 하나의 rolling-window 요청 제한을 정의한다.
 type Rule struct {
 	Key    string
 	Limit  int
@@ -31,13 +31,7 @@ type Charge struct {
 	Units int
 }
 
-type bucket struct {
-	windowStart  time.Time
-	used         int
-	blockedUntil time.Time
-}
-
-// Snapshot은 특정 규칙의 현재 로컬 상태다.
+// Snapshot은 특정 규칙의 현재 상태다.
 type Snapshot struct {
 	Rule         Rule
 	WindowStart  time.Time
@@ -45,19 +39,36 @@ type Snapshot struct {
 	BlockedUntil time.Time
 }
 
-// Limiter는 여러 규칙의 차감을 원자적으로 처리하는 요청 제한기다.
-type Limiter struct {
-	mu      sync.Mutex
-	rules   map[string]Rule
-	buckets map[string]*bucket
+// Backend는 limiter 상태 저장소의 원자적 계약이다. 분산 구현은 Wait에서
+// 모든 charge를 한 번의 원자적 연산으로 검사·차감하고 context 취소를
+// 존중해야 한다. SetRule, ObserveUsed, BlockFor와 Snapshot도 같은 공유
+// namespace를 사용해야 여러 SDK 프로세스가 하나의 거래소 한도를 공유한다.
+type Backend interface {
+	SetRule(Rule) error
+	Wait(context.Context, ...Charge) error
+	ObserveUsed(string, int) error
+	BlockFor([]string, time.Duration) error
+	Snapshot(string) (Snapshot, error)
 }
 
-// New는 검증된 요청 제한기를 생성한다.
+// Limiter는 여러 규칙의 차감을 backend를 통해 원자적으로 처리한다.
+type Limiter struct {
+	backend Backend
+}
+
+// New는 프로세스 내부 rolling-window backend를 사용하는 limiter를 생성한다.
+// 여러 프로세스나 pod가 같은 API key를 공유하면 NewWithBackend로 분산
+// backend를 주입해야 한다.
 func New(rules ...Rule) (*Limiter, error) {
-	limiter := &Limiter{
-		rules:   make(map[string]Rule, len(rules)),
-		buckets: make(map[string]*bucket, len(rules)),
+	return NewWithBackend(newMemoryBackend(), rules...)
+}
+
+// NewWithBackend는 공유 상태를 구현하는 backend를 사용하는 limiter를 생성한다.
+func NewWithBackend(backend Backend, rules ...Rule) (*Limiter, error) {
+	if backend == nil {
+		return nil, fmt.Errorf("rate limit backend is required")
 	}
+	limiter := &Limiter{backend: backend}
 	for _, rule := range rules {
 		if err := limiter.SetRule(rule); err != nil {
 			return nil, err
@@ -67,25 +78,15 @@ func New(rules ...Rule) (*Limiter, error) {
 }
 
 // SetRule은 규칙을 추가하거나 갱신한다.
-// 구간이나 한도가 달라지면 기존 로컬 사용량을 안전하게 초기화한다.
 func (limiter *Limiter) SetRule(rule Rule) error {
 	rule.Key = strings.TrimSpace(rule.Key)
 	if rule.Key == "" || rule.Limit <= 0 || rule.Window <= 0 {
 		return fmt.Errorf("%w: key, positive limit, and positive window are required", ErrInvalidRule)
 	}
-
-	limiter.mu.Lock()
-	defer limiter.mu.Unlock()
-	previous, exists := limiter.rules[rule.Key]
-	limiter.rules[rule.Key] = rule
-	if !exists || previous.Limit != rule.Limit || previous.Window != rule.Window {
-		limiter.buckets[rule.Key] = &bucket{}
-	}
-	return nil
+	return limiter.backend.SetRule(rule)
 }
 
 // Wait는 모든 차감 규칙에 여유가 생길 때까지 기다린 뒤 한 번에 차감한다.
-// 일부 규칙만 먼저 차감하는 일이 없도록 검사와 반영을 같은 잠금에서 수행한다.
 func (limiter *Limiter) Wait(ctx context.Context, charges ...Charge) error {
 	if ctx == nil {
 		return fmt.Errorf("context cannot be nil")
@@ -97,17 +98,72 @@ func (limiter *Limiter) Wait(ctx context.Context, charges ...Charge) error {
 	if len(normalized) == 0 {
 		return nil
 	}
+	return limiter.backend.Wait(ctx, normalized...)
+}
 
+// ObserveUsed는 거래소 응답 헤더에서 관측한 사용량을 backend에 반영한다.
+func (limiter *Limiter) ObserveUsed(key string, used int) error {
+	if used < 0 {
+		return fmt.Errorf("observed usage cannot be negative")
+	}
+	return limiter.backend.ObserveUsed(key, used)
+}
+
+// BlockFor는 거래소가 지시한 시간 동안 지정한 규칙의 신규 요청을 막는다.
+func (limiter *Limiter) BlockFor(keys []string, duration time.Duration) error {
+	if duration <= 0 {
+		return fmt.Errorf("block duration must be positive")
+	}
+	return limiter.backend.BlockFor(keys, duration)
+}
+
+// Snapshot은 테스트와 관측을 위한 규칙 상태 복사본을 반환한다.
+func (limiter *Limiter) Snapshot(key string) (Snapshot, error) {
+	return limiter.backend.Snapshot(key)
+}
+
+type usageEvent struct {
+	at    time.Time
+	units int
+}
+
+type bucket struct {
+	events       []usageEvent
+	used         int
+	blockedUntil time.Time
+}
+
+type memoryBackend struct {
+	mu      sync.Mutex
+	rules   map[string]Rule
+	buckets map[string]*bucket
+}
+
+func newMemoryBackend() *memoryBackend {
+	return &memoryBackend{rules: make(map[string]Rule), buckets: make(map[string]*bucket)}
+}
+
+func (backend *memoryBackend) SetRule(rule Rule) error {
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	previous, exists := backend.rules[rule.Key]
+	backend.rules[rule.Key] = rule
+	if !exists || previous.Limit != rule.Limit || previous.Window != rule.Window {
+		backend.buckets[rule.Key] = &bucket{}
+	}
+	return nil
+}
+
+func (backend *memoryBackend) Wait(ctx context.Context, charges ...Charge) error {
 	for {
 		now := time.Now()
-		waitUntil, err := limiter.tryAcquire(now, normalized)
+		waitUntil, err := backend.tryAcquire(now, charges)
 		if err != nil {
 			return err
 		}
 		if waitUntil.IsZero() {
 			return nil
 		}
-
 		wait := time.Until(waitUntil)
 		if wait <= 0 {
 			continue
@@ -127,33 +183,30 @@ func (limiter *Limiter) Wait(ctx context.Context, charges ...Charge) error {
 	}
 }
 
-func (limiter *Limiter) tryAcquire(now time.Time, charges []Charge) (time.Time, error) {
-	limiter.mu.Lock()
-	defer limiter.mu.Unlock()
+func (backend *memoryBackend) tryAcquire(now time.Time, charges []Charge) (time.Time, error) {
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
 
 	var waitUntil time.Time
 	for _, charge := range charges {
-		rule, exists := limiter.rules[charge.Key]
+		rule, exists := backend.rules[charge.Key]
 		if !exists {
 			return time.Time{}, fmt.Errorf("%w: %q", ErrUnknownRule, charge.Key)
 		}
 		if charge.Units > rule.Limit {
 			return time.Time{}, fmt.Errorf(
 				"%w: charge %d exceeds rule %q limit %d",
-				ErrInvalidRule,
-				charge.Units,
-				charge.Key,
-				rule.Limit,
+				ErrInvalidRule, charge.Units, charge.Key, rule.Limit,
 			)
 		}
-		state := limiter.bucketFor(rule, now)
-		if state.blockedUntil.After(waitUntil) && state.blockedUntil.After(now) {
+		state := backend.bucketFor(rule, now)
+		if state.blockedUntil.After(now) && state.blockedUntil.After(waitUntil) {
 			waitUntil = state.blockedUntil
 		}
-		if state.used+charge.Units > rule.Limit {
-			windowEnd := state.windowStart.Add(rule.Window)
-			if windowEnd.After(waitUntil) {
-				waitUntil = windowEnd
+		if excess := state.used + charge.Units - rule.Limit; excess > 0 {
+			expiresAt := eventExpiration(state.events, excess, rule.Window)
+			if expiresAt.After(waitUntil) {
+				waitUntil = expiresAt
 			}
 		}
 	}
@@ -161,62 +214,78 @@ func (limiter *Limiter) tryAcquire(now time.Time, charges []Charge) (time.Time, 
 		return waitUntil, nil
 	}
 	for _, charge := range charges {
-		rule := limiter.rules[charge.Key]
-		limiter.bucketFor(rule, now).used += charge.Units
+		state := backend.bucketFor(backend.rules[charge.Key], now)
+		state.events = append(state.events, usageEvent{at: now, units: charge.Units})
+		state.used += charge.Units
 	}
 	return time.Time{}, nil
 }
 
-func (limiter *Limiter) bucketFor(rule Rule, now time.Time) *bucket {
-	state, exists := limiter.buckets[rule.Key]
-	if !exists {
-		state = &bucket{}
-		limiter.buckets[rule.Key] = state
+func eventExpiration(events []usageEvent, units int, window time.Duration) time.Time {
+	for _, event := range events {
+		units -= event.units
+		if units <= 0 {
+			return event.at.Add(window)
+		}
 	}
-	windowStart := now.Truncate(rule.Window)
-	if state.windowStart.IsZero() || !state.windowStart.Equal(windowStart) {
-		state.windowStart = windowStart
-		state.used = 0
+	return time.Time{}
+}
+
+func (backend *memoryBackend) bucketFor(rule Rule, now time.Time) *bucket {
+	state := backend.buckets[rule.Key]
+	if state == nil {
+		state = &bucket{}
+		backend.buckets[rule.Key] = state
+	}
+	cutoff := now.Add(-rule.Window)
+	first := 0
+	for first < len(state.events) && !state.events[first].at.After(cutoff) {
+		state.used -= state.events[first].units
+		first++
+	}
+	if first > 0 {
+		state.events = append([]usageEvent(nil), state.events[first:]...)
 	}
 	return state
 }
 
-// ObserveUsed는 거래소 응답 헤더에서 관측한 사용량이 로컬 값보다 크면 반영한다.
-func (limiter *Limiter) ObserveUsed(key string, used int) error {
+func (backend *memoryBackend) ObserveUsed(key string, used int) error {
 	if used < 0 {
 		return fmt.Errorf("observed usage cannot be negative")
 	}
-	limiter.mu.Lock()
-	defer limiter.mu.Unlock()
-	rule, exists := limiter.rules[key]
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	rule, exists := backend.rules[key]
 	if !exists {
 		return fmt.Errorf("%w: %q", ErrUnknownRule, key)
 	}
-	state := limiter.bucketFor(rule, time.Now())
+	now := time.Now()
+	state := backend.bucketFor(rule, now)
 	if used > state.used {
+		delta := used - state.used
+		state.events = append(state.events, usageEvent{at: now, units: delta})
 		state.used = used
 	}
 	return nil
 }
 
-// BlockFor는 거래소가 지시한 시간 동안 지정한 규칙의 신규 요청을 막는다.
-func (limiter *Limiter) BlockFor(keys []string, duration time.Duration) error {
+func (backend *memoryBackend) BlockFor(keys []string, duration time.Duration) error {
 	if duration <= 0 {
 		return fmt.Errorf("block duration must be positive")
 	}
 	until := time.Now().Add(duration)
-	limiter.mu.Lock()
-	defer limiter.mu.Unlock()
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
 	for _, key := range keys {
-		if _, exists := limiter.rules[key]; !exists {
+		if _, exists := backend.rules[key]; !exists {
 			return fmt.Errorf("%w: %q", ErrUnknownRule, key)
 		}
 	}
 	for _, key := range keys {
-		state := limiter.buckets[key]
+		state := backend.buckets[key]
 		if state == nil {
 			state = &bucket{}
-			limiter.buckets[key] = state
+			backend.buckets[key] = state
 		}
 		if until.After(state.blockedUntil) {
 			state.blockedUntil = until
@@ -225,21 +294,19 @@ func (limiter *Limiter) BlockFor(keys []string, duration time.Duration) error {
 	return nil
 }
 
-// Snapshot은 테스트와 관측을 위한 규칙 상태 복사본을 반환한다.
-func (limiter *Limiter) Snapshot(key string) (Snapshot, error) {
-	limiter.mu.Lock()
-	defer limiter.mu.Unlock()
-	rule, exists := limiter.rules[key]
+func (backend *memoryBackend) Snapshot(key string) (Snapshot, error) {
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	rule, exists := backend.rules[key]
 	if !exists {
 		return Snapshot{}, fmt.Errorf("%w: %q", ErrUnknownRule, key)
 	}
-	state := limiter.bucketFor(rule, time.Now())
-	return Snapshot{
-		Rule:         rule,
-		WindowStart:  state.windowStart,
-		Used:         state.used,
-		BlockedUntil: state.blockedUntil,
-	}, nil
+	state := backend.bucketFor(rule, time.Now())
+	windowStart := time.Time{}
+	if len(state.events) > 0 {
+		windowStart = state.events[0].at
+	}
+	return Snapshot{Rule: rule, WindowStart: windowStart, Used: state.used, BlockedUntil: state.blockedUntil}, nil
 }
 
 func normalizeCharges(charges []Charge) ([]Charge, error) {
@@ -255,8 +322,6 @@ func normalizeCharges(charges []Charge) ([]Charge, error) {
 	for key, units := range combined {
 		result = append(result, Charge{Key: key, Units: units})
 	}
-	sort.Slice(result, func(left, right int) bool {
-		return result[left].Key < result[right].Key
-	})
+	sort.Slice(result, func(left, right int) bool { return result[left].Key < result[right].Key })
 	return result, nil
 }
