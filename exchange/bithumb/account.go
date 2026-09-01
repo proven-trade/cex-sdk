@@ -12,7 +12,7 @@ import (
 // Accounts는 빗썸 계정의 코인별 잔고를 조회한다.
 func (client *Client) Accounts(ctx context.Context, options ...trade.RequestOption) ([]Balance, error) {
 	response, err := client.executePrivate(
-		ctx, http.MethodGet, "/v1/accounts", nil, nil, false,
+		ctx, http.MethodGet, "/v1/accounts", nil, nil, rateLimitPrivateOther,
 		credential.PermissionRead, commonexchange.OperationRead, options...,
 	)
 	if err != nil {

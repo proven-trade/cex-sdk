@@ -15,7 +15,7 @@ func (client *Client) Markets(
 	request MarketsRequest,
 	options ...trade.RequestOption,
 ) ([]Market, error) {
-	response, err := client.executePublic(ctx, "/v1/market/all", request.parameters(), options...)
+	response, err := client.executePublic(ctx, "/v1/market/all", request.parameters(), rateLimitPublicOther, options...)
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +33,7 @@ func (client *Client) Tickers(
 	if err := request.validate(); err != nil {
 		return nil, err
 	}
-	response, err := client.executePublic(ctx, "/v1/ticker", request.parameters(), options...)
+	response, err := client.executePublic(ctx, "/v1/ticker", request.parameters(), rateLimitPublicTicker, options...)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func (client *Client) OrderBooks(
 	if err := request.validate(); err != nil {
 		return nil, err
 	}
-	response, err := client.executePublic(ctx, "/v1/orderbook", request.parameters(), options...)
+	response, err := client.executePublic(ctx, "/v1/orderbook", request.parameters(), rateLimitPublicOrderBook, options...)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func (client *Client) RecentTrades(
 	if err := request.validate(); err != nil {
 		return nil, err
 	}
-	response, err := client.executePublic(ctx, "/v1/trades/ticks", request.parameters(), options...)
+	response, err := client.executePublic(ctx, "/v1/trades/ticks", request.parameters(), rateLimitPublicTrade, options...)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (client *Client) MinuteCandles(
 		return nil, err
 	}
 	path := "/v1/candles/minutes/" + strconv.Itoa(int(request.Unit))
-	response, err := client.executePublic(ctx, path, request.parameters(), options...)
+	response, err := client.executePublic(ctx, path, request.parameters(), rateLimitPublicCandle, options...)
 	if err != nil {
 		return nil, err
 	}

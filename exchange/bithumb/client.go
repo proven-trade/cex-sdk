@@ -23,7 +23,7 @@ const (
 	DefaultRequestTimeout           = 10 * time.Second
 	DefaultPublicRequestsPerSecond  = 150
 	DefaultPrivateRequestsPerSecond = 140
-	DefaultOrderRequestsPerSecond   = 10
+	DefaultOrderRequestsPerSecond   = 140
 )
 
 // NonceSource는 인증 요청마다 중복되지 않는 nonce를 생성한다.
@@ -145,14 +145,15 @@ func (client *Client) executePublic(
 	ctx context.Context,
 	path string,
 	query parameters,
+	group rateLimitGroup,
 	options ...trade.RequestOption,
 ) (commonexchange.Response, error) {
 	resolved, err := client.resolveOptions(options...)
 	if err != nil {
 		return commonexchange.Response{}, err
 	}
-	charges, err := publicRateLimitCharges(
-		client.executor.Limiter(), resolved.EgressRouteID, client.publicRequestsPerSecond,
+	charges, err := rateLimitCharges(
+		client.executor.Limiter(), resolved.EgressRouteID, group, client.publicRequestsPerSecond,
 	)
 	if err != nil {
 		return commonexchange.Response{}, err
@@ -171,7 +172,7 @@ func (client *Client) executePrivate(
 	method, path string,
 	params parameters,
 	body []byte,
-	order bool,
+	group rateLimitGroup,
 	permission credential.Permission,
 	operation commonexchange.OperationKind,
 	options ...trade.RequestOption,
@@ -198,10 +199,11 @@ func (client *Client) executePrivate(
 			AccountID: client.credentials.AccountID, Cause: err,
 		}
 	}
-	charges, err := privateRateLimitCharges(
-		client.executor.Limiter(), client.credentials.AccountID, order,
-		client.privateRequestsPerSecond, client.orderRequestsPerSecond,
-	)
+	limit := client.privateRequestsPerSecond
+	if group == rateLimitOrderCreate || group == rateLimitOrderCancel {
+		limit = client.orderRequestsPerSecond
+	}
+	charges, err := rateLimitCharges(client.executor.Limiter(), resolved.EgressRouteID, group, limit)
 	if err != nil {
 		return commonexchange.Response{}, err
 	}

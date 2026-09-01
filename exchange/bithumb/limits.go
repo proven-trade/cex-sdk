@@ -8,42 +8,34 @@ import (
 	"github.com/proven-trade/cex-sdk/transport"
 )
 
-func publicRateLimitCharges(
+type rateLimitGroup string
+
+const (
+	rateLimitPublicOther     rateLimitGroup = "public-other"
+	rateLimitPublicTicker    rateLimitGroup = "public-ticker"
+	rateLimitPublicOrderBook rateLimitGroup = "public-orderbook"
+	rateLimitPublicTrade     rateLimitGroup = "public-trade"
+	rateLimitPublicCandle    rateLimitGroup = "public-candle"
+	rateLimitPrivateOther    rateLimitGroup = "private-other"
+	rateLimitOrderCreate     rateLimitGroup = "order-create"
+	rateLimitOrderCancel     rateLimitGroup = "order-cancel"
+)
+
+func rateLimitCharges(
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
+	group rateLimitGroup,
 	requestsPerSecond int,
 ) ([]ratelimit.Charge, error) {
-	key := fmt.Sprintf("bithumb:route:%s:public:1second", routeID)
+	if routeID == "" {
+		return nil, fmt.Errorf("Bithumb rate limit requires egress route ID")
+	}
+	if group == "" {
+		return nil, fmt.Errorf("Bithumb rate limit group is required")
+	}
+	key := fmt.Sprintf("bithumb:route:%s:%s:1second", routeID, group)
 	if err := limiter.SetRule(ratelimit.Rule{Key: key, Limit: requestsPerSecond, Window: time.Second}); err != nil {
 		return nil, err
 	}
 	return []ratelimit.Charge{{Key: key, Units: 1}}, nil
-}
-
-func privateRateLimitCharges(
-	limiter *ratelimit.Limiter,
-	accountID string,
-	order bool,
-	privateRequestsPerSecond, orderRequestsPerSecond int,
-) ([]ratelimit.Charge, error) {
-	if accountID == "" {
-		return nil, fmt.Errorf("Bithumb private rate limit requires account ID")
-	}
-	privateKey := fmt.Sprintf("bithumb:account:%s:private:1second", accountID)
-	if err := limiter.SetRule(ratelimit.Rule{
-		Key: privateKey, Limit: privateRequestsPerSecond, Window: time.Second,
-	}); err != nil {
-		return nil, err
-	}
-	charges := []ratelimit.Charge{{Key: privateKey, Units: 1}}
-	if !order {
-		return charges, nil
-	}
-	orderKey := fmt.Sprintf("bithumb:account:%s:order:1second", accountID)
-	if err := limiter.SetRule(ratelimit.Rule{
-		Key: orderKey, Limit: orderRequestsPerSecond, Window: time.Second,
-	}); err != nil {
-		return nil, err
-	}
-	return append(charges, ratelimit.Charge{Key: orderKey, Units: 1}), nil
 }

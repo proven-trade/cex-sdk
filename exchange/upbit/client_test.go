@@ -199,6 +199,47 @@ func TestClientRejectsCredentialRouteBeforeSecretResolution(t *testing.T) {
 	}
 }
 
+func TestBestOrderValidationAndBody(t *testing.T) {
+	t.Parallel()
+
+	buy := PlaceOrderRequest{
+		Market: "KRW-BTC", Side: SideBid, Price: "100000",
+		OrderType: OrderTypeBest, TimeInForce: TimeInForceIOC, SMPType: SMPTypeReduce,
+	}
+	if err := buy.validate(); err != nil {
+		t.Fatalf("best bid validate() error = %v", err)
+	}
+	body, err := encodeOrderBody(buy.parameters())
+	if err != nil {
+		t.Fatalf("encodeOrderBody() error = %v", err)
+	}
+	if got, want := string(body), `{"market":"KRW-BTC","side":"bid","price":"100000","ord_type":"best","time_in_force":"ioc","smp_type":"reduce"}`; got != want {
+		t.Fatalf("best bid body = %s, want %s", got, want)
+	}
+
+	sell := PlaceOrderRequest{
+		Market: "BTC-ETH", Side: SideAsk, Volume: "0.5",
+		OrderType: OrderTypeBest, TimeInForce: TimeInForceFOK,
+	}
+	if err := sell.validate(); err != nil {
+		t.Fatalf("best ask validate() error = %v", err)
+	}
+
+	invalid := []PlaceOrderRequest{
+		{Market: "KRW-BTC", Side: SideBid, Price: "100000", OrderType: OrderTypeBest},
+		{Market: "KRW-BTC", Side: SideBid, Volume: "1", Price: "100000", OrderType: OrderTypeBest, TimeInForce: TimeInForceIOC},
+		{Market: "KRW-BTC", Side: SideAsk, Volume: "1", Price: "100000", OrderType: OrderTypeBest, TimeInForce: TimeInForceFOK},
+		{Market: "KRW-BTC", Side: SideBid, Price: "100000", OrderType: OrderTypeBest, TimeInForce: TimeInForcePostOnly},
+		{Market: "KRW-BTC", Side: SideBid, Price: "100000", OrderType: OrderTypePrice, TimeInForce: TimeInForceIOC},
+		{Market: "KRW-BTC", Side: SideBid, Volume: "1", Price: "100000", OrderType: OrderTypeLimit, Identifier: strings.Repeat("x", 65)},
+	}
+	for index, request := range invalid {
+		if err := request.validate(); !errors.Is(err, trade.ErrValidation) {
+			t.Fatalf("invalid best request %d error = %v, want ErrValidation", index, err)
+		}
+	}
+}
+
 func TestMutationServerErrorIsUnknownExecutionState(t *testing.T) {
 	t.Parallel()
 

@@ -51,3 +51,27 @@ func (client *Client) Positions(ctx context.Context, request PositionsRequest, o
 	}
 	return positions, nil
 }
+
+// ChangeMarginType은 계약별 포지션 마진 모드를 교차 또는 격리로 변경한다.
+func (client *Client) ChangeMarginType(
+	ctx context.Context,
+	request ChangeMarginTypeRequest,
+	options ...trade.RequestOption,
+) (ChangeMarginTypeResult, error) {
+	if err := request.validate(); err != nil {
+		return ChangeMarginTypeResult{}, err
+	}
+	response, err := client.executeSigned(
+		ctx, http.MethodPost, "/fapi/v1/marginType", request.values(), 1, 0,
+		credential.PermissionTrade, commonexchange.OperationMutation, options...,
+	)
+	if err != nil {
+		return ChangeMarginTypeResult{}, err
+	}
+	var result ChangeMarginTypeResult
+	if err := client.decode(response, commonexchange.OperationMutation, &result); err != nil {
+		return ChangeMarginTypeResult{}, err
+	}
+	result.Raw = cloneBytes(response.Body)
+	return result, nil
+}

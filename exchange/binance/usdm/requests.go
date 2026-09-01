@@ -96,6 +96,12 @@ type OpenOrdersRequest struct {
 // PositionsRequest는 전체 또는 단일 계약의 포지션 위험 조회 조건이다.
 type PositionsRequest struct{ Symbol string }
 
+// ChangeMarginTypeRequest는 계약별 교차·격리 마진 모드 변경 조건이다.
+type ChangeMarginTypeRequest struct {
+	Symbol     string
+	MarginType MarginType
+}
+
 // OrderHistoryRequest는 단일 계약의 주문 이력 조회 조건이다.
 type OrderHistoryRequest struct {
 	Symbol    string
@@ -260,6 +266,16 @@ func (request OrderHistoryRequest) validate() error {
 	return nil
 }
 
+func (request ChangeMarginTypeRequest) validate() error {
+	if err := validateSymbol(request.Symbol); err != nil {
+		return err
+	}
+	if request.MarginType != MarginTypeIsolated && request.MarginType != MarginTypeCrossed {
+		return validationError("marginType must be ISOLATED or CROSSED")
+	}
+	return nil
+}
+
 func (request PlaceOrderRequest) values() url.Values {
 	values := url.Values{"symbol": {request.Symbol}, "side": {string(request.Side)}, "type": {string(request.Type)}}
 	set(values, "positionSide", string(request.PositionSide))
@@ -311,6 +327,13 @@ func (request OrderHistoryRequest) values() url.Values {
 		values.Set("limit", strconv.Itoa(request.Limit))
 	}
 	return values
+}
+
+func (request ChangeMarginTypeRequest) values() url.Values {
+	return url.Values{
+		"symbol":     {request.Symbol},
+		"marginType": {string(request.MarginType)},
+	}
 }
 
 func validateSymbol(value string) error {

@@ -14,12 +14,12 @@ private API는 `credential.Material.APIKey`와 `credential.Material.SecretKey`�
 |---|---|
 | 연결·시간 | `Ping`, `ServerTime` |
 | 계약·시세 | `ExchangeInfo`, `TickerPrice`, `OrderBook`, `RecentTrades`, `Candles` |
-| 계정·포지션 | `Account`, `Positions` |
+| 계정·포지션 | `Account`, `Positions`, `ChangeMarginType` |
 | 주문 | `PlaceOrder`, `OrderInfo`, `CancelOrder`, `OpenOrders`, `OrderHistory` |
 | private 접속 키 | `StartUserDataStream`, `KeepaliveUserDataStream`, `CloseUserDataStream` |
 | WebSocket | `MarketStream`, `UserDataStream`, 동적 구독·구독 해제 |
 
-계정은 `/fapi/v3/account`, 포지션 위험은 `/fapi/v3/positionRisk`를 사용합니다. 주문 정정, 일괄 주문, 레버리지·마진 모드 변경과 수입 이력은 아직 포함하지 않습니다.
+계정은 `/fapi/v3/account`, 포지션 위험은 `/fapi/v3/positionRisk`를 사용합니다. `ChangeMarginType`은 `POST /fapi/v1/marginType`으로 계약별 `ISOLATED`·`CROSSED` 모드를 변경합니다. 주문 정정, 일괄 주문, 레버리지 변경과 수입 이력은 아직 포함하지 않습니다.
 
 ## 인증과 시간
 

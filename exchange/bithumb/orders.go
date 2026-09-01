@@ -27,7 +27,7 @@ func (client *Client) PlaceOrder(
 		return OrderReference{}, validationError("encode order body: %v", err)
 	}
 	response, err := client.executePrivate(
-		ctx, http.MethodPost, "/v2/orders", params, body, true,
+		ctx, http.MethodPost, "/v2/orders", params, body, rateLimitOrderCreate,
 		credential.PermissionTrade, commonexchange.OperationMutation, options...,
 	)
 	if err != nil {
@@ -51,7 +51,7 @@ func (client *Client) OrderInfo(
 		return OrderDetail{}, err
 	}
 	response, err := client.executePrivate(
-		ctx, http.MethodGet, "/v1/order", request.parameters(), nil, true,
+		ctx, http.MethodGet, "/v1/order", request.parameters(), nil, rateLimitPrivateOther,
 		credential.PermissionRead, commonexchange.OperationRead, options...,
 	)
 	if err != nil {
@@ -76,7 +76,7 @@ func (client *Client) CancelOrder(
 		return CancelResult{}, err
 	}
 	response, err := client.executePrivate(
-		ctx, http.MethodDelete, "/v2/order", request.parameters(), nil, true,
+		ctx, http.MethodDelete, "/v2/order", request.parameters(), nil, rateLimitOrderCancel,
 		credential.PermissionTrade, commonexchange.OperationMutation, options...,
 	)
 	if err != nil {
@@ -100,7 +100,7 @@ func (client *Client) PendingOrders(
 		return OrderPage{}, err
 	}
 	response, err := client.executePrivate(
-		ctx, http.MethodGet, "/v2/orders/pending", request.parameters(), nil, true,
+		ctx, http.MethodGet, "/v2/orders/pending", request.parameters(), nil, rateLimitPrivateOther,
 		credential.PermissionRead, commonexchange.OperationRead, options...,
 	)
 	if err != nil {
@@ -119,7 +119,7 @@ func (client *Client) OrderHistory(
 		return OrderPage{}, err
 	}
 	response, err := client.executePrivate(
-		ctx, http.MethodGet, "/v2/orders/history", request.parameters(), nil, true,
+		ctx, http.MethodGet, "/v2/orders/history", request.parameters(), nil, rateLimitPrivateOther,
 		credential.PermissionRead, commonexchange.OperationRead, options...,
 	)
 	if err != nil {

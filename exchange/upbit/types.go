@@ -152,6 +152,7 @@ const (
 	OrderTypeLimit  OrderType = "limit"
 	OrderTypePrice  OrderType = "price"
 	OrderTypeMarket OrderType = "market"
+	OrderTypeBest   OrderType = "best"
 )
 
 // TimeInForce는 주문 체결 및 만료 정책이다.

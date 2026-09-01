@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	trade "github.com/proven-trade/cex-sdk"
 	"github.com/proven-trade/cex-sdk/model"
@@ -221,14 +222,33 @@ func (request PlaceOrderRequest) validate() error {
 		if err := validatePositiveDecimal("volume", request.Volume); err != nil {
 			return err
 		}
+	case OrderTypeBest:
+		if request.TimeInForce != TimeInForceIOC && request.TimeInForce != TimeInForceFOK {
+			return validationError("best order requires ioc or fok timeInForce")
+		}
+		if request.Side == SideBid {
+			if request.Volume != "" {
+				return validationError("best bid order does not accept volume")
+			}
+			if err := validatePositiveDecimal("price", request.Price); err != nil {
+				return err
+			}
+		} else {
+			if request.Price != "" {
+				return validationError("best ask order does not accept price")
+			}
+			if err := validatePositiveDecimal("volume", request.Volume); err != nil {
+				return err
+			}
+		}
 	default:
-		return validationError("orderType must be limit, price, or market")
+		return validationError("orderType must be limit, price, market, or best")
 	}
 	if request.TimeInForce != "" && !request.TimeInForce.valid() {
 		return validationError("unsupported timeInForce %q", request.TimeInForce)
 	}
-	if request.OrderType != OrderTypeLimit && request.TimeInForce != "" {
-		return validationError("timeInForce is only supported for limit orders")
+	if request.OrderType != OrderTypeLimit && request.OrderType != OrderTypeBest && request.TimeInForce != "" {
+		return validationError("timeInForce is only supported for limit and best orders")
 	}
 	if request.SMPType != "" && !request.SMPType.valid() {
 		return validationError("unsupported SMP type %q", request.SMPType)
@@ -238,6 +258,9 @@ func (request PlaceOrderRequest) validate() error {
 	}
 	if strings.TrimSpace(request.Identifier) != request.Identifier {
 		return validationError("identifier cannot have surrounding whitespace")
+	}
+	if utf8.RuneCountInString(request.Identifier) > 64 {
+		return validationError("identifier must be at most 64 characters")
 	}
 	return nil
 }

@@ -189,13 +189,17 @@ func TestClientPublicAndPrivateLifecycle(t *testing.T) {
 	if providerCalls != 6 || !allZero(key) || !allZero(secret) {
 		t.Fatalf("provider calls = %d, key zero = %v, secret zero = %v", providerCalls, allZero(key), allZero(secret))
 	}
-	privateSnapshot, err := limiter.Snapshot("bithumb:account:bithumb-pocket:private:1second")
-	if err != nil || privateSnapshot.Used != 6 || privateSnapshot.Rule.Limit != 140 {
+	privateSnapshot, err := limiter.Snapshot("bithumb:route:route-a:private-other:1second")
+	if err != nil || privateSnapshot.Used != 4 || privateSnapshot.Rule.Limit != 140 {
 		t.Fatalf("private limiter snapshot = %+v, error = %v", privateSnapshot, err)
 	}
-	orderSnapshot, err := limiter.Snapshot("bithumb:account:bithumb-pocket:order:1second")
-	if err != nil || orderSnapshot.Used != 5 || orderSnapshot.Rule.Limit != 10 {
+	orderSnapshot, err := limiter.Snapshot("bithumb:route:route-b:order-create:1second")
+	if err != nil || orderSnapshot.Used != 1 || orderSnapshot.Rule.Limit != 140 {
 		t.Fatalf("order limiter snapshot = %+v, error = %v", orderSnapshot, err)
+	}
+	cancelSnapshot, err := limiter.Snapshot("bithumb:route:route-a:order-cancel:1second")
+	if err != nil || cancelSnapshot.Used != 1 || cancelSnapshot.Rule.Limit != 140 {
+		t.Fatalf("cancel limiter snapshot = %+v, error = %v", cancelSnapshot, err)
 	}
 }
 

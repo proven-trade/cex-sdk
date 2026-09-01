@@ -22,7 +22,7 @@ Secret Key는 Base64 디코딩하지 않고 HS512 서명 키로 직접 사용합
 | 계정 | `Accounts` |
 | 주문 | `PlaceOrder`, `OrderInfo`, `CancelOrder`, `OpenOrders`, `ClosedOrders` |
 
-주문 생성은 `limit`, 매수 시장가 `price`, 매도 시장가 `market`을 지원합니다. 업비트 고유 `best` 주문, 주문 가능 정보와 일괄 취소는 아직 포함하지 않습니다.
+주문 생성은 `limit`, 매수 시장가 `price`, 매도 시장가 `market`, 최유리 지정가 `best`를 지원합니다. `best` 매수는 총액 `Price`, 매도는 수량 `Volume`, 그리고 `ioc` 또는 `fok`가 필요합니다. 주문 가능 정보와 일괄 취소는 아직 포함하지 않습니다.
 
 가격, 수량, 금액은 `float64`로 변환하지 않습니다. private 응답은 거래소가 제공한 문자열을 유지하고 공개 시세의 JSON 숫자는 `Decimal` 문자열 타입으로 손실 없이 보존합니다.
 

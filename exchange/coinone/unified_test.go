@@ -22,7 +22,8 @@ func TestUnifiedSpotReadConformance(t *testing.T) {
 		writer.Header().Set("Content-Type", "application/json")
 		switch request.URL.Path {
 		case "/public/v2/ticker_new/KRW/BTC":
-			_, _ = io.WriteString(writer, `{"result":"success","error_code":"0","tickers":[{"quote_currency":"KRW","target_currency":"BTC","last":"64000.10"}]}`)
+			// Coinone의 실응답은 이 endpoint에서 통화 코드를 소문자로 반환할 수 있다.
+			_, _ = io.WriteString(writer, `{"result":"success","error_code":"0","tickers":[{"quote_currency":"krw","target_currency":"btc","last":"64000.10"}]}`)
 		case "/v2.1/account/balance/all":
 			verifySignedRequest(t, request, []byte("secret-key"), "123e4567-e89b-42d3-a456-426614174000")
 			_, _ = io.WriteString(writer, `{"result":"success","error_code":"0","balances":[{"currency":"KRW","available":"1000000.00","limit":"2.00"}]}`)

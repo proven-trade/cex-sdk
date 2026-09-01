@@ -11,7 +11,7 @@ private API를 사용하려면 `credential.Provider`가 반환하는 `credential
 | `APIKey` | Access Key |
 | `SecretKey` | Secret Key 원문 |
 
-Secret Key는 Base64 디코딩하지 않고 HS256 서명 키로 직접 사용합니다. `credential.Descriptor.AccountID`에는 같은 빗썸 계정의 요청 제한을 공유할 안정적인 식별자를 넣어야 합니다. 자격증명의 `AllowedEgressRouteIDs` 밖에 있는 route는 Secret 조회 전에 차단됩니다.
+Secret Key는 Base64 디코딩하지 않고 HS256 서명 키로 직접 사용합니다. `credential.Descriptor.AccountID`에는 오류와 감사 로그에서 계정을 식별할 안정적인 값을 넣어야 합니다. 자격증명의 `AllowedEgressRouteIDs` 밖에 있는 route는 Secret 조회 전에 차단됩니다.
 
 ## 지원 범위
 
@@ -45,17 +45,18 @@ POST 주문의 JSON 필드와 해시 입력은 하나의 ordered parameter에서
 
 ## 요청 제한과 송신 경로
 
-SDK 기본 로컬 제한은 공식 안내의 공개 150회/초, private 140회/초, 주문 관련 API 10회/초입니다.
+SDK 기본 로컬 제한은 공식 안내의 공개 분류별 150회/초, private 분류별 140회/초입니다. 제한은 IP 기준이므로 선택한 송신 route별로 관리합니다.
 
 | bucket | 기본 제한 | 범위 |
 |---|---:|---|
-| `bithumb:route:<route>:public:1second` | 150회/초 | 선택한 송신 경로 |
-| `bithumb:account:<account>:private:1second` | 140회/초 | 빗썸 계정 |
-| `bithumb:account:<account>:order:1second` | 10회/초 | 빗썸 계정의 주문 API |
+| `bithumb:route:<route>:public-<category>:1second` | 150회/초 | 공개 캔들·호가·현재가·체결·기타 분류별 |
+| `bithumb:route:<route>:private-other:1second` | 140회/초 | 자산·주문 조회 등 private 기타 |
+| `bithumb:route:<route>:order-create:1second` | 140회/초 | 단건 주문 요청 |
+| `bithumb:route:<route>:order-cancel:1second` | 140회/초 | 단건 주문 취소 접수 |
 
-주문 관련 private 요청은 private bucket과 order bucket을 동시에 소비합니다. 제한값은 `Config`의 `PublicRequestsPerSecond`, `PrivateRequestsPerSecond`, `OrderRequestsPerSecond`로 더 보수적으로 조정할 수 있습니다.
+각 요청은 공식 API 분류에 대응하는 bucket 하나를 소비합니다. 제한값은 `Config`의 `PublicRequestsPerSecond`, `PrivateRequestsPerSecond`, `OrderRequestsPerSecond`로 더 보수적으로 조정할 수 있습니다. 다건 주문 생성·취소는 현재 SDK 범위 밖이며 공식 별도 제한 20회/초를 단건 bucket과 섞지 않습니다.
 
-여러 공인 송신 IP를 사용해도 계정 단위 제한은 늘어나지 않습니다. route 선택은 API Key IP 허용 목록 준수와 네트워크 격리를 위한 기능이며 거래소 제한 우회 용도가 아닙니다.
+각 route에는 실제 공인 송신 IP가 정확히 연결되어 있어야 하며 SDK bucket도 그 route를 기준으로 분리됩니다. route 선택은 API Key IP 허용 목록 준수와 네트워크 격리를 위한 기능입니다.
 
 ## 주문 안전 계약
 

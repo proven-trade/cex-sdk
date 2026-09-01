@@ -23,6 +23,14 @@ const (
 	PositionSideShort PositionSide = "SHORT"
 )
 
+// MarginType은 계약별 포지션의 교차 또는 격리 마진 모드다.
+type MarginType string
+
+const (
+	MarginTypeIsolated MarginType = "ISOLATED"
+	MarginTypeCrossed  MarginType = "CROSSED"
+)
+
 // OrderType은 Futures 주문 가격 결정 및 발동 방식이다.
 type OrderType string
 
@@ -232,6 +240,13 @@ type Account struct {
 	Assets                      []Asset         `json:"assets"`
 	Positions                   []Position      `json:"positions"`
 	Raw                         json.RawMessage `json:"-"`
+}
+
+// ChangeMarginTypeResult는 계약별 마진 모드 변경 결과다.
+type ChangeMarginTypeResult struct {
+	Code    int             `json:"code"`
+	Message string          `json:"msg"`
+	Raw     json.RawMessage `json:"-"`
 }
 
 // Position은 계약별 실시간 포지션 위험 정보다.

@@ -72,7 +72,7 @@ func TestClientMarketAccountPositionAndOrderLifecycle(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		writer.Header().Set("X-MBX-USED-WEIGHT-1M", "20")
-		private := request.URL.Path == "/fapi/v3/account" || request.URL.Path == "/fapi/v3/positionRisk" || request.URL.Path == "/fapi/v1/order" || request.URL.Path == "/fapi/v1/openOrders" || request.URL.Path == "/fapi/v1/allOrders"
+		private := request.URL.Path == "/fapi/v3/account" || request.URL.Path == "/fapi/v3/positionRisk" || request.URL.Path == "/fapi/v1/marginType" || request.URL.Path == "/fapi/v1/order" || request.URL.Path == "/fapi/v1/openOrders" || request.URL.Path == "/fapi/v1/allOrders"
 		if private && !verifySignedRequest(request, []byte("secret-key"), fixedNow) {
 			http.Error(writer, `{"code":-1022,"msg":"Signature invalid."}`, http.StatusBadRequest)
 			return
@@ -92,6 +92,12 @@ func TestClientMarketAccountPositionAndOrderLifecycle(t *testing.T) {
 			_, _ = io.WriteString(writer, `{"canTrade":true,"totalWalletBalance":"1000","availableBalance":"900","assets":[{"asset":"USDT","walletBalance":"1000","availableBalance":"900"}],"positions":[]}`)
 		case "/fapi/v3/positionRisk":
 			_, _ = io.WriteString(writer, `[{"symbol":"BTCUSDT","positionSide":"LONG","positionAmt":"0.01","entryPrice":"64000","markPrice":"64100","unRealizedProfit":"1","notional":"641"}]`)
+		case "/fapi/v1/marginType":
+			if request.Method != http.MethodPost || request.URL.Query().Get("symbol") != "BTCUSDT" || request.URL.Query().Get("marginType") != "ISOLATED" {
+				http.Error(writer, `{"code":-1102,"msg":"bad margin type request"}`, http.StatusBadRequest)
+				return
+			}
+			_, _ = io.WriteString(writer, `{"code":200,"msg":"success"}`)
 		case "/fapi/v1/order":
 			if request.Method == http.MethodPost {
 				query := request.URL.Query()
@@ -148,6 +154,14 @@ func TestClientMarketAccountPositionAndOrderLifecycle(t *testing.T) {
 	if err != nil || positions[0].PositionAmount != "0.01" || len(positions[0].Raw) == 0 {
 		t.Fatalf("Positions() = %+v, error = %v", positions, err)
 	}
+	marginType, err := client.ChangeMarginType(
+		context.Background(),
+		ChangeMarginTypeRequest{Symbol: "BTCUSDT", MarginType: MarginTypeIsolated},
+		trade.WithEgressRoute("route-b"),
+	)
+	if err != nil || marginType.Code != 200 || marginType.Message != "success" || len(marginType.Raw) == 0 {
+		t.Fatalf("ChangeMarginType() = %+v, error = %v", marginType, err)
+	}
 	order, err := client.PlaceOrder(context.Background(), PlaceOrderRequest{Symbol: "BTCUSDT", Side: SideBuy, PositionSide: PositionSideLong, Type: OrderTypeLimit, TimeInForce: TimeInForceGTC, Quantity: "0.01", Price: "64000", ClientOrderID: "strategy-1"}, trade.WithEgressRoute("route-b"))
 	if err != nil || order.OrderID != 42 {
 		t.Fatalf("PlaceOrder() = %+v, error = %v", order, err)
@@ -169,16 +183,35 @@ func TestClientMarketAccountPositionAndOrderLifecycle(t *testing.T) {
 	if err != nil || history[0].Status != OrderStatusFilled {
 		t.Fatalf("OrderHistory() = %+v, error = %v", history, err)
 	}
-	if routes := sender.snapshot(); len(routes) != 12 || routes[0] != "route-b" || routes[1] != "route-b" || routes[7] != "route-b" {
+	if routes := sender.snapshot(); len(routes) != 13 || routes[0] != "route-b" || routes[1] != "route-b" || routes[7] != "route-b" {
 		t.Fatalf("routes = %v", routes)
 	}
 	calls, key, secret := provider.snapshot()
-	if calls != 7 || !allZero(key) || !allZero(secret) {
+	if calls != 8 || !allZero(key) || !allZero(secret) {
 		t.Fatalf("provider calls = %d, secrets zero = %v/%v", calls, allZero(key), allZero(secret))
 	}
 	snapshot, err := limiter.Snapshot("binance-usdm:account:futures-main:orders:10seconds")
 	if err != nil || snapshot.Used != 1 {
 		t.Fatalf("order limiter = %+v, error = %v", snapshot, err)
+	}
+}
+
+func TestChangeMarginTypeValidation(t *testing.T) {
+	t.Parallel()
+
+	for _, request := range []ChangeMarginTypeRequest{
+		{},
+		{Symbol: "BTCUSDT"},
+		{Symbol: "BTCUSDT", MarginType: MarginType("CROSS")},
+	} {
+		if err := request.validate(); !errors.Is(err, trade.ErrValidation) {
+			t.Fatalf("ChangeMarginTypeRequest.validate() error = %v, want ErrValidation", err)
+		}
+	}
+	for _, marginType := range []MarginType{MarginTypeIsolated, MarginTypeCrossed} {
+		if err := (ChangeMarginTypeRequest{Symbol: "BTCUSDT", MarginType: marginType}).validate(); err != nil {
+			t.Fatalf("ChangeMarginTypeRequest.validate(%q) error = %v", marginType, err)
+		}
 	}
 }
 

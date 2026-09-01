@@ -311,7 +311,7 @@ func coinoneMarket(market unified.Market) string {
 }
 
 func coinonePair(quoteCurrency, targetCurrency string) string {
-	return quoteCurrency + "-" + targetCurrency
+	return strings.ToUpper(quoteCurrency) + "-" + strings.ToUpper(targetCurrency)
 }
 
 func coinoneMarketStatus(market Market) string {

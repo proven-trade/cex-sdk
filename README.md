@@ -47,7 +47,7 @@
 | 로컬 송신 원본 IP별 HTTP 연결 풀과 요청별 경로 선택 | 구현됨 |
 | 다차원 요청 제한기 | 구현됨 |
 | Binance Spot REST | 공개 시세, 계정, 주문 생성·조회·취소·목록 구현됨 |
-| Binance USDⓈ-M Futures REST | 공개 시세, 계정 V3, 포지션 V3, 주문 구현됨 |
+| Binance USDⓈ-M Futures REST | 공개 시세, 계정 V3, 포지션 V3, 계약별 마진 모드 변경, 주문 구현됨 |
 | Binance USDⓈ-M Futures WebSocket | 분리 public·market 시세, listenKey private stream·로컬 오더북 자동 `pu` 갭 복구 구현됨 |
 | Bitget v3 UTA | Spot·USDT-M 공개 시세, 자산, 포지션, 주문 구현됨 |
 | Upbit Spot REST | 공개 시세, 잔고, 주문 생성·조회·취소·목록 구현됨 |
@@ -220,6 +220,7 @@ defer session.Close()
 - 서버 시간 보정과 계약 정보
 - 현재가, 호가, 최근 체결, 캔들
 - 계정 V3 자산과 포지션 V3 위험 정보
+- 계약별 격리(`ISOLATED`)·교차(`CROSSED`) 마진 모드 변경
 - 주문 생성, 조회, 취소, 미체결 목록, 주문 이력
 - 단방향·헤지 모드 `positionSide`, `reduceOnly`, `closePosition`
 - 지정가, 시장가, Stop, Take Profit, Trailing Stop 주문 검증
