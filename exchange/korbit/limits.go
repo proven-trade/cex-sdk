@@ -1,6 +1,7 @@
 package korbit
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -27,6 +28,7 @@ type rateLimit struct {
 }
 
 func publicRateLimit(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	requestsPerSecond int,
@@ -35,10 +37,11 @@ func publicRateLimit(
 		key:   fmt.Sprintf("korbit:route:%s:public:1second", routeID),
 		limit: requestsPerSecond, window: time.Second,
 	}
-	return registerRateLimit(limiter, value)
+	return registerRateLimit(ctx, limiter, value)
 }
 
 func privateRateLimit(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	accountID string,
 	group rateGroup,
@@ -55,14 +58,15 @@ func privateRateLimit(
 		key:   fmt.Sprintf("korbit:account:%s:%s:1second", accountID, group),
 		limit: limit, window: time.Second,
 	}
-	return registerRateLimit(limiter, value)
+	return registerRateLimit(ctx, limiter, value)
 }
 
 func registerRateLimit(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	value rateLimit,
 ) (rateLimit, []ratelimit.Charge, error) {
-	if err := limiter.SetRule(ratelimit.Rule{Key: value.key, Limit: value.limit, Window: value.window}); err != nil {
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{Key: value.key, Limit: value.limit, Window: value.window}); err != nil {
 		return rateLimit{}, nil, err
 	}
 	return value, []ratelimit.Charge{{Key: value.key, Units: 1}}, nil

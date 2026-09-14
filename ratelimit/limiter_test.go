@@ -125,7 +125,7 @@ func TestMemoryBackendDoesNotBurstAcrossWallClockBoundary(t *testing.T) {
 	t.Parallel()
 	backend := newMemoryBackend()
 	rule := Rule{Key: "weight", Limit: 1, Window: time.Second}
-	if err := backend.SetRule(rule); err != nil {
+	if err := backend.SetRuleContext(context.Background(), rule); err != nil {
 		t.Fatalf("SetRule() error = %v", err)
 	}
 	first := time.Unix(100, 999*int64(time.Millisecond))
@@ -139,5 +139,28 @@ func TestMemoryBackendDoesNotBurstAcrossWallClockBoundary(t *testing.T) {
 	}
 	if want := first.Add(time.Second); !waitUntil.Equal(want) {
 		t.Fatalf("second tryAcquire() wait = %v, want %v", waitUntil, want)
+	}
+}
+
+func TestCanceledRuleRegistrationPreservesExistingRule(t *testing.T) {
+	limiter, err := New(Rule{Key: "shared", Limit: 10, Window: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	changed := Rule{Key: "shared", Limit: 20, Window: time.Minute}
+	if err := limiter.SetRuleContext(ctx, changed); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	if err := limiter.SetRuleContext(nil, changed); err == nil {
+		t.Fatal("accepted nil context")
+	}
+	state, err := limiter.Snapshot("shared")
+	if err != nil || state.Rule.Limit != 10 || state.Rule.Window != time.Second {
+		t.Fatalf("canceled registration changed rule: %+v %v", state, err)
+	}
+	if err := limiter.SetRuleContext(context.Background(), changed); err != nil {
+		t.Fatal(err)
 	}
 }

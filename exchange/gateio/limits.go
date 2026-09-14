@@ -1,6 +1,7 @@
 package gateio
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"net/http"
@@ -49,6 +50,7 @@ func cancelLimit() endpointLimit {
 }
 
 func rateLimitCharges(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	accountID string,
@@ -104,7 +106,7 @@ func rateLimitCharges(
 	default:
 		return rateLimit{}, nil, fmt.Errorf("unsupported Gate.io rate limit pool %q", limit.pool)
 	}
-	if err := limiter.SetRule(ratelimit.Rule{Key: value.key, Limit: value.limit, Window: window}); err != nil {
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{Key: value.key, Limit: value.limit, Window: window}); err != nil {
 		return rateLimit{}, nil, err
 	}
 	return value, []ratelimit.Charge{{Key: value.key, Units: 1}}, nil

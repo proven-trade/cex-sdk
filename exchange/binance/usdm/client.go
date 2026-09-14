@@ -116,7 +116,12 @@ func (client *Client) executePublic(ctx context.Context, path string, values url
 	if err != nil {
 		return commonexchange.Response{}, err
 	}
-	charges, err := client.limits.charges(client.executor.Limiter(), resolved.EgressRouteID, "", weight, 0)
+	if ctx == nil {
+		return commonexchange.Response{}, fmt.Errorf("request context cannot be nil")
+	}
+	ctx, cancel := context.WithTimeout(ctx, resolved.Timeout)
+	defer cancel()
+	charges, err := client.limits.charges(ctx, client.executor.Limiter(), resolved.EgressRouteID, "", weight, 0)
 	if err != nil {
 		return commonexchange.Response{}, err
 	}
@@ -133,6 +138,11 @@ func (client *Client) executeSigned(ctx context.Context, method, path string, va
 	if err != nil {
 		return commonexchange.Response{}, err
 	}
+	if ctx == nil {
+		return commonexchange.Response{}, fmt.Errorf("request context cannot be nil")
+	}
+	ctx, cancel := context.WithTimeout(ctx, resolved.Timeout)
+	defer cancel()
 	if client.credentials == nil || client.credentialProvider == nil {
 		return commonexchange.Response{}, &trade.APIError{Category: trade.ErrorAuthentication, Exchange: model.ExchangeBinance, Cause: errors.New("private Binance USD-M request requires credentials")}
 	}
@@ -142,7 +152,7 @@ func (client *Client) executeSigned(ctx context.Context, method, path string, va
 	if err := client.credentials.RequirePermission(permission); err != nil {
 		return commonexchange.Response{}, &trade.APIError{Category: trade.ErrorAuthorization, Exchange: model.ExchangeBinance, AccountID: client.credentials.AccountID, Cause: err}
 	}
-	charges, err := client.limits.charges(client.executor.Limiter(), resolved.EgressRouteID, client.credentials.AccountID, weight, orders)
+	charges, err := client.limits.charges(ctx, client.executor.Limiter(), resolved.EgressRouteID, client.credentials.AccountID, weight, orders)
 	if err != nil {
 		return commonexchange.Response{}, err
 	}

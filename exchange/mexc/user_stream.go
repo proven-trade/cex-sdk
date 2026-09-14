@@ -172,6 +172,11 @@ func (client *Client) executeAPIKey(
 	if resolved.Timeout == 0 {
 		resolved.Timeout = client.requestTimeout
 	}
+	if ctx == nil {
+		return commonexchange.Response{}, fmt.Errorf("request context cannot be nil")
+	}
+	ctx, cancel := context.WithTimeout(ctx, resolved.Timeout)
+	defer cancel()
 	if client.credentials == nil || client.credentialProvider == nil {
 		return commonexchange.Response{}, &trade.APIError{
 			Category: trade.ErrorAuthentication, Exchange: model.ExchangeMEXC,
@@ -191,6 +196,7 @@ func (client *Client) executeAPIKey(
 		}
 	}
 	charges, err := privateRateLimitCharges(
+		ctx,
 		client.executor.Limiter(), resolved.EgressRouteID, client.credentials.AccountID,
 		privateLimit("user-data-stream", 1), client.endpointQuota,
 		"private-read", client.privateReadQuota,

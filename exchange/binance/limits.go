@@ -1,6 +1,7 @@
 package binance
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -67,6 +68,7 @@ func (catalog *limitCatalog) update(limits []RateLimit) {
 }
 
 func (catalog *limitCatalog) charges(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	accountID string,
@@ -106,7 +108,7 @@ func (catalog *limitCatalog) charges(
 			return nil, fmt.Errorf("rate limit %s requires %s scope ID", spec.typeName, scope)
 		}
 		key := spec.key(scope, scopeID)
-		if err := limiter.SetRule(ratelimit.Rule{Key: key, Limit: spec.limit, Window: spec.window}); err != nil {
+		if err := limiter.SetRuleContext(ctx, ratelimit.Rule{Key: key, Limit: spec.limit, Window: spec.window}); err != nil {
 			return nil, err
 		}
 		charges = append(charges, ratelimit.Charge{Key: key, Units: units})

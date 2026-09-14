@@ -1,6 +1,7 @@
 package futures
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -38,6 +39,7 @@ func futuresLimit(weight int) endpointLimit {
 }
 
 func rateLimitCharges(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	accountID string,
@@ -60,7 +62,7 @@ func rateLimitCharges(
 		key:   fmt.Sprintf("kucoin-futures:%s:%s:%s:30seconds", scope, scopeID, limit.pool),
 		limit: quota, window: 30 * time.Second,
 	}
-	if err := limiter.SetRule(ratelimit.Rule{
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{
 		Key: value.key, Limit: value.limit, Window: value.window,
 	}); err != nil {
 		return rateLimit{}, nil, err

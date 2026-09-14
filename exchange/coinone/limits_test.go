@@ -1,6 +1,7 @@
 package coinone
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
@@ -14,15 +15,15 @@ func TestRateLimitScopesAndHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ratelimit.New() error = %v", err)
 	}
-	public, publicCharges, err := publicRateLimit(limiter, "route-a", 1200)
+	public, publicCharges, err := publicRateLimit(context.Background(), limiter, "route-a", 1200)
 	if err != nil {
 		t.Fatalf("publicRateLimit() error = %v", err)
 	}
-	private, privateCharges, err := privateRateLimit(limiter, "portfolio-a", false, 80, 40)
+	private, privateCharges, err := privateRateLimit(context.Background(), limiter, "portfolio-a", false, 80, 40)
 	if err != nil {
 		t.Fatalf("privateRateLimit() error = %v", err)
 	}
-	order, orderCharges, err := privateRateLimit(limiter, "portfolio-a", true, 80, 40)
+	order, orderCharges, err := privateRateLimit(context.Background(), limiter, "portfolio-a", true, 80, 40)
 	if err != nil {
 		t.Fatalf("privateRateLimit() error = %v", err)
 	}

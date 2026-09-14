@@ -85,6 +85,11 @@ func (client *Client) executeAPIKey(
 	if err != nil {
 		return commonexchange.Response{}, err
 	}
+	if ctx == nil {
+		return commonexchange.Response{}, fmt.Errorf("request context cannot be nil")
+	}
+	ctx, cancel := context.WithTimeout(ctx, resolved.Timeout)
+	defer cancel()
 	if client.credentials == nil || client.credentialProvider == nil {
 		return commonexchange.Response{}, &trade.APIError{
 			Category: trade.ErrorAuthentication, Exchange: model.ExchangeBinance,
@@ -104,6 +109,7 @@ func (client *Client) executeAPIKey(
 		}
 	}
 	charges, err := client.limits.charges(
+		ctx,
 		client.executor.Limiter(), resolved.EgressRouteID, client.credentials.AccountID, 1, 0,
 	)
 	if err != nil {

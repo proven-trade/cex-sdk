@@ -183,8 +183,14 @@ func (client *Client) executePublic(
 	if resolved.Timeout == 0 {
 		resolved.Timeout = client.requestTimeout
 	}
+	if ctx == nil {
+		return commonexchange.Response{}, fmt.Errorf("request context cannot be nil")
+	}
+	ctx, cancel := context.WithTimeout(ctx, resolved.Timeout)
+	defer cancel()
 	limitMethod := strings.TrimPrefix(method, "public/")
 	charges, err := publicRateLimit(
+		ctx,
 		client.executor.Limiter(), resolved.EgressRouteID, limitMethod,
 		client.publicRequestsPerSecond,
 	)

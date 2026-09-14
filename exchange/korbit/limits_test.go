@@ -1,6 +1,7 @@
 package korbit
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
@@ -14,19 +15,19 @@ func TestRateLimitScopesGroupsAndHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ratelimit.New() error = %v", err)
 	}
-	public, _, err := publicRateLimit(limiter, "route-a", 50)
+	public, _, err := publicRateLimit(context.Background(), limiter, "route-a", 50)
 	if err != nil {
 		t.Fatalf("publicRateLimit() error = %v", err)
 	}
-	private, _, err := privateRateLimit(limiter, "account-a", rateGroupPrivate, 50, 30)
+	private, _, err := privateRateLimit(context.Background(), limiter, "account-a", rateGroupPrivate, 50, 30)
 	if err != nil {
 		t.Fatalf("privateRateLimit() error = %v", err)
 	}
-	place, _, err := privateRateLimit(limiter, "account-a", rateGroupOrderPlace, 50, 30)
+	place, _, err := privateRateLimit(context.Background(), limiter, "account-a", rateGroupOrderPlace, 50, 30)
 	if err != nil {
 		t.Fatalf("privateRateLimit(place) error = %v", err)
 	}
-	cancel, _, err := privateRateLimit(limiter, "account-a", rateGroupOrderCancel, 50, 30)
+	cancel, _, err := privateRateLimit(context.Background(), limiter, "account-a", rateGroupOrderCancel, 50, 30)
 	if err != nil {
 		t.Fatalf("privateRateLimit(cancel) error = %v", err)
 	}

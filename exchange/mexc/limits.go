@@ -1,6 +1,7 @@
 package mexc
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -28,6 +29,7 @@ func privateLimit(name string, endpointWeight int) endpointLimit {
 }
 
 func publicRateLimitCharges(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	limit endpointLimit,
@@ -37,13 +39,14 @@ func publicRateLimitCharges(
 		return nil, fmt.Errorf("invalid MEXC public rate limit")
 	}
 	key := fmt.Sprintf("mexc:route:%s:public:%s:10seconds", routeID, limit.name)
-	if err := limiter.SetRule(ratelimit.Rule{Key: key, Limit: quota, Window: 10 * time.Second}); err != nil {
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{Key: key, Limit: quota, Window: 10 * time.Second}); err != nil {
 		return nil, err
 	}
 	return []ratelimit.Charge{{Key: key, Units: limit.weight}}, nil
 }
 
 func privateRateLimitCharges(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	accountID string,
@@ -66,7 +69,7 @@ func privateRateLimitCharges(
 		{Key: frequencyKey, Limit: frequencyQuota, Window: time.Second},
 	}
 	for _, rule := range rules {
-		if err := limiter.SetRule(rule); err != nil {
+		if err := limiter.SetRuleContext(ctx, rule); err != nil {
 			return nil, err
 		}
 	}

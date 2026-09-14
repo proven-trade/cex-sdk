@@ -213,3 +213,134 @@ func TestValidatedSpotRejectsInvalidMetadataAndConfiguration(t *testing.T) {
 		t.Fatal("accepted wrong exchange")
 	}
 }
+
+// Signals when the waiter reaches the select on a shared metadata refresh.
+type metadataWaitContext struct {
+	context.Context
+	waiting chan struct{}
+	once    sync.Once
+}
+
+func (ctx *metadataWaitContext) Done() <-chan struct{} {
+	ctx.once.Do(func() { close(ctx.waiting) })
+	return ctx.Context.Done()
+}
+
+func TestValidatedSpotRetriesRefreshOwnedByCanceledCaller(t *testing.T) {
+	for _, cache := range []string{"uncached", "expired"} {
+		for _, cancellation := range []string{"cancel", "timeout"} {
+			t.Run(cache+"/"+cancellation, func(t *testing.T) {
+				started := make(chan struct{})
+				var reads, submissions atomic.Int32
+				// A submission error must be returned after exactly one attempt.
+				orderErr := errors.New("order result unavailable")
+				native := &validationClient{
+					markets: func(ctx context.Context, options ...trade.RequestOption) ([]MarketInfo, error) {
+						resolved, err := trade.ResolveRequestOptions("", options...)
+						if err != nil || resolved.EgressRouteID != "a" {
+							t.Errorf("refresh route=%v error=%v", resolved.EgressRouteID, err)
+						}
+						if reads.Add(1) == 1 {
+							close(started)
+							<-ctx.Done()
+							// Native clients can wrap cancellation in APIError.
+							return nil, &trade.APIError{Category: trade.ErrorTimeout, Cause: ctx.Err()}
+						}
+						return validationRules(), nil
+					},
+					place: func(context.Context, PlaceOrderRequest, ...trade.RequestOption) (Order, error) {
+						submissions.Add(1)
+						return Order{}, orderErr
+					},
+				}
+				client, err := NewValidatedSpot(native, ValidationConfig{DefaultEgressRouteID: "a"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if cache == "expired" {
+					ready := make(chan struct{})
+					close(ready)
+					client.rules["a"] = &marketRulesEntry{ready: ready, expires: time.Now().Add(-time.Second)}
+				}
+				ownerCtx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				var ownerOptions []trade.RequestOption
+				wantErr := context.Canceled
+				if cancellation == "timeout" {
+					ownerOptions = []trade.RequestOption{trade.WithTimeout(100 * time.Millisecond)}
+					wantErr = context.DeadlineExceeded
+				}
+				ownerDone := make(chan error, 1)
+				go func() {
+					_, err := client.PlaceOrder(ownerCtx, validatedRequest(), ownerOptions...)
+					ownerDone <- err
+				}()
+				<-started
+				const waiters = 8
+				waiterDone := make(chan error, waiters)
+				for i := 0; i < waiters; i++ {
+					ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+					defer stop()
+					waiterCtx := &metadataWaitContext{Context: ctx, waiting: make(chan struct{})}
+					go func() {
+						_, err := client.PlaceOrder(waiterCtx, validatedRequest())
+						waiterDone <- err
+					}()
+					<-waiterCtx.waiting
+				}
+				if cancellation == "cancel" {
+					cancel()
+				}
+				if err := <-ownerDone; !errors.Is(err, wantErr) {
+					t.Fatalf("owner error=%v", err)
+				}
+				for i := 0; i < waiters; i++ {
+					if err := <-waiterDone; !errors.Is(err, orderErr) {
+						t.Errorf("live waiter error=%v", err)
+					}
+				}
+				if reads.Load() != 2 || submissions.Load() != waiters {
+					t.Fatalf("reads=%d submissions=%d", reads.Load(), submissions.Load())
+				}
+			})
+		}
+	}
+}
+
+func TestValidatedSpotDoesNotRetryUnrelatedRefreshError(t *testing.T) {
+	started, release := make(chan struct{}), make(chan struct{})
+	var reads atomic.Int32
+	native := &validationClient{markets: func(context.Context, ...trade.RequestOption) ([]MarketInfo, error) {
+		if reads.Add(1) == 1 {
+			close(started)
+		}
+		<-release
+		// An upstream timeout with a live caller is not caller cancellation.
+		return nil, context.DeadlineExceeded
+	}}
+	client, err := NewValidatedSpot(native, ValidationConfig{DefaultEgressRouteID: "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 2)
+	go func() {
+		_, err := client.PlaceOrder(context.Background(), validatedRequest())
+		done <- err
+	}()
+	<-started
+	waiterCtx := &metadataWaitContext{Context: context.Background(), waiting: make(chan struct{})}
+	go func() {
+		_, err := client.PlaceOrder(waiterCtx, validatedRequest())
+		done <- err
+	}()
+	<-waiterCtx.waiting
+	close(release)
+	for i := 0; i < 2; i++ {
+		if err := <-done; !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("refresh error=%v", err)
+		}
+	}
+	if reads.Load() != 1 {
+		t.Fatalf("retried upstream timeout %d times", reads.Load())
+	}
+}

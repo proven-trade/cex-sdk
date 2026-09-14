@@ -1,6 +1,7 @@
 package okx
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -27,6 +28,7 @@ func accountLimit(requests int, window time.Duration, discriminator string) endp
 }
 
 func rateLimitCharges(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	accountID, method, path string,
@@ -40,7 +42,7 @@ func rateLimitCharges(
 		return nil, fmt.Errorf("OKX endpoint rate limit requires %s scope ID", scope)
 	}
 	key := rateLimitEndpointKey(scope, scopeID, method, path, limit.discriminator, limit.window)
-	if err := limiter.SetRule(ratelimit.Rule{Key: key, Limit: limit.requests, Window: limit.window}); err != nil {
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{Key: key, Limit: limit.requests, Window: limit.window}); err != nil {
 		return nil, err
 	}
 	return []ratelimit.Charge{{Key: key, Units: 1}}, nil

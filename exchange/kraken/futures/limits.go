@@ -1,6 +1,7 @@
 package futures
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -9,12 +10,13 @@ import (
 )
 
 func publicRateLimitCharges(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	requestsPerSecond int,
 ) ([]ratelimit.Charge, error) {
 	key := fmt.Sprintf("kraken-futures:route:%s:public:1second", routeID)
-	if err := limiter.SetRule(ratelimit.Rule{
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{
 		Key: key, Limit: requestsPerSecond, Window: time.Second,
 	}); err != nil {
 		return nil, err
@@ -23,6 +25,7 @@ func publicRateLimitCharges(
 }
 
 func privateRateLimitCharges(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	accountID string,
 	pointLimit int,
@@ -36,7 +39,7 @@ func privateRateLimitCharges(
 		return nil, fmt.Errorf("Kraken Futures endpoint cost must be between 1 and %d", pointLimit)
 	}
 	key := fmt.Sprintf("kraken-futures:account:%s:derivatives:%s", accountID, durationKey(window))
-	if err := limiter.SetRule(ratelimit.Rule{Key: key, Limit: pointLimit, Window: window}); err != nil {
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{Key: key, Limit: pointLimit, Window: window}); err != nil {
 		return nil, err
 	}
 	return []ratelimit.Charge{{Key: key, Units: cost}}, nil

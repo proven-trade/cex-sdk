@@ -123,7 +123,12 @@ func (client *Client) executePublic(
 	if err != nil {
 		return commonexchange.Response{}, err
 	}
-	charges, rateKey, err := rateLimitCharges(client.executor.Limiter(), resolved.EgressRouteID, "", group)
+	if ctx == nil {
+		return commonexchange.Response{}, fmt.Errorf("request context cannot be nil")
+	}
+	ctx, cancel := context.WithTimeout(ctx, resolved.Timeout)
+	defer cancel()
+	charges, rateKey, err := rateLimitCharges(ctx, client.executor.Limiter(), resolved.EgressRouteID, "", group)
 	if err != nil {
 		return commonexchange.Response{}, err
 	}
@@ -155,6 +160,11 @@ func (client *Client) executeSigned(
 	if err != nil {
 		return commonexchange.Response{}, err
 	}
+	if ctx == nil {
+		return commonexchange.Response{}, fmt.Errorf("request context cannot be nil")
+	}
+	ctx, cancel := context.WithTimeout(ctx, resolved.Timeout)
+	defer cancel()
 	if client.credentials == nil || client.credentialProvider == nil {
 		return commonexchange.Response{}, &trade.APIError{
 			Category: trade.ErrorAuthentication, Exchange: model.ExchangeUpbit,
@@ -174,6 +184,7 @@ func (client *Client) executeSigned(
 		}
 	}
 	charges, rateKey, err := rateLimitCharges(
+		ctx,
 		client.executor.Limiter(), resolved.EgressRouteID, client.credentials.AccountID, group,
 	)
 	if err != nil {

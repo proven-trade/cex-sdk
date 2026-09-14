@@ -1,6 +1,7 @@
 package coinone
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -19,6 +20,7 @@ type rateLimit struct {
 }
 
 func publicRateLimit(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	requestsPerMinute int,
@@ -27,13 +29,14 @@ func publicRateLimit(
 		key:   fmt.Sprintf("coinone:route:%s:public:1minute", routeID),
 		limit: requestsPerMinute, window: time.Minute, header: "Public-Ratelimit-Remaining",
 	}
-	if err := limiter.SetRule(ratelimit.Rule{Key: value.key, Limit: value.limit, Window: value.window}); err != nil {
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{Key: value.key, Limit: value.limit, Window: value.window}); err != nil {
 		return rateLimit{}, nil, err
 	}
 	return value, []ratelimit.Charge{{Key: value.key, Units: 1}}, nil
 }
 
 func privateRateLimit(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	accountID string,
 	order bool,
@@ -50,7 +53,7 @@ func privateRateLimit(
 		key:   fmt.Sprintf("coinone:account:%s:%s:1second", accountID, group),
 		limit: limit, window: time.Second, header: header,
 	}
-	if err := limiter.SetRule(ratelimit.Rule{Key: value.key, Limit: value.limit, Window: value.window}); err != nil {
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{Key: value.key, Limit: value.limit, Window: value.window}); err != nil {
 		return rateLimit{}, nil, err
 	}
 	return value, []ratelimit.Charge{{Key: value.key, Units: 1}}, nil

@@ -16,7 +16,7 @@ func TestPrivateRateLimitChargesEndpointCost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ratelimit.New() error = %v", err)
 	}
-	charges, err := privateRateLimitCharges(limiter, "account-a", 500, 10*time.Second, 25)
+	charges, err := privateRateLimitCharges(context.Background(), limiter, "account-a", 500, 10*time.Second, 25)
 	if err != nil {
 		t.Fatalf("privateRateLimitCharges() error = %v", err)
 	}
@@ -37,7 +37,7 @@ func TestPublicRateLimitChargesAreSeparatedByRoute(t *testing.T) {
 		t.Fatalf("ratelimit.New() error = %v", err)
 	}
 	for _, routeID := range []transport.EgressRouteID{"route-a", "route-b"} {
-		charges, chargeErr := publicRateLimitCharges(limiter, routeID, 20)
+		charges, chargeErr := publicRateLimitCharges(context.Background(), limiter, routeID, 20)
 		if chargeErr != nil {
 			t.Fatalf("publicRateLimitCharges(%q) error = %v", routeID, chargeErr)
 		}

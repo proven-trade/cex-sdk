@@ -1,6 +1,7 @@
 package upbit
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -28,6 +29,7 @@ var (
 )
 
 func rateLimitCharges(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	accountID string,
@@ -41,7 +43,7 @@ func rateLimitCharges(
 		return nil, "", fmt.Errorf("Upbit rate group %q requires %s scope ID", group.name, scope)
 	}
 	key := rateLimitKey(scope, scopeID, group.name)
-	if err := limiter.SetRule(ratelimit.Rule{
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{
 		Key: key, Limit: group.perSecond, Window: time.Second,
 	}); err != nil {
 		return nil, "", err

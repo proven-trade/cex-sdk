@@ -1,6 +1,7 @@
 package cryptocom
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 )
 
 func publicRateLimit(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	method string,
@@ -20,7 +22,7 @@ func publicRateLimit(
 		return nil, fmt.Errorf("invalid Crypto.com public rate limit")
 	}
 	key := fmt.Sprintf("cryptocom:route:%s:public:%s:1second", routeID, method)
-	if err := limiter.SetRule(ratelimit.Rule{
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{
 		Key: key, Limit: requestsPerSecond, Window: time.Second,
 	}); err != nil {
 		return nil, err
@@ -29,6 +31,7 @@ func publicRateLimit(
 }
 
 func privateRateLimit(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	accountID string,
 	method string,
@@ -59,7 +62,7 @@ func privateRateLimit(
 		windowName = "1second"
 	}
 	key := fmt.Sprintf("cryptocom:account:%s:private:%s:%s", accountID, method, windowName)
-	if err := limiter.SetRule(ratelimit.Rule{Key: key, Limit: limit, Window: window}); err != nil {
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{Key: key, Limit: limit, Window: window}); err != nil {
 		return nil, err
 	}
 	return []ratelimit.Charge{{Key: key, Units: 1}}, nil

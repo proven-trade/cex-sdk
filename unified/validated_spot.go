@@ -28,10 +28,11 @@ type ValidatedSpot struct {
 }
 
 type marketRulesEntry struct {
-	ready   chan struct{}
-	expires time.Time
-	markets map[Market]MarketInfo
-	err     error
+	ready    chan struct{}
+	expires  time.Time
+	markets  map[Market]MarketInfo
+	err      error
+	canceled bool // The refresh owner's context ended; live waiters may refresh again.
 }
 
 var _ SpotClient = (*ValidatedSpot)(nil)
@@ -105,20 +106,31 @@ func (client *ValidatedSpot) InvalidateMarketRules() {
 }
 
 func (client *ValidatedSpot) marketRules(ctx context.Context, route transport.EgressRouteID, options []trade.RequestOption) (map[Market]MarketInfo, error) {
-	client.mu.Lock()
-	entry := client.rules[route]
-	if entry != nil && (entry.expires.IsZero() || time.Now().Before(entry.expires)) {
+	var entry *marketRulesEntry
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		client.mu.Lock()
+		entry = client.rules[route]
+		if entry == nil || (!entry.expires.IsZero() && !time.Now().Before(entry.expires)) {
+			entry = &marketRulesEntry{ready: make(chan struct{})}
+			client.rules[route] = entry
+			client.mu.Unlock()
+			break
+		}
 		client.mu.Unlock()
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-entry.ready:
+			if entry.canceled {
+				// Only retry metadata owned by a canceled caller, never submission.
+				continue
+			}
 			return entry.markets, entry.err
 		}
 	}
-	entry = &marketRulesEntry{ready: make(chan struct{})}
-	client.rules[route] = entry
-	client.mu.Unlock()
 
 	items, err := client.SpotClient.Markets(ctx, options...)
 	markets := make(map[Market]MarketInfo, len(items))
@@ -142,6 +154,7 @@ func (client *ValidatedSpot) marketRules(ctx context.Context, route transport.Eg
 	}
 	client.mu.Lock()
 	entry.markets, entry.err = markets, err
+	entry.canceled = err != nil && ctx.Err() != nil
 	entry.expires = time.Now().Add(client.config.CacheTTL)
 	if err != nil && client.rules[route] == entry {
 		delete(client.rules, route)

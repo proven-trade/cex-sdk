@@ -165,7 +165,13 @@ func (client *Client) executePublic(
 	if resolved.Timeout == 0 {
 		resolved.Timeout = client.requestTimeout
 	}
+	if ctx == nil {
+		return commonexchange.Response{}, fmt.Errorf("request context cannot be nil")
+	}
+	ctx, cancel := context.WithTimeout(ctx, resolved.Timeout)
+	defer cancel()
 	limit, charges, err := publicRateLimit(
+		ctx,
 		client.executor.Limiter(), resolved.EgressRouteID, endpoint,
 		client.publicRequestsPerSecond,
 	)
@@ -205,6 +211,11 @@ func (client *Client) executePrivate(
 	if resolved.Timeout == 0 {
 		resolved.Timeout = client.requestTimeout
 	}
+	if ctx == nil {
+		return commonexchange.Response{}, fmt.Errorf("request context cannot be nil")
+	}
+	ctx, cancel := context.WithTimeout(ctx, resolved.Timeout)
+	defer cancel()
 	if client.credentials == nil || client.credentialProvider == nil {
 		return commonexchange.Response{}, &trade.APIError{
 			Category: trade.ErrorAuthentication, Exchange: model.ExchangeHTX,
@@ -224,6 +235,7 @@ func (client *Client) executePrivate(
 		}
 	}
 	limit, charges, err := privateRateLimit(
+		ctx,
 		client.executor.Limiter(), client.credentials.AccountID, group, quota,
 	)
 	if err != nil {

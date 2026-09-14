@@ -40,6 +40,11 @@ func (client *Client) executePrivate(
 	if resolved.Timeout == 0 {
 		resolved.Timeout = client.requestTimeout
 	}
+	if ctx == nil {
+		return commonexchange.Response{}, "", fmt.Errorf("request context cannot be nil")
+	}
+	ctx, cancel := context.WithTimeout(ctx, resolved.Timeout)
+	defer cancel()
 	if client.credentials == nil || client.credentialProvider == nil {
 		return commonexchange.Response{}, "", &trade.APIError{
 			Category: trade.ErrorAuthentication, Exchange: model.ExchangeCryptoCom,
@@ -60,6 +65,7 @@ func (client *Client) executePrivate(
 	}
 	limitMethod := strings.TrimPrefix(method, "private/")
 	charges, err := privateRateLimit(
+		ctx,
 		client.executor.Limiter(), client.credentials.AccountID, limitMethod,
 		client.orderRequestsPer100Milliseconds,
 		client.orderDetailRequestsPer100Milliseconds,

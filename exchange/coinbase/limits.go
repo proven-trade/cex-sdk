@@ -1,6 +1,7 @@
 package coinbase
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 )
 
 func rateLimitCharges(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	accountID string,
@@ -16,7 +18,7 @@ func rateLimitCharges(
 	publicRequestsPerSecond, privateRequestsPerSecond int,
 ) ([]ratelimit.Charge, error) {
 	routeKey := fmt.Sprintf("coinbase:route:%s:all:1second", routeID)
-	if err := limiter.SetRule(ratelimit.Rule{
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{
 		Key: routeKey, Limit: publicRequestsPerSecond, Window: time.Second,
 	}); err != nil {
 		return nil, err
@@ -29,7 +31,7 @@ func rateLimitCharges(
 		return nil, fmt.Errorf("Coinbase private rate limit requires account ID")
 	}
 	accountKey := fmt.Sprintf("coinbase:account:%s:private:1second", accountID)
-	if err := limiter.SetRule(ratelimit.Rule{
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{
 		Key: accountKey, Limit: privateRequestsPerSecond, Window: time.Second,
 	}); err != nil {
 		return nil, err

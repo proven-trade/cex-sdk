@@ -31,6 +31,8 @@ if err != nil { return err }
 
 `ContextTimeoutEnabled: true`는 필수이며 생성 시 확인합니다. Redis 접속·인증·TLS는 주입하는 클라이언트에 설정합니다. SDK는 클라이언트를 닫지 않습니다. `MaxRetries: -1`은 불명확한 Redis 응답의 중복 차감을 줄이는 권장 설정입니다. Redis 요청을 재시도해 중복 차감이 발생하더라도 거래소 주문 자체를 재시도하지 않으며 quota를 보수적으로 소비합니다.
 
+native REST 클라이언트는 규칙 등록 전에 요청 deadline을 만들고 `SetRuleContext`에 전달합니다. `WithTimeout` 또는 클라이언트 기본 제한 시간은 Redis 등록·quota 대기·HTTP 전송이 함께 사용하며, 상위 context의 더 이른 deadline도 유지합니다. `OperationTimeout`은 각 Redis 호출의 추가 상한입니다. 요청 경로에서 직접 규칙을 등록할 때도 `limiter.SetRuleContext(ctx, rule)`을 사용합니다. 초기 설정용 `SetRule(rule)`은 background context를 사용합니다. 사용자 정의 `ratelimit.Backend`도 `SetRuleContext(context.Context, Rule) error`를 구현하고 전달받은 취소와 deadline을 존중해야 합니다.
+
 ## 공유 범위와 저장 계약
 
 - 같은 한도를 공유하는 프로세스는 같은 `Namespace`, 거래소 `AccountID`와 route ID를 사용합니다. 동일 공인 IP를 다른 route ID로 등록하면 기존 SDK의 route별 키가 다르므로 한도를 공유하지 않습니다.

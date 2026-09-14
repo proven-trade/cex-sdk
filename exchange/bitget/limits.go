@@ -1,6 +1,7 @@
 package bitget
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -27,13 +28,14 @@ func accountLimit(perSecond int) endpointLimit {
 }
 
 func rateLimitCharges(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	accountID, path string,
 	limit endpointLimit,
 ) ([]ratelimit.Charge, error) {
 	globalKey := fmt.Sprintf("bitget:route:%s:global:1minute", routeID)
-	if err := limiter.SetRule(ratelimit.Rule{
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{
 		Key: globalKey, Limit: globalRequestsPerMinute, Window: time.Minute,
 	}); err != nil {
 		return nil, err
@@ -47,7 +49,7 @@ func rateLimitCharges(
 		return nil, fmt.Errorf("Bitget endpoint rate limit requires %s scope ID", scope)
 	}
 	endpointKey := rateLimitEndpointKey(scope, scopeID, path)
-	if err := limiter.SetRule(ratelimit.Rule{
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{
 		Key: endpointKey, Limit: limit.perSecond, Window: time.Second,
 	}); err != nil {
 		return nil, err

@@ -114,11 +114,23 @@ func (backend *Backend) call(ctx context.Context, names []string, args ...any) (
 // SetRule preserves usage and cooldown when a rule is updated. A window change
 // blocks for a full new window because previously expired history is unavailable.
 func (backend *Backend) SetRule(rule ratelimit.Rule) error {
+	return backend.SetRuleContext(context.Background(), rule)
+}
+
+// SetRuleContext registers a rule within the caller's deadline. OperationTimeout
+// is an additional upper bound; it never extends the request budget.
+func (backend *Backend) SetRuleContext(ctx context.Context, rule ratelimit.Rule) error {
+	if ctx == nil {
+		return fmt.Errorf("limiter context cannot be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	rule.Key = strings.TrimSpace(rule.Key)
 	if rule.Key == "" || rule.Limit <= 0 || rule.Limit > maxUnits || rule.Window <= 0 || rule.Window > maxDuration {
 		return ratelimit.ErrInvalidRule
 	}
-	_, err := backend.call(context.Background(), []string{rule.Key}, "set", rule.Limit, durationMicros(rule.Window))
+	_, err := backend.call(ctx, []string{rule.Key}, "set", rule.Limit, durationMicros(rule.Window))
 	return err
 }
 

@@ -1,6 +1,7 @@
 package kraken
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -18,6 +19,7 @@ const (
 )
 
 func rateLimitCharges(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	accountID, pair string,
@@ -28,7 +30,7 @@ func rateLimitCharges(
 ) ([]ratelimit.Charge, error) {
 	if kind == limitPublic {
 		key := fmt.Sprintf("kraken:route:%s:public:1second", routeID)
-		if err := limiter.SetRule(ratelimit.Rule{
+		if err := limiter.SetRuleContext(ctx, ratelimit.Rule{
 			Key: key, Limit: publicRequestsPerSecond, Window: time.Second,
 		}); err != nil {
 			return nil, err
@@ -43,7 +45,7 @@ func rateLimitCharges(
 			pair = "unknown"
 		}
 		key := fmt.Sprintf("kraken:account:%s:trading:%s:1second", accountID, pair)
-		if err := limiter.SetRule(ratelimit.Rule{
+		if err := limiter.SetRuleContext(ctx, ratelimit.Rule{
 			Key: key, Limit: tradingRequestsPerSecond, Window: time.Second,
 		}); err != nil {
 			return nil, err
@@ -51,7 +53,7 @@ func rateLimitCharges(
 		return []ratelimit.Charge{{Key: key, Units: 1}}, nil
 	}
 	key := fmt.Sprintf("kraken:account:%s:private-counter", accountID)
-	if err := limiter.SetRule(ratelimit.Rule{
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{
 		Key: key, Limit: privateCounterLimit, Window: privateCounterWindow,
 	}); err != nil {
 		return nil, err

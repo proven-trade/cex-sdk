@@ -1,6 +1,7 @@
 package usdm
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -53,6 +54,7 @@ func (catalog *limitCatalog) update(rules []RateLimit) {
 }
 
 func (catalog *limitCatalog) charges(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	accountID string,
@@ -81,7 +83,7 @@ func (catalog *limitCatalog) charges(
 		if strings.Contains(rule.key, "::") {
 			return nil, fmt.Errorf("Binance USD-M rate limit scope ID is required")
 		}
-		if err := limiter.SetRule(ratelimit.Rule{Key: rule.key, Limit: rule.limit, Window: rule.window}); err != nil {
+		if err := limiter.SetRuleContext(ctx, ratelimit.Rule{Key: rule.key, Limit: rule.limit, Window: rule.window}); err != nil {
 			return nil, err
 		}
 		charges = append(charges, ratelimit.Charge{Key: rule.key, Units: rule.units})

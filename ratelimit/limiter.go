@@ -41,10 +41,11 @@ type Snapshot struct {
 
 // Backend는 limiter 상태 저장소의 원자적 계약이다. 분산 구현은 Wait에서
 // 모든 charge를 한 번의 원자적 연산으로 검사·차감하고 context 취소를
-// 존중해야 한다. SetRule, ObserveUsed, BlockFor와 Snapshot도 같은 공유
+// 존중해야 한다. SetRuleContext도 요청 deadline을 존중해야 한다.
+// ObserveUsed, BlockFor와 Snapshot도 같은 공유
 // namespace를 사용해야 여러 SDK 프로세스가 하나의 거래소 한도를 공유한다.
 type Backend interface {
-	SetRule(Rule) error
+	SetRuleContext(context.Context, Rule) error
 	Wait(context.Context, ...Charge) error
 	ObserveUsed(string, int) error
 	BlockFor([]string, time.Duration) error
@@ -79,11 +80,22 @@ func NewWithBackend(backend Backend, rules ...Rule) (*Limiter, error) {
 
 // SetRule은 규칙을 추가하거나 갱신한다.
 func (limiter *Limiter) SetRule(rule Rule) error {
+	return limiter.SetRuleContext(context.Background(), rule)
+}
+
+// SetRuleContext는 요청의 취소와 deadline 안에서 규칙을 추가하거나 갱신한다.
+func (limiter *Limiter) SetRuleContext(ctx context.Context, rule Rule) error {
+	if ctx == nil {
+		return fmt.Errorf("context cannot be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	rule.Key = strings.TrimSpace(rule.Key)
 	if rule.Key == "" || rule.Limit <= 0 || rule.Window <= 0 {
 		return fmt.Errorf("%w: key, positive limit, and positive window are required", ErrInvalidRule)
 	}
-	return limiter.backend.SetRule(rule)
+	return limiter.backend.SetRuleContext(ctx, rule)
 }
 
 // Wait는 모든 차감 규칙에 여유가 생길 때까지 기다린 뒤 한 번에 차감한다.
@@ -146,9 +158,12 @@ func newMemoryBackend() *memoryBackend {
 	return &memoryBackend{rules: make(map[string]Rule), buckets: make(map[string]*bucket)}
 }
 
-func (backend *memoryBackend) SetRule(rule Rule) error {
+func (backend *memoryBackend) SetRuleContext(ctx context.Context, rule Rule) error {
 	backend.mu.Lock()
 	defer backend.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	previous, exists := backend.rules[rule.Key]
 	backend.rules[rule.Key] = rule
 	if !exists || previous.Limit != rule.Limit || previous.Window != rule.Window {

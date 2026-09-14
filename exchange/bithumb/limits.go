@@ -1,6 +1,7 @@
 package bithumb
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -22,6 +23,7 @@ const (
 )
 
 func rateLimitCharges(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	group rateLimitGroup,
@@ -34,7 +36,7 @@ func rateLimitCharges(
 		return nil, fmt.Errorf("Bithumb rate limit group is required")
 	}
 	key := fmt.Sprintf("bithumb:route:%s:%s:1second", routeID, group)
-	if err := limiter.SetRule(ratelimit.Rule{Key: key, Limit: requestsPerSecond, Window: time.Second}); err != nil {
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{Key: key, Limit: requestsPerSecond, Window: time.Second}); err != nil {
 		return nil, err
 	}
 	return []ratelimit.Charge{{Key: key, Units: 1}}, nil

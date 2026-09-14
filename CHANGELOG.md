@@ -24,6 +24,8 @@
 
 ### Changed
 
+- Redis 규칙 등록부터 quota 대기와 HTTP 전송까지 같은 요청 deadline을 전달합니다. backend 계약은 `SetRuleContext`로 요청 취소와 제한 시간을 받습니다.
+- 마켓 규칙의 공유 조회를 시작한 호출자가 취소되면 다른 유효한 호출자는 메타데이터를 다시 조회하며 주문 제출은 재시도하지 않습니다.
 - 모듈·내부 import 경로를 `github.com/proven-trade/cex-sdk/v2`로 전환했습니다.
 - REST 관측 훅이 HTTP 오류와 거래소 envelope·주문 항목의 오류 분류를 기록합니다.
 - Gate.io·MEXC·HTX 공통 마켓 목록은 표현할 수 없는 비ASCII·괄호 등 지원 문법 밖의 심볼을 제외하고, Crypto.com은 외부시장 접미사가 붙은 상품을 제외합니다. native 목록은 보존합니다.

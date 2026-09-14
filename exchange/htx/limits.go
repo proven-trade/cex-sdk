@@ -1,6 +1,7 @@
 package htx
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -27,6 +28,7 @@ const (
 )
 
 func publicRateLimit(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	endpoint string,
@@ -40,7 +42,7 @@ func publicRateLimit(
 		key:   fmt.Sprintf("htx:route:%s:public:%s:1second", routeID, endpoint),
 		limit: requestsPerSecond, window: time.Second,
 	}
-	if err := limiter.SetRule(ratelimit.Rule{
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{
 		Key: value.key, Limit: value.limit, Window: value.window,
 	}); err != nil {
 		return rateLimit{}, nil, err
@@ -49,6 +51,7 @@ func publicRateLimit(
 }
 
 func privateRateLimit(
+	ctx context.Context,
 	limiter *ratelimit.Limiter,
 	accountID string,
 	group rateGroup,
@@ -61,7 +64,7 @@ func privateRateLimit(
 		key:   fmt.Sprintf("htx:account:%s:%s:2seconds", accountID, group),
 		limit: quota, window: 2 * time.Second,
 	}
-	if err := limiter.SetRule(ratelimit.Rule{
+	if err := limiter.SetRuleContext(ctx, ratelimit.Rule{
 		Key: value.key, Limit: value.limit, Window: value.window,
 	}); err != nil {
 		return rateLimit{}, nil, err

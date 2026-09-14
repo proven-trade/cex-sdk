@@ -1,6 +1,7 @@
 package bithumb
 
 import (
+	"context"
 	"testing"
 
 	"github.com/proven-trade/cex-sdk/v2/ratelimit"
@@ -13,7 +14,7 @@ func TestRateLimitsUseRouteAndAPICategoryScopes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ratelimit.New() error = %v", err)
 	}
-	charges, err := rateLimitCharges(limiter, "seoul-b", rateLimitOrderCreate, 140)
+	charges, err := rateLimitCharges(context.Background(), limiter, "seoul-b", rateLimitOrderCreate, 140)
 	if err != nil {
 		t.Fatalf("rateLimitCharges() error = %v", err)
 	}
@@ -25,7 +26,7 @@ func TestRateLimitsUseRouteAndAPICategoryScopes(t *testing.T) {
 		t.Fatalf("snapshot = %+v, error = %v", snapshot, err)
 	}
 
-	public, err := rateLimitCharges(limiter, "seoul-b", rateLimitPublicTicker, 150)
+	public, err := rateLimitCharges(context.Background(), limiter, "seoul-b", rateLimitPublicTicker, 150)
 	if err != nil || public[0].Key != "bithumb:route:seoul-b:public-ticker:1second" {
 		t.Fatalf("public charges = %+v, error = %v", public, err)
 	}
