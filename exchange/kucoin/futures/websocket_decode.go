@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	corestream "github.com/proven-trade/cex-sdk/stream"
+	corestream "github.com/proven-trade/cex-sdk/v2/stream"
 )
 
 type streamWireMessage struct {

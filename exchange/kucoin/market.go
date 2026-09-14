@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"net/url"
 
-	trade "github.com/proven-trade/cex-sdk"
-	commonexchange "github.com/proven-trade/cex-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	commonexchange "github.com/proven-trade/cex-sdk/v2/exchange"
 )
 
 // Symbols는 모든 KuCoin Spot 거래쌍과 주문 단위 규칙을 조회한다.

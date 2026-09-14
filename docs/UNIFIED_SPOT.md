@@ -1,5 +1,7 @@
 # 공통 Spot API
 
+v2의 선택적 route별 마켓 규칙 캐시와 주문 사전 검증은 [마이그레이션 가이드](MIGRATION_V2.md#선택적-주문-사전-검증)를 참고합니다. `NewValidatedSpot`으로 기존 공통 어댑터를 감싸면 `PlaceOrder`가 `MarketInfo.ValidateOrder`를 실행한 뒤 주문을 제출합니다.
+
 ## 목적
 
 `unified.SpotClient`는 Binance, Bitget, Upbit, Bybit, OKX, Coinbase, Kraken, Bithumb, Coinone, Korbit, KuCoin, Gate.io, MEXC, HTX와 Crypto.com의 공통 현물 기능을 한 인터페이스로 제공합니다. 거래소 고유 기능과 원본 필드는 각 `exchange/<거래소>` native 클라이언트를 사용합니다.

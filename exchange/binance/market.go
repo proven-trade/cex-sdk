@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"net/url"
 
-	trade "github.com/proven-trade/cex-sdk"
-	commonexchange "github.com/proven-trade/cex-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	commonexchange "github.com/proven-trade/cex-sdk/v2/exchange"
 )
 
 // OrderBook은 지정한 상품의 현재 호가를 조회한다.

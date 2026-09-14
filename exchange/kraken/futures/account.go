@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"sort"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/credential"
-	commonexchange "github.com/proven-trade/cex-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/credential"
+	commonexchange "github.com/proven-trade/cex-sdk/v2/exchange"
 )
 
 // Accounts는 계정의 cash, margin, multi-collateral 지갑을 조회한다.

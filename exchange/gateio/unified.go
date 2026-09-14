@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/model"
-	"github.com/proven-trade/cex-sdk/unified"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/model"
+	"github.com/proven-trade/cex-sdk/v2/unified"
 )
 
 const (
@@ -51,20 +51,24 @@ func (adapter *UnifiedSpot) Markets(
 	if err != nil {
 		return nil, err
 	}
-	markets := make([]unified.MarketInfo, len(native))
-	for index, pair := range native {
+	markets := make([]unified.MarketInfo, 0, len(native))
+	for _, pair := range native {
+		// The unified contract currently represents ASCII asset codes only.
+		if strings.IndexFunc(pair.ID, func(r rune) bool { return r > 127 }) >= 0 {
+			continue
+		}
 		market := unified.Market{Base: pair.Base, Quote: pair.Quote}
 		if err := market.Validate(); err != nil || gateIOSymbol(market) != pair.ID {
 			return nil, fmt.Errorf("invalid Gate.io Spot currency pair %q", pair.ID)
 		}
-		markets[index] = unified.MarketInfo{
+		markets = append(markets, unified.MarketInfo{
 			Exchange: model.ExchangeGateIO, Market: market, NativeMarket: pair.ID,
 			Status:              fromGateIOTradeStatus(pair.TradeStatus),
 			PriceIncrement:      unified.DecimalIncrement(pair.PricePrecision),
 			QuantityIncrement:   unified.DecimalIncrement(pair.AmountPrecision),
 			MinimumBaseQuantity: gateIOOptionalString(pair.MinimumBaseAmount),
 			MinimumQuoteAmount:  gateIOOptionalString(pair.MinimumQuoteAmount), Raw: pair.Raw,
-		}
+		})
 	}
 	return markets, nil
 }

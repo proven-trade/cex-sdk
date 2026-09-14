@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"unicode/utf8"
 
-	corestream "github.com/proven-trade/cex-sdk/stream"
+	corestream "github.com/proven-trade/cex-sdk/v2/stream"
 	"google.golang.org/protobuf/encoding/protowire"
 )
 

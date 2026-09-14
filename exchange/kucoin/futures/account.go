@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"net/url"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/credential"
-	commonexchange "github.com/proven-trade/cex-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/credential"
+	commonexchange "github.com/proven-trade/cex-sdk/v2/exchange"
 )
 
 // AccountOverview는 결제 통화별 Futures 자산과 증거금 요약을 조회한다.

@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"net/url"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/credential"
-	commonexchange "github.com/proven-trade/cex-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/credential"
+	commonexchange "github.com/proven-trade/cex-sdk/v2/exchange"
 )
 
 // Account는 USDⓈ-M Futures 계정 V3 자산과 포지션을 조회한다.

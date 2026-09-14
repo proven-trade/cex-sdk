@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/url"
 
-	trade "github.com/proven-trade/cex-sdk"
-	commonexchange "github.com/proven-trade/cex-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	commonexchange "github.com/proven-trade/cex-sdk/v2/exchange"
 )
 
 // Instruments는 현재 상장된 Futures 상품 규칙을 조회한다.

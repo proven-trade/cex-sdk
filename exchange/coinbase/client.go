@@ -14,11 +14,11 @@ import (
 	"sync"
 	"time"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/credential"
-	commonexchange "github.com/proven-trade/cex-sdk/exchange"
-	"github.com/proven-trade/cex-sdk/model"
-	"github.com/proven-trade/cex-sdk/transport"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/credential"
+	commonexchange "github.com/proven-trade/cex-sdk/v2/exchange"
+	"github.com/proven-trade/cex-sdk/v2/model"
+	"github.com/proven-trade/cex-sdk/v2/transport"
 )
 
 const (
@@ -153,7 +153,8 @@ func (client *Client) executePublic(
 		return commonexchange.Response{}, err
 	}
 	return client.executor.Execute(ctx, commonexchange.Execution{
-		Exchange: model.ExchangeCoinbase, EgressRouteID: resolved.EgressRouteID,
+		ClassifyResponse: client.classifyResponse,
+		Exchange:         model.ExchangeCoinbase, EgressRouteID: resolved.EgressRouteID,
 		Timeout: resolved.Timeout, Charges: charges, Operation: commonexchange.OperationRead,
 		Build: func(context.Context) (*http.Request, error) {
 			request, requestErr := client.newRequest(method, path, query, nil)
@@ -207,7 +208,8 @@ func (client *Client) executePrivate(
 	var material credential.Material
 	defer material.Destroy()
 	return client.executor.Execute(ctx, commonexchange.Execution{
-		Exchange: model.ExchangeCoinbase, AccountID: client.credentials.AccountID,
+		ClassifyResponse: client.classifyResponse,
+		Exchange:         model.ExchangeCoinbase, AccountID: client.credentials.AccountID,
 		EgressRouteID: resolved.EgressRouteID, Timeout: resolved.Timeout,
 		Charges: charges, Operation: operation,
 		Build: func(buildContext context.Context) (*http.Request, error) {
@@ -417,4 +419,40 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// classifyResponse reuses native error semantics without changing execution behavior.
+func (client *Client) classifyResponse(response commonexchange.Response, operation commonexchange.OperationKind) error {
+	var envelope struct {
+		Success       *bool `json:"success"`
+		ErrorResponse struct {
+			Error         string `json:"error"`
+			Message       string `json:"message"`
+			Details       string `json:"error_details"`
+			NewReason     string `json:"new_order_failure_reason"`
+			PreviewReason string `json:"preview_failure_reason"`
+		} `json:"error_response"`
+		Results []struct {
+			Success       bool   `json:"success"`
+			FailureReason string `json:"failure_reason"`
+		} `json:"results"`
+	}
+	if err := client.decodeSuccess(response, operation, &envelope); err != nil {
+		return err
+	}
+	if envelope.Success != nil && !*envelope.Success {
+		code := firstNonEmpty(envelope.ErrorResponse.NewReason, envelope.ErrorResponse.PreviewReason, envelope.ErrorResponse.Error)
+		message := firstNonEmpty(envelope.ErrorResponse.Message, envelope.ErrorResponse.Details)
+		category, retryable := classifyError(response.StatusCode, code, message, operation)
+		return client.apiError(response, category, retryable, code, message, nil)
+	}
+	if operation == commonexchange.OperationMutation {
+		for _, item := range envelope.Results {
+			if !item.Success {
+				category, retryable := classifyError(response.StatusCode, item.FailureReason, "", operation)
+				return client.apiError(response, category, retryable, item.FailureReason, "", nil)
+			}
+		}
+	}
+	return nil
 }

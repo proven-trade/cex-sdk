@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/model"
-	"github.com/proven-trade/cex-sdk/ratelimit"
-	"github.com/proven-trade/cex-sdk/transport"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/model"
+	"github.com/proven-trade/cex-sdk/v2/ratelimit"
+	"github.com/proven-trade/cex-sdk/v2/transport"
 )
 
 const defaultMaxResponseBodyBytes int64 = 32 << 20
@@ -42,16 +42,21 @@ const (
 // BuildRequest는 limiter 대기가 끝난 뒤 최종 직렬화와 서명을 수행한다.
 type BuildRequest func(context.Context) (*http.Request, error)
 
+// ResponseClassifier interprets an exchange envelope for observation only.
+// It must be side-effect free. It does not change retries or returned responses.
+type ResponseClassifier func(Response, OperationKind) error
+
 // Execution은 HTTP 요청 한 건의 공통 실행 정보를 담는다.
 type Execution struct {
-	Exchange      model.ExchangeID
-	EndpointID    string
-	AccountID     string
-	EgressRouteID transport.EgressRouteID
-	Timeout       time.Duration
-	Charges       []ratelimit.Charge
-	Operation     OperationKind
-	Build         BuildRequest
+	Exchange         model.ExchangeID
+	EndpointID       string
+	AccountID        string
+	EgressRouteID    transport.EgressRouteID
+	Timeout          time.Duration
+	Charges          []ratelimit.Charge
+	Operation        OperationKind
+	Build            BuildRequest
+	ClassifyResponse ResponseClassifier
 }
 
 // ReadRetryPolicy는 읽기 전용 REST 요청에만 적용되는 제한적 재시도 정책이다.
@@ -264,8 +269,37 @@ func (executor *Executor) executeAttempt(
 		executor.applyRetryAfter(response.Header, execution.Charges)
 	}
 	retry := execution.Operation == OperationRead && retryableReadStatus(response.StatusCode)
-	executor.observe(execution, endpointID, attempt, started, response.StatusCode, nil)
+	if executor.observer != nil {
+		var responseErr error
+		if execution.ClassifyResponse != nil {
+			responseErr = execution.ClassifyResponse(response, execution.Operation)
+		}
+		if responseErr == nil {
+			responseErr = execution.httpStatusError(response.StatusCode)
+		}
+		executor.observe(execution, endpointID, attempt, started, response.StatusCode, responseErr)
+	}
 	return response, retry, nil
+}
+
+func (execution Execution) httpStatusError(status int) error {
+	if status >= 200 && status < 300 {
+		return nil
+	}
+	category := trade.ErrorExchangeUnavailable
+	switch {
+	case status == http.StatusTooManyRequests || status == http.StatusTeapot:
+		category = trade.ErrorRateLimited
+	case status == http.StatusUnauthorized:
+		category = trade.ErrorAuthentication
+	case status == http.StatusForbidden:
+		category = trade.ErrorAuthorization
+	case execution.Operation == OperationMutation && (status >= 500 || status == http.StatusRequestTimeout):
+		category = trade.ErrorUnknownExecutionState
+	case status >= 400 && status < 500:
+		category = trade.ErrorValidation
+	}
+	return &trade.APIError{Category: category, Exchange: execution.Exchange, HTTPStatus: status}
 }
 
 func (policy ReadRetryPolicy) validate() error {
@@ -336,6 +370,8 @@ func (executor *Executor) observe(
 	var apiError *trade.APIError
 	if errors.As(err, &apiError) {
 		category = apiError.Category
+	} else if err != nil {
+		category = trade.ErrorInternal
 	}
 	executor.observer.ObserveExecution(ExecutionObservation{
 		Exchange: execution.Exchange, EndpointID: endpointID,

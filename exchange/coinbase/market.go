@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	trade "github.com/proven-trade/cex-sdk"
-	commonexchange "github.com/proven-trade/cex-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	commonexchange "github.com/proven-trade/cex-sdk/v2/exchange"
 )
 
 const publicPrefix = "/api/v3/brokerage"

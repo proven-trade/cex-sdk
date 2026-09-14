@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/credential"
-	commonexchange "github.com/proven-trade/cex-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/credential"
+	commonexchange "github.com/proven-trade/cex-sdk/v2/exchange"
 )
 
 // Accounts는 전체 또는 지정 통화의 Gate.io Spot 잔고를 조회한다.

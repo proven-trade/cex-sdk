@@ -13,11 +13,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/credential"
-	commonexchange "github.com/proven-trade/cex-sdk/exchange"
-	"github.com/proven-trade/cex-sdk/model"
-	"github.com/proven-trade/cex-sdk/transport"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/credential"
+	commonexchange "github.com/proven-trade/cex-sdk/v2/exchange"
+	"github.com/proven-trade/cex-sdk/v2/model"
+	"github.com/proven-trade/cex-sdk/v2/transport"
 )
 
 const (
@@ -154,7 +154,8 @@ func (client *Client) executePublic(
 		return commonexchange.Response{}, err
 	}
 	return client.executor.Execute(ctx, commonexchange.Execution{
-		Exchange: model.ExchangeKraken, EgressRouteID: resolved.EgressRouteID,
+		ClassifyResponse: client.classifyResponse,
+		Exchange:         model.ExchangeKraken, EgressRouteID: resolved.EgressRouteID,
 		Timeout: resolved.Timeout, Charges: charges, Operation: commonexchange.OperationRead,
 		Build: func(context.Context) (*http.Request, error) {
 			return client.newRequest(http.MethodGet, path, query)
@@ -204,7 +205,8 @@ func (client *Client) executePrivate(
 	var material credential.Material
 	defer material.Destroy()
 	return client.executor.Execute(ctx, commonexchange.Execution{
-		Exchange: model.ExchangeKraken, AccountID: client.credentials.AccountID,
+		ClassifyResponse: client.classifyResponse,
+		Exchange:         model.ExchangeKraken, AccountID: client.credentials.AccountID,
 		EgressRouteID: resolved.EgressRouteID, Timeout: resolved.Timeout,
 		Charges: charges, Operation: operation,
 		Build: func(buildContext context.Context) (*http.Request, error) {
@@ -431,4 +433,26 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// classifyResponse reuses native error semantics without changing execution behavior.
+func (client *Client) classifyResponse(response commonexchange.Response, operation commonexchange.OperationKind) error {
+	var envelope struct {
+		Send *struct {
+			Status string `json:"status"`
+		} `json:"sendStatus"`
+		Cancel *struct {
+			Status string `json:"status"`
+		} `json:"cancelStatus"`
+	}
+	if err := client.decodeSuccess(response, operation, &envelope); err != nil {
+		return err
+	}
+	if envelope.Send != nil && envelope.Send.Status != "placed" {
+		return client.decodeError(response, envelope.Send.Status, envelope.Send.Status, operation, nil)
+	}
+	if envelope.Cancel != nil && envelope.Cancel.Status != "cancelled" {
+		return client.decodeError(response, envelope.Cancel.Status, envelope.Cancel.Status, operation, nil)
+	}
+	return nil
 }

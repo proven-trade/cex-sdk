@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	trade "github.com/proven-trade/cex-sdk"
-	commonexchange "github.com/proven-trade/cex-sdk/exchange"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	commonexchange "github.com/proven-trade/cex-sdk/v2/exchange"
 )
 
 // ServerTime은 코빗 서버의 현재 Unix millisecond 시각을 조회한다.

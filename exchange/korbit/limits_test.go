@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/proven-trade/cex-sdk/ratelimit"
+	"github.com/proven-trade/cex-sdk/v2/ratelimit"
 )
 
 func TestRateLimitScopesGroupsAndHeader(t *testing.T) {

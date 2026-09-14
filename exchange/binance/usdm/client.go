@@ -13,12 +13,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/credential"
-	commonexchange "github.com/proven-trade/cex-sdk/exchange"
-	"github.com/proven-trade/cex-sdk/exchange/binance"
-	"github.com/proven-trade/cex-sdk/model"
-	"github.com/proven-trade/cex-sdk/transport"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/credential"
+	commonexchange "github.com/proven-trade/cex-sdk/v2/exchange"
+	"github.com/proven-trade/cex-sdk/v2/exchange/binance"
+	"github.com/proven-trade/cex-sdk/v2/model"
+	"github.com/proven-trade/cex-sdk/v2/transport"
 )
 
 const (
@@ -120,7 +120,8 @@ func (client *Client) executePublic(ctx context.Context, path string, values url
 	if err != nil {
 		return commonexchange.Response{}, err
 	}
-	response, err := client.executor.Execute(ctx, commonexchange.Execution{Exchange: model.ExchangeBinance, EgressRouteID: resolved.EgressRouteID, Timeout: resolved.Timeout, Charges: charges, Operation: commonexchange.OperationRead, Build: func(context.Context) (*http.Request, error) { return client.newRequest(http.MethodGet, path, values) }})
+	response, err := client.executor.Execute(ctx, commonexchange.Execution{
+		ClassifyResponse: client.classifyResponse, Exchange: model.ExchangeBinance, EgressRouteID: resolved.EgressRouteID, Timeout: resolved.Timeout, Charges: charges, Operation: commonexchange.OperationRead, Build: func(context.Context) (*http.Request, error) { return client.newRequest(http.MethodGet, path, values) }})
 	if err == nil {
 		observeHeaders(client.executor.Limiter(), resolved.EgressRouteID, "", response.Header)
 	}
@@ -148,30 +149,31 @@ func (client *Client) executeSigned(ctx context.Context, method, path string, va
 	baseValues := cloneValues(values)
 	var material credential.Material
 	defer material.Destroy()
-	response, err := client.executor.Execute(ctx, commonexchange.Execution{Exchange: model.ExchangeBinance, AccountID: client.credentials.AccountID, EgressRouteID: resolved.EgressRouteID, Timeout: resolved.Timeout, Charges: charges, Operation: operation, Build: func(buildContext context.Context) (*http.Request, error) {
-		resolvedMaterial, resolveErr := client.credentialProvider.Resolve(buildContext, client.credentials.SecretRef)
-		material = resolvedMaterial
-		if resolveErr != nil {
-			return nil, &trade.APIError{Category: trade.ErrorAuthentication, Exchange: model.ExchangeBinance, AccountID: client.credentials.AccountID, Cause: resolveErr}
-		}
-		if len(material.APIKey) == 0 || len(material.SecretKey) == 0 {
-			return nil, &trade.APIError{Category: trade.ErrorAuthentication, Exchange: model.ExchangeBinance, AccountID: client.credentials.AccountID, Cause: errors.New("Binance API key and HMAC secret are required")}
-		}
-		finalValues := cloneValues(baseValues)
-		finalValues.Set("recvWindow", strconv.FormatInt(client.receiveWindow.Milliseconds(), 10))
-		finalValues.Set("timestamp", strconv.FormatInt(client.now().UnixMilli()+client.clockOffsetMillis.Load(), 10))
-		signature, signErr := binance.SignHMACSHA256(material.SecretKey, []byte(finalValues.Encode()))
-		if signErr != nil {
-			return nil, signErr
-		}
-		finalValues.Set("signature", signature)
-		request, requestErr := client.newRequest(method, path, finalValues)
-		if requestErr != nil {
-			return nil, requestErr
-		}
-		request.Header.Set("X-MBX-APIKEY", string(material.APIKey))
-		return request, nil
-	}})
+	response, err := client.executor.Execute(ctx, commonexchange.Execution{
+		ClassifyResponse: client.classifyResponse, Exchange: model.ExchangeBinance, AccountID: client.credentials.AccountID, EgressRouteID: resolved.EgressRouteID, Timeout: resolved.Timeout, Charges: charges, Operation: operation, Build: func(buildContext context.Context) (*http.Request, error) {
+			resolvedMaterial, resolveErr := client.credentialProvider.Resolve(buildContext, client.credentials.SecretRef)
+			material = resolvedMaterial
+			if resolveErr != nil {
+				return nil, &trade.APIError{Category: trade.ErrorAuthentication, Exchange: model.ExchangeBinance, AccountID: client.credentials.AccountID, Cause: resolveErr}
+			}
+			if len(material.APIKey) == 0 || len(material.SecretKey) == 0 {
+				return nil, &trade.APIError{Category: trade.ErrorAuthentication, Exchange: model.ExchangeBinance, AccountID: client.credentials.AccountID, Cause: errors.New("Binance API key and HMAC secret are required")}
+			}
+			finalValues := cloneValues(baseValues)
+			finalValues.Set("recvWindow", strconv.FormatInt(client.receiveWindow.Milliseconds(), 10))
+			finalValues.Set("timestamp", strconv.FormatInt(client.now().UnixMilli()+client.clockOffsetMillis.Load(), 10))
+			signature, signErr := binance.SignHMACSHA256(material.SecretKey, []byte(finalValues.Encode()))
+			if signErr != nil {
+				return nil, signErr
+			}
+			finalValues.Set("signature", signature)
+			request, requestErr := client.newRequest(method, path, finalValues)
+			if requestErr != nil {
+				return nil, requestErr
+			}
+			request.Header.Set("X-MBX-APIKEY", string(material.APIKey))
+			return request, nil
+		}})
 	if err == nil {
 		observeHeaders(client.executor.Limiter(), resolved.EgressRouteID, client.credentials.AccountID, response.Header)
 	}
@@ -277,3 +279,15 @@ func cloneValues(values url.Values) url.Values {
 	return cloned
 }
 func cloneBytes(value []byte) []byte { return append([]byte(nil), value...) }
+
+// classifyResponse reuses native error semantics without changing execution behavior.
+func (client *Client) classifyResponse(response commonexchange.Response, operation commonexchange.OperationKind) error {
+	var payload struct {
+		Code int `json:"code"`
+	}
+	if json.Unmarshal(response.Body, &payload) == nil && payload.Code < 0 {
+		return client.decodeError(response, operation, nil)
+	}
+	var raw json.RawMessage
+	return client.decode(response, operation, &raw)
+}

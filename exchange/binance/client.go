@@ -12,11 +12,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/credential"
-	commonexchange "github.com/proven-trade/cex-sdk/exchange"
-	"github.com/proven-trade/cex-sdk/model"
-	"github.com/proven-trade/cex-sdk/transport"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/credential"
+	commonexchange "github.com/proven-trade/cex-sdk/v2/exchange"
+	"github.com/proven-trade/cex-sdk/v2/model"
+	"github.com/proven-trade/cex-sdk/v2/transport"
 )
 
 const (
@@ -405,11 +405,12 @@ func (client *Client) executePublicWithBuildHook(
 		return commonexchange.Response{}, "", err
 	}
 	response, err := client.executor.Execute(ctx, commonexchange.Execution{
-		Exchange:      model.ExchangeBinance,
-		EgressRouteID: resolved.EgressRouteID,
-		Timeout:       resolved.Timeout,
-		Charges:       charges,
-		Operation:     commonexchange.OperationRead,
+		ClassifyResponse: client.classifyResponse,
+		Exchange:         model.ExchangeBinance,
+		EgressRouteID:    resolved.EgressRouteID,
+		Timeout:          resolved.Timeout,
+		Charges:          charges,
+		Operation:        commonexchange.OperationRead,
 		Build: func(context.Context) (*http.Request, error) {
 			if beforeBuild != nil {
 				beforeBuild()
@@ -473,12 +474,13 @@ func (client *Client) executeSigned(
 	var material credential.Material
 	defer material.Destroy()
 	response, err := client.executor.Execute(ctx, commonexchange.Execution{
-		Exchange:      model.ExchangeBinance,
-		AccountID:     client.credentials.AccountID,
-		EgressRouteID: resolved.EgressRouteID,
-		Timeout:       resolved.Timeout,
-		Charges:       charges,
-		Operation:     operation,
+		ClassifyResponse: client.classifyResponse,
+		Exchange:         model.ExchangeBinance,
+		AccountID:        client.credentials.AccountID,
+		EgressRouteID:    resolved.EgressRouteID,
+		Timeout:          resolved.Timeout,
+		Charges:          charges,
+		Operation:        operation,
 		Build: func(buildContext context.Context) (*http.Request, error) {
 			resolvedMaterial, resolveErr := client.credentialProvider.Resolve(
 				buildContext,
@@ -688,4 +690,21 @@ func firstHeader(headers map[string][]string, name string) string {
 func parsePositiveInt(value string) (int, bool) {
 	parsed, err := strconv.Atoi(strings.TrimSpace(value))
 	return parsed, err == nil && parsed >= 0
+}
+
+// classifyResponse reuses native error semantics without changing execution behavior.
+func (client *Client) classifyResponse(response commonexchange.Response, operation commonexchange.OperationKind) error {
+	var payload struct {
+		Code int `json:"code"`
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return client.decodeError(response, operation, nil)
+	}
+	if !json.Valid(response.Body) {
+		return client.decodeError(response, operation, fmt.Errorf("invalid JSON response"))
+	}
+	if json.Unmarshal(response.Body, &payload) == nil && payload.Code < 0 {
+		return client.decodeError(response, operation, nil)
+	}
+	return nil
 }

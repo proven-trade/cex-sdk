@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/proven-trade/cex-sdk/transport"
+	"github.com/proven-trade/cex-sdk/v2/transport"
 )
 
 func TestWebSocketConnectorUsesBoundRouteAndExchangesMessages(t *testing.T) {

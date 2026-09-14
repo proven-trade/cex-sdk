@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/model"
-	"github.com/proven-trade/cex-sdk/unified"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/model"
+	"github.com/proven-trade/cex-sdk/v2/unified"
 )
 
 const (
@@ -50,20 +50,28 @@ func (adapter *UnifiedSpot) Markets(
 	if err != nil {
 		return nil, err
 	}
-	markets := make([]unified.MarketInfo, len(native.Symbols))
-	for index, symbol := range native.Symbols {
+	markets := make([]unified.MarketInfo, 0, len(native.Symbols))
+	for _, symbol := range native.Symbols {
+		// The unified contract uses the native adapter's supported symbol syntax.
+		if symbol.Symbol != "" && !symbolPattern.MatchString(symbol.Symbol) {
+			continue
+		}
 		market, parseErr := marketFromHTXSymbol(symbol)
 		if parseErr != nil {
+			// Retired symbols can keep their old name after an asset rename.
+			if symbol.State == "offline" && symbol.BaseCurrency != "" && symbol.QuoteCurrency != "" {
+				continue
+			}
 			return nil, parseErr
 		}
-		markets[index] = unified.MarketInfo{
+		markets = append(markets, unified.MarketInfo{
 			Exchange: model.ExchangeHTX, Market: market, NativeMarket: symbol.Symbol,
 			Status:              fromHTXMarketStatus(symbol),
 			PriceIncrement:      unified.DecimalIncrement(symbol.PricePrecision),
 			QuantityIncrement:   unified.DecimalIncrement(symbol.AmountPrecision),
-			MinimumBaseQuantity: symbol.MinimumOrderAmount.String(),
-			MinimumQuoteAmount:  symbol.MinimumOrderValue.String(), Raw: symbol.Raw,
-		}
+			MinimumBaseQuantity: plainHTXDecimal(symbol.MinimumOrderAmount),
+			MinimumQuoteAmount:  plainHTXDecimal(symbol.MinimumOrderValue), Raw: symbol.Raw,
+		})
 	}
 	return markets, nil
 }
@@ -84,7 +92,7 @@ func (adapter *UnifiedSpot) Ticker(
 	}
 	return unified.Ticker{
 		Exchange: model.ExchangeHTX, Market: request.Market,
-		NativeMarket: nativeMarket, Price: native.Close.String(), Raw: native.Raw,
+		NativeMarket: nativeMarket, Price: plainHTXDecimal(native.Close), Raw: native.Raw,
 	}, nil
 }
 
@@ -158,7 +166,7 @@ func (adapter *UnifiedSpot) RecentTrades(
 				tradeID = string(item.ID)
 			}
 			trades = append(trades, unified.PublicTrade{
-				ID: tradeID, Price: item.Price.String(), Quantity: item.Amount.String(),
+				ID: tradeID, Price: plainHTXDecimal(item.Price), Quantity: plainHTXDecimal(item.Amount),
 				Side: side, Timestamp: item.Timestamp,
 			})
 			if len(trades) == limit {
@@ -200,8 +208,8 @@ func (adapter *UnifiedSpot) Candles(
 			return nil, fmt.Errorf("invalid HTX candle timestamp %d", item.OpenTime)
 		}
 		candles[index] = unified.Candle{
-			StartTime: item.OpenTime * 1000, Open: item.Open.String(), High: item.High.String(),
-			Low: item.Low.String(), Close: item.Close.String(), Volume: item.BaseVolume.String(),
+			StartTime: item.OpenTime * 1000, Open: plainHTXDecimal(item.Open), High: plainHTXDecimal(item.High),
+			Low: plainHTXDecimal(item.Low), Close: plainHTXDecimal(item.Close), Volume: plainHTXDecimal(item.BaseVolume),
 		}
 	}
 	if request.Interval == unified.Candle3Minutes {
@@ -251,9 +259,9 @@ func (adapter *UnifiedSpot) Balances(
 		current := &balances[position.index]
 		switch balance.Type {
 		case "trade":
-			current.Available, err = unified.AddDecimals(current.Available, balance.Balance.String())
+			current.Available, err = unified.AddDecimals(current.Available, plainHTXDecimal(balance.Balance))
 		case "frozen", "lock", "bank":
-			current.Locked, err = unified.AddDecimals(current.Locked, balance.Balance.String())
+			current.Locked, err = unified.AddDecimals(current.Locked, plainHTXDecimal(balance.Balance))
 		}
 		if err != nil {
 			return nil, fmt.Errorf("map HTX %s balance: %w", asset, err)
@@ -468,7 +476,7 @@ func fromHTXBookLevels(native []BookLevel, limit int) []unified.BookLevel {
 	levels := make([]unified.BookLevel, len(native))
 	for index, level := range native {
 		levels[index] = unified.BookLevel{
-			Price: level.Price.String(), Quantity: level.Quantity.String(),
+			Price: plainHTXDecimal(level.Price), Quantity: plainHTXDecimal(level.Quantity),
 		}
 	}
 	return levels
@@ -535,16 +543,16 @@ func fromHTXOrder(native Order, market unified.Market) (unified.Order, error) {
 	if err != nil {
 		return unified.Order{}, err
 	}
-	quantity, quoteAmount := native.Amount.String(), ""
+	quantity, quoteAmount := plainHTXDecimal(native.Amount), ""
 	if orderType == unified.OrderTypeMarket && side == unified.SideBuy {
-		quantity, quoteAmount = "", native.Amount.String()
+		quantity, quoteAmount = "", plainHTXDecimal(native.Amount)
 	}
 	return unified.Order{
 		Exchange: model.ExchangeHTX, ID: string(native.ID), ClientOrderID: native.ClientOrderID,
 		Market: market, NativeMarket: native.Symbol, Side: side, Type: orderType,
-		Status: fromHTXOrderStatus(native.State), Price: native.Price.String(),
+		Status: fromHTXOrderStatus(native.State), Price: plainHTXDecimal(native.Price),
 		Quantity: quantity, QuoteAmount: quoteAmount,
-		ExecutedQuantity: native.FilledAmount.String(), Raw: native.Raw,
+		ExecutedQuantity: plainHTXDecimal(native.FilledAmount), Raw: native.Raw,
 	}, nil
 }
 

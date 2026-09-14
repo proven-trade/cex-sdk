@@ -11,8 +11,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/model"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/model"
 )
 
 var instrumentNamePattern = regexp.MustCompile(`^[A-Z0-9]{1,20}_[A-Z0-9]{1,20}$`)

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/proven-trade/cex-sdk/ratelimit"
-	"github.com/proven-trade/cex-sdk/transport"
+	"github.com/proven-trade/cex-sdk/v2/ratelimit"
+	"github.com/proven-trade/cex-sdk/v2/transport"
 )
 
 func publicRateLimit(

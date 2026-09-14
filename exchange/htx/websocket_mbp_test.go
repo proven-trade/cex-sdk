@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	trade "github.com/proven-trade/cex-sdk"
-	corestream "github.com/proven-trade/cex-sdk/stream"
-	"github.com/proven-trade/cex-sdk/transport"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	corestream "github.com/proven-trade/cex-sdk/v2/stream"
+	"github.com/proven-trade/cex-sdk/v2/transport"
 )
 
 type htxMBPRequest struct {

@@ -7,6 +7,26 @@ import (
 	"time"
 )
 
+func TestCanceledAndOverflowingChargesDoNotConsumeQuota(t *testing.T) {
+	limiter, err := New(Rule{Key: "shared", Limit: 10, Window: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := limiter.Wait(ctx, Charge{Key: "shared", Units: 1}); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	maxInt := int(^uint(0) >> 1)
+	if err := limiter.Wait(context.Background(), Charge{Key: "shared", Units: maxInt}, Charge{Key: "shared", Units: 1}); !errors.Is(err, ErrInvalidRule) {
+		t.Fatal(err)
+	}
+	snapshot, err := limiter.Snapshot("shared")
+	if err != nil || snapshot.Used != 0 {
+		t.Fatalf("unexpected charge: %+v %v", snapshot, err)
+	}
+}
+
 func TestWaitCombinesDuplicateCharges(t *testing.T) {
 	t.Parallel()
 

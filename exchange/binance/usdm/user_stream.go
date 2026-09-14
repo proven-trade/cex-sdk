@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"net/http"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/credential"
-	commonexchange "github.com/proven-trade/cex-sdk/exchange"
-	"github.com/proven-trade/cex-sdk/model"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/credential"
+	commonexchange "github.com/proven-trade/cex-sdk/v2/exchange"
+	"github.com/proven-trade/cex-sdk/v2/model"
 )
 
 const userDataStreamPath = "/fapi/v1/listenKey"
@@ -112,7 +112,8 @@ func (client *Client) executeAPIKey(
 	var material credential.Material
 	defer material.Destroy()
 	response, err := client.executor.Execute(ctx, commonexchange.Execution{
-		Exchange: model.ExchangeBinance, AccountID: client.credentials.AccountID,
+		ClassifyResponse: client.classifyResponse,
+		Exchange:         model.ExchangeBinance, AccountID: client.credentials.AccountID,
 		EgressRouteID: resolved.EgressRouteID, Timeout: resolved.Timeout,
 		Charges: charges, Operation: commonexchange.OperationRead,
 		Build: func(buildContext context.Context) (*http.Request, error) {

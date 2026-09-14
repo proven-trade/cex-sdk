@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/proven-trade/cex-sdk/transport"
+	"github.com/proven-trade/cex-sdk/v2/transport"
 )
 
 var (

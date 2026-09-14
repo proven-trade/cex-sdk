@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/proven-trade/cex-sdk/model"
+	"github.com/proven-trade/cex-sdk/v2/model"
 )
 
 func TestAPIErrorSupportsCommonAndOriginalErrors(t *testing.T) {

@@ -12,11 +12,11 @@ import (
 	"time"
 	"unicode"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/credential"
-	"github.com/proven-trade/cex-sdk/model"
-	corestream "github.com/proven-trade/cex-sdk/stream"
-	"github.com/proven-trade/cex-sdk/transport"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/credential"
+	"github.com/proven-trade/cex-sdk/v2/model"
+	corestream "github.com/proven-trade/cex-sdk/v2/stream"
+	"github.com/proven-trade/cex-sdk/v2/transport"
 )
 
 const (

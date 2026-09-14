@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	trade "github.com/proven-trade/cex-sdk"
+	trade "github.com/proven-trade/cex-sdk/v2"
 )
 
 var decimalPattern = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+)?$`)

@@ -8,6 +8,9 @@
 
 ## 문서
 
+- [v2 마이그레이션](docs/MIGRATION_V2.md)
+- [Redis 공유 요청 제한기](docs/REDIS_LIMITER.md)
+- [REST 오류 관측](docs/OBSERVABILITY.md)
 - [프로젝트 기획서](docs/PROJECT_PLAN.md)
 - [공급자 중립 송신 경로 설계](docs/EGRESS_ROUTES.md)
 - [거래소 지원 매트릭스](docs/SUPPORT_MATRIX.md)

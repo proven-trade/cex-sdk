@@ -6,7 +6,7 @@ import (
 	"net/url"
 
 	"github.com/coder/websocket"
-	"github.com/proven-trade/cex-sdk/transport"
+	"github.com/proven-trade/cex-sdk/v2/transport"
 )
 
 const defaultReadLimit int64 = 4 << 20

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	corestream "github.com/proven-trade/cex-sdk/stream"
+	corestream "github.com/proven-trade/cex-sdk/v2/stream"
 )
 
 type marketWireMessage struct {

@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/model"
-	"github.com/proven-trade/cex-sdk/unified"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/model"
+	"github.com/proven-trade/cex-sdk/v2/unified"
 )
 
 const (
@@ -52,7 +52,7 @@ func (adapter *UnifiedSpot) Markets(
 	}
 	markets := make([]unified.MarketInfo, 0, len(native.Items))
 	for _, instrument := range native.Items {
-		if instrument.InstrumentType != cryptoComSpotInstrumentType {
+		if instrument.InstrumentType != cryptoComSpotInstrumentType || strings.Contains(instrument.Symbol, "@") {
 			continue
 		}
 		market, parseErr := marketFromCryptoComInstrument(instrument)

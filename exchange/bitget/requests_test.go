@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	trade "github.com/proven-trade/cex-sdk"
+	trade "github.com/proven-trade/cex-sdk/v2"
 )
 
 func TestPlaceOrderRequestValidation(t *testing.T) {

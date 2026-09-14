@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"time"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/model"
-	"github.com/proven-trade/cex-sdk/unified"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/model"
+	"github.com/proven-trade/cex-sdk/v2/unified"
 )
 
 const (
@@ -49,8 +49,12 @@ func (adapter *UnifiedSpot) Markets(
 	if err != nil {
 		return nil, err
 	}
-	markets := make([]unified.MarketInfo, len(info.Symbols))
-	for index, symbol := range info.Symbols {
+	markets := make([]unified.MarketInfo, 0, len(info.Symbols))
+	for _, symbol := range info.Symbols {
+		// The unified contract uses the native adapter's supported symbol syntax.
+		if symbol.Symbol != "" && !symbolPattern.MatchString(symbol.Symbol) {
+			continue
+		}
 		market, parseErr := marketFromMEXCSymbol(symbol)
 		if parseErr != nil {
 			return nil, parseErr
@@ -62,12 +66,12 @@ func (adapter *UnifiedSpot) Markets(
 		if quantityIncrement == "" {
 			quantityIncrement = symbol.BaseSizePrecision
 		}
-		markets[index] = unified.MarketInfo{
+		markets = append(markets, unified.MarketInfo{
 			Exchange: model.ExchangeMEXC, Market: market, NativeMarket: symbol.Symbol,
 			Status:         fromMEXCMarketStatus(symbol),
 			PriceIncrement: priceIncrement, QuantityIncrement: quantityIncrement,
 			MinimumBaseQuantity: minimumBase, MinimumQuoteAmount: minimumQuote, Raw: symbol.Raw,
-		}
+		})
 	}
 	return markets, nil
 }

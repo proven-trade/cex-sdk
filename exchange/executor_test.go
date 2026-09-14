@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/model"
-	"github.com/proven-trade/cex-sdk/ratelimit"
-	"github.com/proven-trade/cex-sdk/transport"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/model"
+	"github.com/proven-trade/cex-sdk/v2/ratelimit"
+	"github.com/proven-trade/cex-sdk/v2/transport"
 )
 
 type senderFunc func(context.Context, transport.EgressRouteID, *http.Request) (*http.Response, error)

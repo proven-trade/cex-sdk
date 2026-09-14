@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 var decimalNumberPattern = regexp.MustCompile(`^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$`)
@@ -162,6 +163,23 @@ const (
 	TradeSideBuy  TradeSide = "BUY"
 	TradeSideSell TradeSide = "SELL"
 )
+
+// UnmarshalJSON accepts the lowercase REST spelling and uppercase stream spelling.
+func (side *TradeSide) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	switch strings.ToUpper(value) {
+	case string(TradeSideBuy):
+		*side = TradeSideBuy
+	case string(TradeSideSell):
+		*side = TradeSideSell
+	default:
+		return fmt.Errorf("invalid Crypto.com trade side %q", value)
+	}
+	return nil
+}
 
 // Trade는 Crypto.com Spot 공개 체결 한 건이다.
 type Trade struct {

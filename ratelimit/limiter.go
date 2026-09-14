@@ -91,6 +91,9 @@ func (limiter *Limiter) Wait(ctx context.Context, charges ...Charge) error {
 	if ctx == nil {
 		return fmt.Errorf("context cannot be nil")
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	normalized, err := normalizeCharges(charges)
 	if err != nil {
 		return err
@@ -156,6 +159,9 @@ func (backend *memoryBackend) SetRule(rule Rule) error {
 
 func (backend *memoryBackend) Wait(ctx context.Context, charges ...Charge) error {
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		now := time.Now()
 		waitUntil, err := backend.tryAcquire(now, charges)
 		if err != nil {
@@ -315,6 +321,9 @@ func normalizeCharges(charges []Charge) ([]Charge, error) {
 		charge.Key = strings.TrimSpace(charge.Key)
 		if charge.Key == "" || charge.Units <= 0 {
 			return nil, fmt.Errorf("charge key and positive units are required")
+		}
+		if charge.Units > int(^uint(0)>>1)-combined[charge.Key] {
+			return nil, fmt.Errorf("%w: combined charge overflows", ErrInvalidRule)
 		}
 		combined[charge.Key] += charge.Units
 	}

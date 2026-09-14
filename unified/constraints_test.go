@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	trade "github.com/proven-trade/cex-sdk"
+	trade "github.com/proven-trade/cex-sdk/v2"
 )
 
 func TestMarketInfoValidateOrderUsesExactDecimals(t *testing.T) {

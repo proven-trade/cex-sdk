@@ -3,8 +3,8 @@ package unified
 import (
 	"context"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/model"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/model"
 )
 
 // SpotClient는 지원 거래소가 공통으로 제공하는 Spot 거래 기능이다.

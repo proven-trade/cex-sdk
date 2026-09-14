@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	trade "github.com/proven-trade/cex-sdk"
-	"github.com/proven-trade/cex-sdk/model"
-	"github.com/proven-trade/cex-sdk/unified"
+	trade "github.com/proven-trade/cex-sdk/v2"
+	"github.com/proven-trade/cex-sdk/v2/model"
+	"github.com/proven-trade/cex-sdk/v2/unified"
 )
 
 // UnifiedSpot은 Bithumb native 클라이언트를 공통 Spot 계약으로 변환한다.
@@ -101,17 +101,26 @@ func (adapter *UnifiedSpot) OrderBook(
 	if request.Limit > 0 && request.Limit < depth {
 		depth = request.Limit
 	}
-	bids := make([]unified.BookLevel, depth)
-	asks := make([]unified.BookLevel, depth)
-	for index, level := range native[0].OrderBook[:depth] {
-		bids[index] = unified.BookLevel{Price: string(level.BidPrice), Quantity: string(level.BidSize)}
-		asks[index] = unified.BookLevel{Price: string(level.AskPrice), Quantity: string(level.AskSize)}
+	bids := make([]unified.BookLevel, 0, depth)
+	asks := make([]unified.BookLevel, 0, depth)
+	for _, level := range native[0].OrderBook {
+		if len(bids) < depth && !bithumbBookSizeZero(level.BidSize) {
+			bids = append(bids, unified.BookLevel{Price: string(level.BidPrice), Quantity: string(level.BidSize)})
+		}
+		if len(asks) < depth && !bithumbBookSizeZero(level.AskSize) {
+			asks = append(asks, unified.BookLevel{Price: string(level.AskPrice), Quantity: string(level.AskSize)})
+		}
 	}
 	return unified.OrderBook{
 		Exchange: model.ExchangeBithumb, Market: request.Market,
 		NativeMarket: native[0].Market, Bids: bids, Asks: asks,
 		Timestamp: native[0].Timestamp, Raw: native[0].Raw,
 	}, nil
+}
+
+func bithumbBookSizeZero(size Decimal) bool {
+	value := string(size)
+	return value == "0" || (strings.HasPrefix(value, "0.") && len(value) > 2 && strings.Trim(value[2:], "0") == "")
 }
 
 // RecentTrades는 Bithumb 공개 최근 체결을 공통 형식으로 조회한다.
