@@ -1,0 +1,1168 @@
+{
+  "schemaVersion": 1,
+  "scope": "local_public_spot_read",
+  "testedRevision": "092ec4f8195c0d4c7bc854d3d6f817800107124d",
+  "environment": "darwin/arm64",
+  "goVersion": "go version go1.27.1 darwin/arm64",
+  "networkIdentityRedacted": true,
+  "productionVerified": false,
+  "privateReadVerified": false,
+  "passed": true,
+  "reports": [
+    {
+      "version": 2,
+      "kind": "spot_read",
+      "exchange": "binance",
+      "product": "spot",
+      "market": {
+        "base": "BTC",
+        "quote": "USDT"
+      },
+      "egressRouteId": "local-en0",
+      "privateRead": false,
+      "startedAt": "2026-09-14T13:14:04.876266Z",
+      "completedAt": "2026-09-14T13:14:05.632337Z",
+      "passed": true,
+      "checks": [
+        {
+          "name": "egress_ip",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:04.876266Z",
+          "completedAt": "2026-09-14T13:14:05.196496Z",
+          "durationMillis": 320,
+          "evidence": {}
+        },
+        {
+          "name": "markets",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.196497Z",
+          "completedAt": "2026-09-14T13:14:05.462203Z",
+          "durationMillis": 265,
+          "evidence": {
+            "count": 3659,
+            "nativeMarket": "BTCUSDT"
+          }
+        },
+        {
+          "name": "ticker",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.462204Z",
+          "completedAt": "2026-09-14T13:14:05.505544Z",
+          "durationMillis": 43,
+          "evidence": {
+            "nativeMarket": "BTCUSDT"
+          }
+        },
+        {
+          "name": "order_book",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.505546Z",
+          "completedAt": "2026-09-14T13:14:05.548758Z",
+          "durationMillis": 43,
+          "evidence": {
+            "count": 10,
+            "nativeMarket": "BTCUSDT"
+          }
+        },
+        {
+          "name": "recent_trades",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.548758Z",
+          "completedAt": "2026-09-14T13:14:05.59032Z",
+          "durationMillis": 41,
+          "evidence": {
+            "count": 5
+          }
+        },
+        {
+          "name": "candles",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.590321Z",
+          "completedAt": "2026-09-14T13:14:05.632337Z",
+          "durationMillis": 42,
+          "evidence": {
+            "count": 5
+          }
+        }
+      ]
+    },
+    {
+      "version": 2,
+      "kind": "spot_read",
+      "exchange": "bitget",
+      "product": "spot",
+      "market": {
+        "base": "BTC",
+        "quote": "USDT"
+      },
+      "egressRouteId": "local-en0",
+      "privateRead": false,
+      "startedAt": "2026-09-14T13:14:04.876151Z",
+      "completedAt": "2026-09-14T13:14:05.563248Z",
+      "passed": true,
+      "checks": [
+        {
+          "name": "egress_ip",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:04.876151Z",
+          "completedAt": "2026-09-14T13:14:05.196016Z",
+          "durationMillis": 319,
+          "evidence": {}
+        },
+        {
+          "name": "markets",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.196019Z",
+          "completedAt": "2026-09-14T13:14:05.316068Z",
+          "durationMillis": 120,
+          "evidence": {
+            "count": 1761,
+            "nativeMarket": "BTCUSDT"
+          }
+        },
+        {
+          "name": "ticker",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.316069Z",
+          "completedAt": "2026-09-14T13:14:05.375596Z",
+          "durationMillis": 59,
+          "evidence": {
+            "nativeMarket": "BTCUSDT"
+          }
+        },
+        {
+          "name": "order_book",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.375597Z",
+          "completedAt": "2026-09-14T13:14:05.426821Z",
+          "durationMillis": 51,
+          "evidence": {
+            "count": 10,
+            "nativeMarket": "BTCUSDT"
+          }
+        },
+        {
+          "name": "recent_trades",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.426821Z",
+          "completedAt": "2026-09-14T13:14:05.483749Z",
+          "durationMillis": 56,
+          "evidence": {
+            "count": 5
+          }
+        },
+        {
+          "name": "candles",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.483751Z",
+          "completedAt": "2026-09-14T13:14:05.563247Z",
+          "durationMillis": 79,
+          "evidence": {
+            "count": 5
+          }
+        }
+      ]
+    },
+    {
+      "version": 2,
+      "kind": "spot_read",
+      "exchange": "upbit",
+      "product": "spot",
+      "market": {
+        "base": "BTC",
+        "quote": "KRW"
+      },
+      "egressRouteId": "local-en0",
+      "privateRead": false,
+      "startedAt": "2026-09-14T13:14:04.876233Z",
+      "completedAt": "2026-09-14T13:14:05.310936Z",
+      "passed": true,
+      "checks": [
+        {
+          "name": "egress_ip",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:04.876233Z",
+          "completedAt": "2026-09-14T13:14:05.192444Z",
+          "durationMillis": 316,
+          "evidence": {}
+        },
+        {
+          "name": "markets",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.192451Z",
+          "completedAt": "2026-09-14T13:14:05.253169Z",
+          "durationMillis": 60,
+          "evidence": {
+            "count": 849,
+            "nativeMarket": "KRW-BTC"
+          }
+        },
+        {
+          "name": "ticker",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.253169Z",
+          "completedAt": "2026-09-14T13:14:05.263363Z",
+          "durationMillis": 10,
+          "evidence": {
+            "nativeMarket": "KRW-BTC"
+          }
+        },
+        {
+          "name": "order_book",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.263364Z",
+          "completedAt": "2026-09-14T13:14:05.277142Z",
+          "durationMillis": 13,
+          "evidence": {
+            "count": 10,
+            "nativeMarket": "KRW-BTC"
+          }
+        },
+        {
+          "name": "recent_trades",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.277143Z",
+          "completedAt": "2026-09-14T13:14:05.29463Z",
+          "durationMillis": 17,
+          "evidence": {
+            "count": 5
+          }
+        },
+        {
+          "name": "candles",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.294632Z",
+          "completedAt": "2026-09-14T13:14:05.310935Z",
+          "durationMillis": 16,
+          "evidence": {
+            "count": 5
+          }
+        }
+      ]
+    },
+    {
+      "version": 2,
+      "kind": "spot_read",
+      "exchange": "bybit",
+      "product": "spot",
+      "market": {
+        "base": "BTC",
+        "quote": "USDT"
+      },
+      "egressRouteId": "local-en0",
+      "privateRead": false,
+      "startedAt": "2026-09-14T13:14:05.320935Z",
+      "completedAt": "2026-09-14T13:14:06.617369Z",
+      "passed": true,
+      "checks": [
+        {
+          "name": "egress_ip",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.320936Z",
+          "completedAt": "2026-09-14T13:14:05.627446Z",
+          "durationMillis": 306,
+          "evidence": {}
+        },
+        {
+          "name": "markets",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.627447Z",
+          "completedAt": "2026-09-14T13:14:06.155305Z",
+          "durationMillis": 527,
+          "evidence": {
+            "count": 538,
+            "nativeMarket": "BTCUSDT"
+          }
+        },
+        {
+          "name": "ticker",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.155307Z",
+          "completedAt": "2026-09-14T13:14:06.231158Z",
+          "durationMillis": 75,
+          "evidence": {
+            "nativeMarket": "BTCUSDT"
+          }
+        },
+        {
+          "name": "order_book",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.231159Z",
+          "completedAt": "2026-09-14T13:14:06.463889Z",
+          "durationMillis": 232,
+          "evidence": {
+            "count": 10,
+            "nativeMarket": "BTCUSDT"
+          }
+        },
+        {
+          "name": "recent_trades",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.46389Z",
+          "completedAt": "2026-09-14T13:14:06.540707Z",
+          "durationMillis": 76,
+          "evidence": {
+            "count": 5
+          }
+        },
+        {
+          "name": "candles",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.54071Z",
+          "completedAt": "2026-09-14T13:14:06.617367Z",
+          "durationMillis": 76,
+          "evidence": {
+            "count": 5
+          }
+        }
+      ]
+    },
+    {
+      "version": 2,
+      "kind": "spot_read",
+      "exchange": "okx",
+      "product": "spot",
+      "market": {
+        "base": "BTC",
+        "quote": "USDT"
+      },
+      "egressRouteId": "local-en0",
+      "privateRead": false,
+      "startedAt": "2026-09-14T13:14:05.57297Z",
+      "completedAt": "2026-09-14T13:14:06.372009Z",
+      "passed": true,
+      "checks": [
+        {
+          "name": "egress_ip",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.57297Z",
+          "completedAt": "2026-09-14T13:14:05.88417Z",
+          "durationMillis": 311,
+          "evidence": {}
+        },
+        {
+          "name": "markets",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.884175Z",
+          "completedAt": "2026-09-14T13:14:06.095312Z",
+          "durationMillis": 211,
+          "evidence": {
+            "count": 1416,
+            "nativeMarket": "BTC-USDT"
+          }
+        },
+        {
+          "name": "ticker",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.095325Z",
+          "completedAt": "2026-09-14T13:14:06.167713Z",
+          "durationMillis": 72,
+          "evidence": {
+            "nativeMarket": "BTC-USDT"
+          }
+        },
+        {
+          "name": "order_book",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.167714Z",
+          "completedAt": "2026-09-14T13:14:06.251706Z",
+          "durationMillis": 83,
+          "evidence": {
+            "count": 10,
+            "nativeMarket": "BTC-USDT"
+          }
+        },
+        {
+          "name": "recent_trades",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.251707Z",
+          "completedAt": "2026-09-14T13:14:06.313042Z",
+          "durationMillis": 61,
+          "evidence": {
+            "count": 5
+          }
+        },
+        {
+          "name": "candles",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.313045Z",
+          "completedAt": "2026-09-14T13:14:06.372006Z",
+          "durationMillis": 58,
+          "evidence": {
+            "count": 5
+          }
+        }
+      ]
+    },
+    {
+      "version": 2,
+      "kind": "spot_read",
+      "exchange": "coinbase",
+      "product": "spot",
+      "market": {
+        "base": "BTC",
+        "quote": "USD"
+      },
+      "egressRouteId": "local-en0",
+      "privateRead": false,
+      "startedAt": "2026-09-14T13:14:05.643283Z",
+      "completedAt": "2026-09-14T13:14:07.164458Z",
+      "passed": true,
+      "checks": [
+        {
+          "name": "egress_ip",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.643283Z",
+          "completedAt": "2026-09-14T13:14:05.94973Z",
+          "durationMillis": 306,
+          "evidence": {}
+        },
+        {
+          "name": "markets",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:05.949735Z",
+          "completedAt": "2026-09-14T13:14:06.236442Z",
+          "durationMillis": 286,
+          "evidence": {
+            "count": 931,
+            "nativeMarket": "BTC-USD"
+          }
+        },
+        {
+          "name": "ticker",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.236442Z",
+          "completedAt": "2026-09-14T13:14:06.459Z",
+          "durationMillis": 222,
+          "evidence": {
+            "nativeMarket": "BTC-USD"
+          }
+        },
+        {
+          "name": "order_book",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.45901Z",
+          "completedAt": "2026-09-14T13:14:06.670722Z",
+          "durationMillis": 211,
+          "evidence": {
+            "count": 10,
+            "nativeMarket": "BTC-USD"
+          }
+        },
+        {
+          "name": "recent_trades",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.670723Z",
+          "completedAt": "2026-09-14T13:14:06.916973Z",
+          "durationMillis": 246,
+          "evidence": {
+            "count": 5
+          }
+        },
+        {
+          "name": "candles",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.916976Z",
+          "completedAt": "2026-09-14T13:14:07.164457Z",
+          "durationMillis": 247,
+          "evidence": {
+            "count": 4
+          }
+        }
+      ]
+    },
+    {
+      "version": 2,
+      "kind": "spot_read",
+      "exchange": "kraken",
+      "product": "spot",
+      "market": {
+        "base": "BTC",
+        "quote": "USD"
+      },
+      "egressRouteId": "local-en0",
+      "privateRead": false,
+      "startedAt": "2026-09-14T13:14:06.39099Z",
+      "completedAt": "2026-09-14T13:14:10.95577Z",
+      "passed": true,
+      "checks": [
+        {
+          "name": "egress_ip",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.390991Z",
+          "completedAt": "2026-09-14T13:14:06.69434Z",
+          "durationMillis": 303,
+          "evidence": {}
+        },
+        {
+          "name": "markets",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.694342Z",
+          "completedAt": "2026-09-14T13:14:06.981117Z",
+          "durationMillis": 286,
+          "evidence": {
+            "count": 1449,
+            "nativeMarket": "XBTUSD"
+          }
+        },
+        {
+          "name": "ticker",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.98112Z",
+          "completedAt": "2026-09-14T13:14:07.714602Z",
+          "durationMillis": 733,
+          "evidence": {
+            "nativeMarket": "XXBTZUSD"
+          }
+        },
+        {
+          "name": "order_book",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.714608Z",
+          "completedAt": "2026-09-14T13:14:08.95513Z",
+          "durationMillis": 1240,
+          "evidence": {
+            "count": 10,
+            "nativeMarket": "XXBTZUSD"
+          }
+        },
+        {
+          "name": "recent_trades",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.955133Z",
+          "completedAt": "2026-09-14T13:14:09.944294Z",
+          "durationMillis": 989,
+          "evidence": {
+            "count": 5
+          }
+        },
+        {
+          "name": "candles",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:09.944295Z",
+          "completedAt": "2026-09-14T13:14:10.955767Z",
+          "durationMillis": 1011,
+          "evidence": {
+            "count": 5
+          }
+        }
+      ]
+    },
+    {
+      "version": 2,
+      "kind": "spot_read",
+      "exchange": "bithumb",
+      "product": "spot",
+      "market": {
+        "base": "BTC",
+        "quote": "KRW"
+      },
+      "egressRouteId": "local-en0",
+      "privateRead": false,
+      "startedAt": "2026-09-14T13:14:06.635512Z",
+      "completedAt": "2026-09-14T13:14:07.043869Z",
+      "passed": true,
+      "checks": [
+        {
+          "name": "egress_ip",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.635513Z",
+          "completedAt": "2026-09-14T13:14:06.931934Z",
+          "durationMillis": 296,
+          "evidence": {}
+        },
+        {
+          "name": "markets",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.931938Z",
+          "completedAt": "2026-09-14T13:14:06.98259Z",
+          "durationMillis": 50,
+          "evidence": {
+            "count": 492,
+            "nativeMarket": "KRW-BTC"
+          }
+        },
+        {
+          "name": "ticker",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.982591Z",
+          "completedAt": "2026-09-14T13:14:06.995078Z",
+          "durationMillis": 12,
+          "evidence": {
+            "nativeMarket": "KRW-BTC"
+          }
+        },
+        {
+          "name": "order_book",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:06.995082Z",
+          "completedAt": "2026-09-14T13:14:07.00837Z",
+          "durationMillis": 13,
+          "evidence": {
+            "count": 10,
+            "nativeMarket": "KRW-BTC"
+          }
+        },
+        {
+          "name": "recent_trades",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.008371Z",
+          "completedAt": "2026-09-14T13:14:07.031478Z",
+          "durationMillis": 23,
+          "evidence": {
+            "count": 5
+          }
+        },
+        {
+          "name": "candles",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.031479Z",
+          "completedAt": "2026-09-14T13:14:07.043869Z",
+          "durationMillis": 12,
+          "evidence": {
+            "count": 5
+          }
+        }
+      ]
+    },
+    {
+      "version": 2,
+      "kind": "spot_read",
+      "exchange": "coinone",
+      "product": "spot",
+      "market": {
+        "base": "BTC",
+        "quote": "KRW"
+      },
+      "egressRouteId": "local-en0",
+      "privateRead": false,
+      "startedAt": "2026-09-14T13:14:07.058451Z",
+      "completedAt": "2026-09-14T13:14:07.656393Z",
+      "passed": true,
+      "checks": [
+        {
+          "name": "egress_ip",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.058452Z",
+          "completedAt": "2026-09-14T13:14:07.364688Z",
+          "durationMillis": 306,
+          "evidence": {}
+        },
+        {
+          "name": "markets",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.364692Z",
+          "completedAt": "2026-09-14T13:14:07.565713Z",
+          "durationMillis": 201,
+          "evidence": {
+            "count": 363,
+            "nativeMarket": "KRW-BTC"
+          }
+        },
+        {
+          "name": "ticker",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.565715Z",
+          "completedAt": "2026-09-14T13:14:07.585849Z",
+          "durationMillis": 20,
+          "evidence": {
+            "nativeMarket": "KRW-BTC"
+          }
+        },
+        {
+          "name": "order_book",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.585853Z",
+          "completedAt": "2026-09-14T13:14:07.609716Z",
+          "durationMillis": 23,
+          "evidence": {
+            "count": 10,
+            "nativeMarket": "KRW-BTC"
+          }
+        },
+        {
+          "name": "recent_trades",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.609717Z",
+          "completedAt": "2026-09-14T13:14:07.63181Z",
+          "durationMillis": 22,
+          "evidence": {
+            "count": 5
+          }
+        },
+        {
+          "name": "candles",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.631811Z",
+          "completedAt": "2026-09-14T13:14:07.656393Z",
+          "durationMillis": 24,
+          "evidence": {
+            "count": 5
+          }
+        }
+      ]
+    },
+    {
+      "version": 2,
+      "kind": "spot_read",
+      "exchange": "korbit",
+      "product": "spot",
+      "market": {
+        "base": "BTC",
+        "quote": "KRW"
+      },
+      "egressRouteId": "local-en0",
+      "privateRead": false,
+      "startedAt": "2026-09-14T13:14:07.179595Z",
+      "completedAt": "2026-09-14T13:14:07.700256Z",
+      "passed": true,
+      "checks": [
+        {
+          "name": "egress_ip",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.179595Z",
+          "completedAt": "2026-09-14T13:14:07.501966Z",
+          "durationMillis": 322,
+          "evidence": {}
+        },
+        {
+          "name": "markets",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.50197Z",
+          "completedAt": "2026-09-14T13:14:07.58639Z",
+          "durationMillis": 84,
+          "evidence": {
+            "count": 227,
+            "nativeMarket": "btc_krw"
+          }
+        },
+        {
+          "name": "ticker",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.586391Z",
+          "completedAt": "2026-09-14T13:14:07.612344Z",
+          "durationMillis": 25,
+          "evidence": {
+            "nativeMarket": "btc_krw"
+          }
+        },
+        {
+          "name": "order_book",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.612349Z",
+          "completedAt": "2026-09-14T13:14:07.63826Z",
+          "durationMillis": 25,
+          "evidence": {
+            "count": 10,
+            "nativeMarket": "btc_krw"
+          }
+        },
+        {
+          "name": "recent_trades",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.63826Z",
+          "completedAt": "2026-09-14T13:14:07.666393Z",
+          "durationMillis": 28,
+          "evidence": {
+            "count": 5
+          }
+        },
+        {
+          "name": "candles",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.666396Z",
+          "completedAt": "2026-09-14T13:14:07.700255Z",
+          "durationMillis": 33,
+          "evidence": {
+            "count": 5
+          }
+        }
+      ]
+    },
+    {
+      "version": 2,
+      "kind": "spot_read",
+      "exchange": "kucoin",
+      "product": "spot",
+      "market": {
+        "base": "BTC",
+        "quote": "USDT"
+      },
+      "egressRouteId": "local-en0",
+      "privateRead": false,
+      "startedAt": "2026-09-14T13:14:07.669906Z",
+      "completedAt": "2026-09-14T13:14:08.363644Z",
+      "passed": true,
+      "checks": [
+        {
+          "name": "egress_ip",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.669907Z",
+          "completedAt": "2026-09-14T13:14:07.983346Z",
+          "durationMillis": 313,
+          "evidence": {}
+        },
+        {
+          "name": "markets",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.983349Z",
+          "completedAt": "2026-09-14T13:14:08.130352Z",
+          "durationMillis": 147,
+          "evidence": {
+            "count": 987,
+            "nativeMarket": "BTC-USDT"
+          }
+        },
+        {
+          "name": "ticker",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.130355Z",
+          "completedAt": "2026-09-14T13:14:08.180701Z",
+          "durationMillis": 50,
+          "evidence": {
+            "nativeMarket": "BTC-USDT"
+          }
+        },
+        {
+          "name": "order_book",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.180706Z",
+          "completedAt": "2026-09-14T13:14:08.253434Z",
+          "durationMillis": 72,
+          "evidence": {
+            "count": 10,
+            "nativeMarket": "BTC-USDT"
+          }
+        },
+        {
+          "name": "recent_trades",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.253436Z",
+          "completedAt": "2026-09-14T13:14:08.307915Z",
+          "durationMillis": 54,
+          "evidence": {
+            "count": 5
+          }
+        },
+        {
+          "name": "candles",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.307917Z",
+          "completedAt": "2026-09-14T13:14:08.363644Z",
+          "durationMillis": 55,
+          "evidence": {
+            "count": 5
+          }
+        }
+      ]
+    },
+    {
+      "version": 2,
+      "kind": "spot_read",
+      "exchange": "gateio",
+      "product": "spot",
+      "market": {
+        "base": "BTC",
+        "quote": "USDT"
+      },
+      "egressRouteId": "local-en0",
+      "privateRead": false,
+      "startedAt": "2026-09-14T13:14:07.712806Z",
+      "completedAt": "2026-09-14T13:14:08.53479Z",
+      "passed": true,
+      "checks": [
+        {
+          "name": "egress_ip",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:07.712807Z",
+          "completedAt": "2026-09-14T13:14:08.007274Z",
+          "durationMillis": 294,
+          "evidence": {}
+        },
+        {
+          "name": "markets",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.007276Z",
+          "completedAt": "2026-09-14T13:14:08.322657Z",
+          "durationMillis": 315,
+          "evidence": {
+            "count": 2232,
+            "nativeMarket": "BTC_USDT"
+          }
+        },
+        {
+          "name": "ticker",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.322659Z",
+          "completedAt": "2026-09-14T13:14:08.398959Z",
+          "durationMillis": 76,
+          "evidence": {
+            "nativeMarket": "BTC_USDT"
+          }
+        },
+        {
+          "name": "order_book",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.398962Z",
+          "completedAt": "2026-09-14T13:14:08.439559Z",
+          "durationMillis": 40,
+          "evidence": {
+            "count": 10,
+            "nativeMarket": "BTC_USDT"
+          }
+        },
+        {
+          "name": "recent_trades",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.439561Z",
+          "completedAt": "2026-09-14T13:14:08.479304Z",
+          "durationMillis": 39,
+          "evidence": {
+            "count": 5
+          }
+        },
+        {
+          "name": "candles",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.479307Z",
+          "completedAt": "2026-09-14T13:14:08.534788Z",
+          "durationMillis": 55,
+          "evidence": {
+            "count": 5
+          }
+        }
+      ]
+    },
+    {
+      "version": 2,
+      "kind": "spot_read",
+      "exchange": "mexc",
+      "product": "spot",
+      "market": {
+        "base": "BTC",
+        "quote": "USDT"
+      },
+      "egressRouteId": "local-en0",
+      "privateRead": false,
+      "startedAt": "2026-09-14T13:14:08.374879Z",
+      "completedAt": "2026-09-14T13:14:09.078291Z",
+      "passed": true,
+      "checks": [
+        {
+          "name": "egress_ip",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.374879Z",
+          "completedAt": "2026-09-14T13:14:08.674712Z",
+          "durationMillis": 299,
+          "evidence": {}
+        },
+        {
+          "name": "markets",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.674717Z",
+          "completedAt": "2026-09-14T13:14:08.770144Z",
+          "durationMillis": 95,
+          "evidence": {
+            "count": 1973,
+            "nativeMarket": "BTCUSDT"
+          }
+        },
+        {
+          "name": "ticker",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.770145Z",
+          "completedAt": "2026-09-14T13:14:08.846326Z",
+          "durationMillis": 76,
+          "evidence": {
+            "nativeMarket": "BTCUSDT"
+          }
+        },
+        {
+          "name": "order_book",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.84633Z",
+          "completedAt": "2026-09-14T13:14:08.917608Z",
+          "durationMillis": 71,
+          "evidence": {
+            "count": 10,
+            "nativeMarket": "BTCUSDT"
+          }
+        },
+        {
+          "name": "recent_trades",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.91761Z",
+          "completedAt": "2026-09-14T13:14:08.999761Z",
+          "durationMillis": 82,
+          "evidence": {
+            "count": 5
+          }
+        },
+        {
+          "name": "candles",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.999766Z",
+          "completedAt": "2026-09-14T13:14:09.078287Z",
+          "durationMillis": 78,
+          "evidence": {
+            "count": 5
+          }
+        }
+      ]
+    },
+    {
+      "version": 2,
+      "kind": "spot_read",
+      "exchange": "htx",
+      "product": "spot",
+      "market": {
+        "base": "BTC",
+        "quote": "USDT"
+      },
+      "egressRouteId": "local-en0",
+      "privateRead": false,
+      "startedAt": "2026-09-14T13:14:08.552929Z",
+      "completedAt": "2026-09-14T13:14:10.072328Z",
+      "passed": true,
+      "checks": [
+        {
+          "name": "egress_ip",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.552929Z",
+          "completedAt": "2026-09-14T13:14:08.867343Z",
+          "durationMillis": 314,
+          "evidence": {}
+        },
+        {
+          "name": "markets",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:08.86735Z",
+          "completedAt": "2026-09-14T13:14:09.89535Z",
+          "durationMillis": 1028,
+          "evidence": {
+            "count": 2089,
+            "nativeMarket": "btcusdt"
+          }
+        },
+        {
+          "name": "ticker",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:09.895351Z",
+          "completedAt": "2026-09-14T13:14:09.93769Z",
+          "durationMillis": 42,
+          "evidence": {
+            "nativeMarket": "btcusdt"
+          }
+        },
+        {
+          "name": "order_book",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:09.937691Z",
+          "completedAt": "2026-09-14T13:14:09.981663Z",
+          "durationMillis": 43,
+          "evidence": {
+            "count": 10,
+            "nativeMarket": "btcusdt"
+          }
+        },
+        {
+          "name": "recent_trades",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:09.981665Z",
+          "completedAt": "2026-09-14T13:14:10.024548Z",
+          "durationMillis": 42,
+          "evidence": {
+            "count": 5
+          }
+        },
+        {
+          "name": "candles",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:10.024549Z",
+          "completedAt": "2026-09-14T13:14:10.072327Z",
+          "durationMillis": 47,
+          "evidence": {
+            "count": 5
+          }
+        }
+      ]
+    },
+    {
+      "version": 2,
+      "kind": "spot_read",
+      "exchange": "cryptocom",
+      "product": "spot",
+      "market": {
+        "base": "BTC",
+        "quote": "USDT"
+      },
+      "egressRouteId": "local-en0",
+      "privateRead": false,
+      "startedAt": "2026-09-14T13:14:09.097511Z",
+      "completedAt": "2026-09-14T13:14:09.86959Z",
+      "passed": true,
+      "checks": [
+        {
+          "name": "egress_ip",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:09.097511Z",
+          "completedAt": "2026-09-14T13:14:09.407133Z",
+          "durationMillis": 309,
+          "evidence": {}
+        },
+        {
+          "name": "markets",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:09.407138Z",
+          "completedAt": "2026-09-14T13:14:09.578962Z",
+          "durationMillis": 171,
+          "evidence": {
+            "count": 569,
+            "nativeMarket": "BTC_USDT"
+          }
+        },
+        {
+          "name": "ticker",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:09.578965Z",
+          "completedAt": "2026-09-14T13:14:09.652117Z",
+          "durationMillis": 73,
+          "evidence": {
+            "nativeMarket": "BTC_USDT"
+          }
+        },
+        {
+          "name": "order_book",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:09.652129Z",
+          "completedAt": "2026-09-14T13:14:09.726043Z",
+          "durationMillis": 73,
+          "evidence": {
+            "count": 10,
+            "nativeMarket": "BTC_USDT"
+          }
+        },
+        {
+          "name": "recent_trades",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:09.726046Z",
+          "completedAt": "2026-09-14T13:14:09.800008Z",
+          "durationMillis": 73,
+          "evidence": {
+            "count": 5
+          }
+        },
+        {
+          "name": "candles",
+          "status": "passed",
+          "startedAt": "2026-09-14T13:14:09.800014Z",
+          "completedAt": "2026-09-14T13:14:09.869588Z",
+          "durationMillis": 69,
+          "evidence": {
+            "count": 5
+          }
+        }
+      ]
+    }
+  ]
+}
