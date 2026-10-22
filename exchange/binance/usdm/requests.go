@@ -111,6 +111,53 @@ type OrderHistoryRequest struct {
 	Limit     int
 }
 
+// PlaceAlgoOrderRequest는 USDⓈ-M Futures Algo 조건부 주문이다.
+// AlgoType을 비우면 CONDITIONAL로 전송한다.
+type PlaceAlgoOrderRequest struct {
+	AlgoType                AlgoType
+	Symbol                  string
+	Side                    Side
+	PositionSide            PositionSide
+	Type                    OrderType
+	TimeInForce             TimeInForce
+	Quantity                string
+	Price                   string
+	TriggerPrice            string
+	WorkingType             WorkingType
+	PriceMatch              string
+	ClosePosition           bool
+	PriceProtect            bool
+	ReduceOnly              bool
+	ActivationPrice         string
+	CallbackRate            string
+	ClientAlgoID            string
+	ResponseType            string
+	SelfTradePreventionMode string
+	GoodTillDate            *time.Time
+}
+
+// AlgoOrderInfoRequest는 Algo 주문 ID 또는 사용자 Algo 주문 ID로 단건 Algo 주문을 지정한다.
+type AlgoOrderInfoRequest struct {
+	AlgoID       *int64
+	ClientAlgoID string
+}
+
+// OpenAlgoOrdersRequest는 미체결 Algo 주문 조회 범위다.
+// 전체 계약 조회는 AllSymbols를 명시해야 한다.
+type OpenAlgoOrdersRequest struct {
+	Symbol     string
+	AllSymbols bool
+}
+
+// AlgoOrderHistoryRequest는 단일 계약의 Algo 주문 이력 조회 조건이다.
+type AlgoOrderHistoryRequest struct {
+	Symbol    string
+	AlgoID    *int64
+	StartTime *time.Time
+	EndTime   *time.Time
+	Limit     int
+}
+
 func (request OrderBookRequest) validate() error {
 	if err := validateSymbol(request.Symbol); err != nil {
 		return err
@@ -334,6 +381,172 @@ func (request ChangeMarginTypeRequest) values() url.Values {
 		"symbol":     {request.Symbol},
 		"marginType": {string(request.MarginType)},
 	}
+}
+
+func (request PlaceAlgoOrderRequest) validate() error {
+	if request.AlgoType != "" && request.AlgoType != AlgoTypeConditional {
+		return validationError("algoType must be CONDITIONAL")
+	}
+	if err := validateSymbol(request.Symbol); err != nil {
+		return err
+	}
+	if request.Side != SideBuy && request.Side != SideSell {
+		return validationError("side must be BUY or SELL")
+	}
+	if request.PositionSide != "" && request.PositionSide != PositionSideBoth && request.PositionSide != PositionSideLong && request.PositionSide != PositionSideShort {
+		return validationError("invalid positionSide")
+	}
+	if request.ReduceOnly && (request.PositionSide == PositionSideLong || request.PositionSide == PositionSideShort) {
+		return validationError("reduceOnly cannot be sent in hedge mode")
+	}
+	if request.ClosePosition && (request.Quantity != "" || request.ReduceOnly) {
+		return validationError("closePosition cannot be combined with quantity or reduceOnly")
+	}
+	for name, value := range map[string]string{"quantity": request.Quantity, "price": request.Price, "triggerPrice": request.TriggerPrice, "activatePrice": request.ActivationPrice, "callbackRate": request.CallbackRate} {
+		if value != "" && (!decimalPattern.MatchString(value) || strings.Trim(value, "0.") == "") {
+			return validationError("%s must be a positive decimal string", name)
+		}
+	}
+	if request.PriceMatch != "" && request.Price != "" {
+		return validationError("priceMatch cannot be combined with price")
+	}
+	switch request.Type {
+	case OrderTypeStop, OrderTypeTakeProfit:
+		if request.Quantity == "" || (request.Price == "" && request.PriceMatch == "") || request.TriggerPrice == "" {
+			return validationError("STOP and TAKE_PROFIT algo orders require quantity, price or priceMatch, and triggerPrice")
+		}
+	case OrderTypeStopMarket, OrderTypeTakeProfitMarket:
+		if request.TriggerPrice == "" || (!request.ClosePosition && request.Quantity == "") {
+			return validationError("conditional market algo order requires triggerPrice and quantity or closePosition")
+		}
+	case OrderTypeTrailingStopMarket:
+		if request.Quantity == "" || request.CallbackRate == "" {
+			return validationError("TRAILING_STOP_MARKET requires quantity and callbackRate")
+		}
+	default:
+		return validationError("unsupported algo order type %q", request.Type)
+	}
+	if request.ClosePosition && request.Type != OrderTypeStopMarket && request.Type != OrderTypeTakeProfitMarket {
+		return validationError("closePosition requires STOP_MARKET or TAKE_PROFIT_MARKET")
+	}
+	if request.TimeInForce != "" && !request.TimeInForce.valid() {
+		return validationError("unsupported timeInForce %q", request.TimeInForce)
+	}
+	if request.TimeInForce == TimeInForceGTD {
+		if request.GoodTillDate == nil || request.GoodTillDate.Unix() <= time.Now().Unix()+600 {
+			return validationError("GTD requires goodTillDate at least 600 seconds in the future")
+		}
+	} else if request.GoodTillDate != nil {
+		return validationError("goodTillDate requires GTD")
+	}
+	if request.WorkingType != "" && request.WorkingType != WorkingTypeContractPrice && request.WorkingType != WorkingTypeMarkPrice {
+		return validationError("unsupported workingType")
+	}
+	if request.ResponseType != "" && request.ResponseType != "ACK" && request.ResponseType != "RESULT" {
+		return validationError("responseType must be ACK or RESULT")
+	}
+	if strings.TrimSpace(request.ClientAlgoID) != request.ClientAlgoID {
+		return validationError("client algo ID cannot have surrounding whitespace")
+	}
+	return nil
+}
+
+func (request AlgoOrderInfoRequest) validate() error {
+	if (request.AlgoID == nil) == (request.ClientAlgoID == "") {
+		return validationError("exactly one algo order identity is required")
+	}
+	if request.AlgoID != nil && *request.AlgoID <= 0 {
+		return validationError("algoId must be positive")
+	}
+	if strings.TrimSpace(request.ClientAlgoID) != request.ClientAlgoID {
+		return validationError("client algo ID cannot have surrounding whitespace")
+	}
+	return nil
+}
+
+func (request OpenAlgoOrdersRequest) validate() error {
+	if request.AllSymbols && request.Symbol != "" {
+		return validationError("symbol and AllSymbols cannot be used together")
+	}
+	if !request.AllSymbols {
+		return validateSymbol(request.Symbol)
+	}
+	return nil
+}
+
+func (request AlgoOrderHistoryRequest) validate() error {
+	if err := validateSymbol(request.Symbol); err != nil {
+		return err
+	}
+	if request.AlgoID != nil && *request.AlgoID <= 0 {
+		return validationError("algoId must be positive")
+	}
+	if request.Limit < 0 || request.Limit > 1000 {
+		return validationError("algo order history limit must be at most 1000")
+	}
+	if request.StartTime != nil && request.EndTime != nil && request.StartTime.After(*request.EndTime) {
+		return validationError("startTime cannot be after endTime")
+	}
+	return nil
+}
+
+func (request PlaceAlgoOrderRequest) values() url.Values {
+	algoType := request.AlgoType
+	if algoType == "" {
+		algoType = AlgoTypeConditional
+	}
+	values := url.Values{"algoType": {string(algoType)}, "symbol": {request.Symbol}, "side": {string(request.Side)}, "type": {string(request.Type)}}
+	set(values, "positionSide", string(request.PositionSide))
+	set(values, "timeInForce", string(request.TimeInForce))
+	set(values, "quantity", request.Quantity)
+	set(values, "price", request.Price)
+	set(values, "triggerPrice", request.TriggerPrice)
+	set(values, "workingType", string(request.WorkingType))
+	set(values, "priceMatch", request.PriceMatch)
+	if request.ClosePosition {
+		values.Set("closePosition", "true")
+	}
+	if request.PriceProtect {
+		values.Set("priceProtect", "true")
+	}
+	if request.ReduceOnly {
+		values.Set("reduceOnly", "true")
+	}
+	set(values, "activatePrice", request.ActivationPrice)
+	set(values, "callbackRate", request.CallbackRate)
+	set(values, "clientAlgoId", request.ClientAlgoID)
+	set(values, "newOrderRespType", request.ResponseType)
+	set(values, "selfTradePreventionMode", request.SelfTradePreventionMode)
+	if request.GoodTillDate != nil {
+		values.Set("goodTillDate", strconv.FormatInt(request.GoodTillDate.UnixMilli(), 10))
+	}
+	return values
+}
+
+func (request AlgoOrderInfoRequest) values() url.Values {
+	values := make(url.Values)
+	if request.AlgoID != nil {
+		values.Set("algoId", strconv.FormatInt(*request.AlgoID, 10))
+	}
+	set(values, "clientAlgoId", request.ClientAlgoID)
+	return values
+}
+
+func (request AlgoOrderHistoryRequest) values() url.Values {
+	values := url.Values{"symbol": {request.Symbol}}
+	if request.AlgoID != nil {
+		values.Set("algoId", strconv.FormatInt(*request.AlgoID, 10))
+	}
+	if request.StartTime != nil {
+		values.Set("startTime", strconv.FormatInt(request.StartTime.UnixMilli(), 10))
+	}
+	if request.EndTime != nil {
+		values.Set("endTime", strconv.FormatInt(request.EndTime.UnixMilli(), 10))
+	}
+	if request.Limit > 0 {
+		values.Set("limit", strconv.Itoa(request.Limit))
+	}
+	return values
 }
 
 func validateSymbol(value string) error {
