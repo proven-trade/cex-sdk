@@ -75,6 +75,21 @@ const (
 	OrderStatusExpiredInMatch  OrderStatus = "EXPIRED_IN_MATCH"
 )
 
+// AlgoType은 Algo 주문 서비스의 주문 분류다.
+type AlgoType string
+
+const AlgoTypeConditional AlgoType = "CONDITIONAL"
+
+// AlgoStatus는 Algo 주문 처리 상태다.
+type AlgoStatus string
+
+const (
+	AlgoStatusNew       AlgoStatus = "NEW"
+	AlgoStatusCanceled  AlgoStatus = "CANCELED"
+	AlgoStatusTriggered AlgoStatus = "TRIGGERED"
+	AlgoStatusFinished  AlgoStatus = "FINISHED"
+)
+
 // RateLimit은 exchangeInfo의 동적 요청 제한 규칙이다.
 type RateLimit struct {
 	Type        string `json:"rateLimitType"`
@@ -299,5 +314,34 @@ type Order struct {
 	PriceRate               string          `json:"priceRate"`
 	UpdateTime              int64           `json:"updateTime"`
 	Time                    int64           `json:"time"`
+	Raw                     json.RawMessage `json:"-"`
+}
+
+// AlgoOrder는 USDⓈ-M Futures Algo 조건부 주문 상태다.
+type AlgoOrder struct {
+	AlgoID                  int64           `json:"algoId"`
+	ClientAlgoID            string          `json:"clientAlgoId"`
+	AlgoType                AlgoType        `json:"algoType"`
+	OrderType               OrderType       `json:"orderType"`
+	Symbol                  string          `json:"symbol"`
+	Side                    Side            `json:"side"`
+	PositionSide            PositionSide    `json:"positionSide"`
+	TimeInForce             TimeInForce     `json:"timeInForce"`
+	Quantity                string          `json:"quantity"`
+	AlgoStatus              AlgoStatus      `json:"algoStatus"`
+	TriggerPrice            string          `json:"triggerPrice"`
+	Price                   string          `json:"price"`
+	WorkingType             WorkingType     `json:"workingType"`
+	PriceMatch              string          `json:"priceMatch"`
+	ClosePosition           bool            `json:"closePosition"`
+	PriceProtect            bool            `json:"priceProtect"`
+	ReduceOnly              bool            `json:"reduceOnly"`
+	ActivationPrice         string          `json:"activatePrice"`
+	CallbackRate            string          `json:"callbackRate"`
+	SelfTradePreventionMode string          `json:"selfTradePreventionMode"`
+	CreateTime              int64           `json:"createTime"`
+	UpdateTime              int64           `json:"updateTime"`
+	TriggerTime             int64           `json:"triggerTime"`
+	GoodTillDate            int64           `json:"goodTillDate"`
 	Raw                     json.RawMessage `json:"-"`
 }

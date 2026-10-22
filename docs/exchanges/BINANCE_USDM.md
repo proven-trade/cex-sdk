@@ -16,6 +16,7 @@ private API는 `credential.Material.APIKey`와 `credential.Material.SecretKey`�
 | 계약·시세 | `ExchangeInfo`, `TickerPrice`, `OrderBook`, `RecentTrades`, `Candles` |
 | 계정·포지션 | `Account`, `Positions`, `ChangeMarginType` |
 | 주문 | `PlaceOrder`, `OrderInfo`, `CancelOrder`, `OpenOrders`, `OrderHistory` |
+| Algo 조건부 주문 | `PlaceAlgoOrder`, `AlgoOrderInfo`, `CancelAlgoOrder`, `OpenAlgoOrders`, `AlgoOrderHistory` |
 | private 접속 키 | `StartUserDataStream`, `KeepaliveUserDataStream`, `CloseUserDataStream` |
 | WebSocket | `MarketStream`, `UserDataStream`, 동적 구독·구독 해제 |
 
@@ -57,6 +58,28 @@ SIGNED 요청은 URL 인코딩한 최종 파라미터에 HMAC SHA-256을 적용�
 - 가격과 수량은 decimal 문자열로 입력하며 SDK가 자동 반올림하지 않습니다.
 
 지원 주문 종류는 `LIMIT`, `MARKET`, `STOP`, `STOP_MARKET`, `TAKE_PROFIT`, `TAKE_PROFIT_MARKET`, `TRAILING_STOP_MARKET`입니다.
+
+## Algo 조건부 주문
+
+Algo 주문 서비스는 `/fapi/v1/algoOrder` 계열 엔드포인트로 조건부 주문을 관리합니다.
+
+| 메서드 | 엔드포인트 | 제한 |
+|---|---|---|
+| `PlaceAlgoOrder` | `POST /fapi/v1/algoOrder` | 계정 주문 count 1, IP weight 0 |
+| `AlgoOrderInfo` | `GET /fapi/v1/algoOrder` | IP weight 1 |
+| `CancelAlgoOrder` | `DELETE /fapi/v1/algoOrder` | IP weight 1 |
+| `OpenAlgoOrders` | `GET /fapi/v1/openAlgoOrders` | 단일 계약 1, 전체 40 |
+| `AlgoOrderHistory` | `GET /fapi/v1/allAlgoOrders` | IP weight 5 |
+
+- `AlgoType`은 현재 `CONDITIONAL`만 지원하며 비우면 `CONDITIONAL`로 전송합니다.
+- 지원 주문 종류는 `STOP`, `TAKE_PROFIT`, `STOP_MARKET`, `TAKE_PROFIT_MARKET`, `TRAILING_STOP_MARKET`입니다.
+- 발동 가격은 `stopPrice`가 아니라 `TriggerPrice`(`triggerPrice`)로 전송합니다.
+- `STOP`·`TAKE_PROFIT`은 `Quantity`, `TriggerPrice`, 그리고 `Price` 또는 `PriceMatch` 중 하나가 필요합니다.
+- `STOP_MARKET`·`TAKE_PROFIT_MARKET`은 `TriggerPrice`와 `Quantity` 또는 `ClosePosition`이 필요합니다.
+- `TRAILING_STOP_MARKET`은 `Quantity`와 `CallbackRate`가 필요합니다.
+- 단건 조회와 취소는 `AlgoID` 또는 `ClientAlgoID` 중 정확히 하나로 지정하며 계약 심볼을 보내지 않습니다.
+- 전체 계약 미체결 조회는 `OpenAlgoOrdersRequest.AllSymbols`를 명시해야 합니다.
+- 취소 응답은 식별자만 포함할 수 있으므로 최종 상태는 `AlgoOrderInfo`로 확인합니다.
 
 ## HTTP 503과 주문 안전성
 
