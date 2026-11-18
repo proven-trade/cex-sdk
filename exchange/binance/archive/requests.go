@@ -9,7 +9,9 @@ import (
 	"github.com/proven-trade/cex-sdk/exchange/binance"
 )
 
-var symbolPattern = regexp.MustCompile(`^[A-Z0-9]{2,30}$`)
+// symbolPattern은 exchangeInfo가 주는 심볼을 받는다. Binance Spot에는 한자 심볼(币安人生USDT 등)도 있고
+// 저장소도 그 이름으로 게시한다. 소문자·구분자·경로 문자는 거부한다.
+var symbolPattern = regexp.MustCompile(`^[\p{Lu}\p{Lo}0-9]{2,30}$`)
 
 // Market은 공개 데이터 저장소의 상품 구분이다.
 type Market string
@@ -40,7 +42,7 @@ func (request KlinesRequest) path() (string, error) {
 		return "", validationError("unsupported archive market %q", request.Market)
 	}
 	if !symbolPattern.MatchString(request.Symbol) {
-		return "", validationError("archive symbol must contain uppercase letters and digits")
+		return "", validationError("archive symbol must contain uppercase letters, CJK letters and digits")
 	}
 	interval, err := archiveInterval(request.Market, request.Interval)
 	if err != nil {

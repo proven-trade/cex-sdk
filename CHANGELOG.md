@@ -2,6 +2,12 @@
 
 이 프로젝트의 사용자 영향 변경 사항은 이 파일에 기록합니다. 버전은 Semantic Versioning을 따릅니다.
 
+## Unreleased
+
+### Fixed
+
+- `binance/archive`가 Binance Spot 한자 심볼(`币安人生USDT` 등) 덤프를 검증 오류로 거부하던 문제 (#14)
+
 ## 1.1.0
 
 ### Added
