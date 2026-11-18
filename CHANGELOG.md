@@ -2,7 +2,7 @@
 
 이 프로젝트의 사용자 영향 변경 사항은 이 파일에 기록합니다. 버전은 Semantic Versioning을 따릅니다.
 
-## Unreleased
+## 1.1.1
 
 ### Fixed
 
