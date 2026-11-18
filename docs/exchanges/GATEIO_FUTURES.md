@@ -86,6 +86,8 @@ defer private.Close()
 
 가격·수량·금액·수수료는 문자열로 보존합니다. 주문·체결의 JSON 정수 ID는 `Identifier`가 부동소수점 변환 없이 문자열로 보존하며, double timestamp는 `Decimal`이 원문 십진 표현을 유지합니다. 목록 항목과 단일 객체의 `Raw`에는 해당 원본 JSON을 보존합니다.
 
+`Candles`는 최근 10,000개보다 오래된 구간을 거부합니다. 그 이전 캔들과 체결은 `exchange/gateio/archive`의 `MarketFuturesUSDT`·`MarketFuturesBTC` 월별 덤프로 읽습니다. 사용법과 게시 범위는 [Gate.io Spot 문서의 과거 데이터 덤프](GATEIO.md#과거-데이터-덤프)를 참고하세요.
+
 ## WebSocket 지원 범위
 
 | 구분 | 채널 | SDK 채널 |

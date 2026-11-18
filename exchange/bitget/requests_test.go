@@ -94,3 +94,31 @@ func TestOrderQueryRangeValidation(t *testing.T) {
 		t.Fatalf("OpenOrdersRequest.validate() error = %v, want ErrValidation", err)
 	}
 }
+
+func TestHistoryCandlesRequestValidation(t *testing.T) {
+	t.Parallel()
+
+	start := time.UnixMilli(1_609_459_200_000)
+	withinRange := start.Add(90 * 24 * time.Hour)
+	beyondRange := withinRange.Add(time.Millisecond)
+	base := CandlesRequest{Category: CategorySpot, Symbol: "BTCUSDT", Interval: Candle1Minute}
+
+	valid := base
+	valid.StartTime, valid.EndTime, valid.Limit = &start, &withinRange, 100
+	if err := valid.validateHistory(); err != nil {
+		t.Fatalf("90-day history request error = %v", err)
+	}
+	tooWide := valid
+	tooWide.EndTime = &beyondRange
+	if err := tooWide.validateHistory(); !errors.Is(err, trade.ErrValidation) {
+		t.Fatalf("wide history request error = %v, want ErrValidation", err)
+	}
+	tooMany := base
+	tooMany.Limit = 101
+	if err := tooMany.validateHistory(); !errors.Is(err, trade.ErrValidation) {
+		t.Fatalf("history limit 101 error = %v, want ErrValidation", err)
+	}
+	if err := tooMany.validate(); err != nil {
+		t.Fatalf("recent candle limit 101 error = %v", err)
+	}
+}

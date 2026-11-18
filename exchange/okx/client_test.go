@@ -101,6 +101,13 @@ func TestClientSpotAndSwapLifecycle(t *testing.T) {
 			_, _ = io.WriteString(writer, `{"code":"0","msg":"","data":[{"instId":"BTC-USDT","tradeId":"10","px":"64000","sz":"0.01","side":"buy","ts":"1700000000000"}]}`)
 		case "/api/v5/market/candles":
 			_, _ = io.WriteString(writer, `{"code":"0","msg":"","data":[["1700000000000","1","2","0.5","1.5","10","15","16","1"]]}`)
+		case "/api/v5/market/history-candles":
+			query := request.URL.Query()
+			if query.Get("bar") != "1s" || query.Get("after") != "1546304400000" || query.Get("limit") != "300" {
+				http.Error(writer, `{"code":"51000","msg":"bad history query","data":[]}`, http.StatusBadRequest)
+				return
+			}
+			_, _ = io.WriteString(writer, `{"code":"0","msg":"","data":[["1546304399000","3","4","2","3.5","7","8","9","1"]]}`)
 		case "/api/v5/account/balance":
 			_, _ = io.WriteString(writer, `{"code":"0","msg":"","data":[{"totalEq":"1000","uTime":"1700000000000","details":[{"ccy":"USDT","eq":"1000","availBal":"900","frozenBal":"100"}]}]}`)
 		case "/api/v5/account/positions":
@@ -169,6 +176,20 @@ func TestClientSpotAndSwapLifecycle(t *testing.T) {
 	if err != nil || len(candles) != 1 || candles[0].Close != "1.5" || !candles[0].Confirmed {
 		t.Fatalf("Candles() = %+v, error = %v", candles, err)
 	}
+	candleHistoryAfter := time.UnixMilli(1_546_304_400_000)
+	candleHistory, err := client.HistoryCandles(
+		context.Background(),
+		CandlesRequest{InstrumentID: "BTC-USDT", Interval: Candle1Second, After: &candleHistoryAfter, Limit: 300},
+	)
+	if err != nil || len(candleHistory) != 1 || candleHistory[0].Close != "3.5" {
+		t.Fatalf("HistoryCandles() = %+v, error = %v", candleHistory, err)
+	}
+	historySnapshot, err := limiter.Snapshot(
+		"okx:route:route-a:endpoint:GET:api/v5/market/history-candles:2seconds",
+	)
+	if err != nil || historySnapshot.Used != 1 || historySnapshot.Rule.Limit != 20 {
+		t.Fatalf("history-candles limiter snapshot = %+v, error = %v", historySnapshot, err)
+	}
 	balance, err := client.Balance(context.Background(), BalanceRequest{Currencies: []string{"USDT"}})
 	if err != nil || balance.TotalEquity != "1000" || balance.Details[0].AvailableBalance != "900" || len(balance.Raw) == 0 {
 		t.Fatalf("Balance() = %+v, error = %v", balance, err)
@@ -216,7 +237,7 @@ func TestClientSpotAndSwapLifecycle(t *testing.T) {
 	}
 
 	routes := sender.snapshot()
-	if len(routes) != 13 || routes[1] != "route-b" || routes[8] != "route-b" {
+	if len(routes) != 14 || routes[1] != "route-b" || routes[9] != "route-b" {
 		t.Fatalf("sender routes = %v", routes)
 	}
 	calls, apiKey, secret, passphrase := provider.snapshot()
@@ -291,6 +312,7 @@ func TestClientClassifiesItemRateLimitAndUnknownMutationState(t *testing.T) {
 func TestRequestValidation(t *testing.T) {
 	t.Parallel()
 
+	pageAfter, pageBefore := time.UnixMilli(1_000), time.UnixMilli(2_000)
 	tests := []struct {
 		name string
 		err  error
@@ -298,6 +320,12 @@ func TestRequestValidation(t *testing.T) {
 		{name: "instrument type", err: (TickersRequest{}).validate()},
 		{name: "book size", err: (OrderBookRequest{InstrumentID: "BTC-USDT", Size: 401}).validate()},
 		{name: "position type", err: (PositionsRequest{InstrumentType: InstrumentTypeSpot}).validate()},
+		{name: "1s recent candles", err: (CandlesRequest{InstrumentID: "BTC-USDT", Interval: Candle1Second}).validate()},
+		{name: "history candle limit", err: (CandlesRequest{InstrumentID: "BTC-USDT", Interval: Candle1Minute, Limit: 301}).validateHistory()},
+		{name: "inverted candle page", err: (CandlesRequest{
+			InstrumentID: "BTC-USDT", Interval: Candle1Minute,
+			After: &pageAfter, Before: &pageBefore,
+		}).validateHistory()},
 		{name: "duplicate currency", err: (BalanceRequest{Currencies: []string{"USDT", "USDT"}}).validate()},
 		{name: "missing identity", err: (CancelOrderRequest{InstrumentID: "BTC-USDT"}).validate()},
 		{name: "Spot margin mode", err: (PlaceOrderRequest{InstrumentType: InstrumentTypeSpot, InstrumentID: "BTC-USDT", TradeMode: TradeModeCross, Side: SideBuy, OrderType: OrderTypeMarket, Quantity: "1"}).validate()},

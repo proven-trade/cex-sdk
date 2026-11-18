@@ -20,6 +20,8 @@ var (
 type CandleInterval string
 
 const (
+	// Candle1Second는 HistoryCandles에서만 지원하며 OKX는 최근 3개월만 제공한다.
+	Candle1Second   CandleInterval = "1s"
 	Candle1Minute   CandleInterval = "1m"
 	Candle3Minutes  CandleInterval = "3m"
 	Candle5Minutes  CandleInterval = "5m"
@@ -205,11 +207,25 @@ func (request RecentTradesRequest) values() url.Values {
 }
 
 func (request CandlesRequest) validate() error {
+	return request.validateFor(false)
+}
+
+func (request CandlesRequest) validateHistory() error {
+	return request.validateFor(true)
+}
+
+func (request CandlesRequest) validateFor(history bool) error {
 	if err := validateRequiredText("instId", request.InstrumentID); err != nil {
 		return err
 	}
-	if !request.Interval.valid() {
+	if request.Interval == Candle1Second && !history {
+		return validationError("1s candles are only available from HistoryCandles")
+	}
+	if request.Interval != Candle1Second && !request.Interval.valid() {
 		return validationError("unsupported candle interval %q", request.Interval)
+	}
+	if request.After != nil && request.Before != nil && !request.Before.Before(*request.After) {
+		return validationError("candle before must be earlier than after")
 	}
 	if request.Limit < 0 || request.Limit > 300 {
 		return validationError("candle limit must be between 1 and 300 or zero for default")

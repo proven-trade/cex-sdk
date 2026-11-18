@@ -219,6 +219,14 @@ func TestClientAdditionalMarketDataEndpoints(t *testing.T) {
 				return
 			}
 			_, _ = io.WriteString(writer, `{"code":"00000","msg":"success","requestTime":1700000000000,"data":[["1700000000000","1","2","0.5","1.5","10","15"]]}`)
+		case "/api/v3/market/history-candles":
+			query := request.URL.Query()
+			if query.Get("category") != "SPOT" || query.Get("interval") != "1m" ||
+				query.Get("endTime") != "1609462800000" || query.Get("limit") != "100" {
+				http.Error(writer, `{"code":"40017","msg":"bad history candle query"}`, http.StatusBadRequest)
+				return
+			}
+			_, _ = io.WriteString(writer, `{"code":"00000","msg":"success","requestTime":1700000000000,"data":[["1609462740000","29014.18","29014.18","28984.1","28990.4","3","87000"]]}`)
 		default:
 			http.NotFound(writer, request)
 		}
@@ -260,8 +268,26 @@ func TestClientAdditionalMarketDataEndpoints(t *testing.T) {
 	if err != nil || len(candles) != 1 || candles[0].Close != "1.5" || candles[0].Turnover != "15" {
 		t.Fatalf("Candles() = %+v, error = %v", candles, err)
 	}
+	historyEnd := time.UnixMilli(1_609_462_800_000)
+	history, err := client.HistoryCandles(
+		context.Background(),
+		CandlesRequest{
+			Category: CategorySpot, Symbol: "BTCUSDT", Interval: Candle1Minute,
+			EndTime: &historyEnd, Limit: 100,
+		},
+		trade.WithEgressRoute("route-b"),
+	)
+	if err != nil || len(history) != 1 || history[0].Close != "28990.4" || history[0].Turnover != "87000" {
+		t.Fatalf("HistoryCandles() = %+v, error = %v", history, err)
+	}
+	historySnapshot, err := limiter.Snapshot(
+		"bitget:route:route-b:endpoint:api/v3/market/history-candles:1second",
+	)
+	if err != nil || historySnapshot.Used != 1 || historySnapshot.Rule.Limit != 20 {
+		t.Fatalf("history-candles limiter snapshot = %+v, error = %v", historySnapshot, err)
+	}
 	snapshot, err := limiter.Snapshot("bitget:route:route-b:global:1minute")
-	if err != nil || snapshot.Used != 3 {
+	if err != nil || snapshot.Used != 4 {
 		t.Fatalf("global limiter snapshot = %+v, error = %v", snapshot, err)
 	}
 }

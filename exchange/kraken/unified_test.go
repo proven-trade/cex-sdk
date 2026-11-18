@@ -1,6 +1,7 @@
 package kraken
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -239,4 +240,75 @@ func unifiedKrakenRequestValues(
 	valid := request.Header.Get("API-Key") == "test-api-key" &&
 		request.Header.Get("API-Sign") == expected && nonce != ""
 	return values, valid
+}
+
+func TestTradeHistoryPagesBuildCandlesBeyondOHLCWindow(t *testing.T) {
+	t.Parallel()
+
+	pages := map[string]string{
+		"1388534400000000000": `{"error":[],"result":{"XXBTZUSD":[["730.10","0.5",1388534460.123,"b","l","",1],["731.00","0.25",1388534461.5,"s","m","",2]],"last":"1388534461500000000"}}`,
+		"1388534461500000000": `{"error":[],"result":{"XXBTZUSD":[["729.5","1",1388534519.999,"s","m","",3],["732","2",1388534520,"b","l","",4]],"last":"1388534520000000000"}}`,
+		"1388534520000000000": `{"error":[],"result":{"XXBTZUSD":[],"last":"1388534520000000000"}}`,
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		page, exists := pages[request.URL.Query().Get("since")]
+		if request.URL.Path != publicPrefix+"Trades" || !exists {
+			http.Error(writer, `{"error":["EGeneral:Invalid arguments"]}`, http.StatusBadRequest)
+			return
+		}
+		_, _ = io.WriteString(writer, page)
+	}))
+	defer server.Close()
+
+	client, _ := newTestClient(
+		t, server.URL, &directSender{}, &recordingProvider{},
+		[]transport.EgressRouteID{"route-a"}, time.Unix(1_700_000_000, 0),
+	)
+	builder, err := unified.NewTradeCandleBuilder(time.Minute, unified.TradeOrderAscending)
+	if err != nil {
+		t.Fatalf("NewTradeCandleBuilder() error = %v", err)
+	}
+	var candles []unified.TradeCandle
+	since := "1388534400000000000"
+	for {
+		page, pageErr := client.RecentTrades(
+			context.Background(), RecentTradesRequest{Pair: "XBTUSD", Since: since, Count: 1000},
+		)
+		if pageErr != nil {
+			t.Fatalf("RecentTrades(since=%s) error = %v", since, pageErr)
+		}
+		if len(page.Trades) == 0 {
+			break
+		}
+		for _, item := range page.Trades {
+			tick, convertErr := item.Unified()
+			if convertErr != nil {
+				t.Fatalf("Unified() error = %v", convertErr)
+			}
+			candle, done, addErr := builder.Add(tick)
+			if addErr != nil {
+				t.Fatalf("Add() error = %v", addErr)
+			}
+			if done {
+				candles = append(candles, candle)
+			}
+		}
+		since = page.Last
+	}
+	if last, ok := builder.Flush(); ok {
+		candles = append(candles, last)
+	}
+	if len(candles) != 2 {
+		t.Fatalf("candles = %+v, want two", candles)
+	}
+	first, second := candles[0], candles[1]
+	if first.StartTime != 1_388_534_460_000 || first.Open != "730.10" || first.High != "731.00" ||
+		first.Low != "729.5" || first.Close != "729.5" || first.Volume != "1.75" || first.TradeCount != 3 {
+		t.Fatalf("first candle = %+v", first)
+	}
+	if second.StartTime != 1_388_534_520_000 || second.Open != "732" || second.Volume != "2" ||
+		second.QuoteVolume != "1464" {
+		t.Fatalf("second candle = %+v", second)
+	}
 }

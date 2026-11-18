@@ -188,14 +188,32 @@ func (client *Client) Candles(
 	if err := request.validate(); err != nil {
 		return nil, err
 	}
-	response, _, err := client.executePublic(
-		ctx,
-		http.MethodGet,
-		"/api/v5/market/candles",
-		request.values(),
-		publicLimit(40, 2*time.Second, ""),
-		options...,
+	return client.candles(ctx, "/api/v5/market/candles", request, publicLimit(40, 2*time.Second, ""), options...)
+}
+
+// HistoryCandles는 /market/candles의 최근 1,440개 제한을 넘는 과거 OHLCV를 조회한다.
+// After를 이전 응답의 가장 오래된 시각으로 옮기면 상장 시점까지 거슬러 올라갈 수 있다.
+func (client *Client) HistoryCandles(
+	ctx context.Context,
+	request CandlesRequest,
+	options ...trade.RequestOption,
+) ([]Candle, error) {
+	if err := request.validateHistory(); err != nil {
+		return nil, err
+	}
+	return client.candles(
+		ctx, "/api/v5/market/history-candles", request, publicLimit(20, 2*time.Second, ""), options...,
 	)
+}
+
+func (client *Client) candles(
+	ctx context.Context,
+	path string,
+	request CandlesRequest,
+	limit endpointLimit,
+	options ...trade.RequestOption,
+) ([]Candle, error) {
+	response, _, err := client.executePublic(ctx, http.MethodGet, path, request.values(), limit, options...)
 	if err != nil {
 		return nil, err
 	}

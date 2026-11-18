@@ -142,14 +142,29 @@ func (client *Client) Candles(
 	if err := request.validate(); err != nil {
 		return nil, err
 	}
-	response, _, err := client.executePublic(
-		ctx,
-		http.MethodGet,
-		"/api/v3/market/candles",
-		request.values(),
-		publicLimit(20),
-		options...,
-	)
+	return client.candles(ctx, "/api/v3/market/candles", request, options...)
+}
+
+// HistoryCandles는 /market/candles가 제공하지 않는 90일 이전 OHLCV를 조회한다.
+// 요청당 최대 100개, StartTime과 EndTime 범위는 최대 90일이다.
+func (client *Client) HistoryCandles(
+	ctx context.Context,
+	request CandlesRequest,
+	options ...trade.RequestOption,
+) ([]Candle, error) {
+	if err := request.validateHistory(); err != nil {
+		return nil, err
+	}
+	return client.candles(ctx, "/api/v3/market/history-candles", request, options...)
+}
+
+func (client *Client) candles(
+	ctx context.Context,
+	path string,
+	request CandlesRequest,
+	options ...trade.RequestOption,
+) ([]Candle, error) {
+	response, _, err := client.executePublic(ctx, http.MethodGet, path, request.values(), publicLimit(20), options...)
 	if err != nil {
 		return nil, err
 	}

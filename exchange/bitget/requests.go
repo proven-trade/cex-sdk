@@ -196,7 +196,25 @@ func (request RecentFillsRequest) values() url.Values {
 	return values
 }
 
+// historyCandleRange는 Bitget history-candles의 최대 조회 범위다.
+const historyCandleRange = 90 * 24 * time.Hour
+
 func (request CandlesRequest) validate() error {
+	return request.validateWithLimit(1000)
+}
+
+func (request CandlesRequest) validateHistory() error {
+	if err := request.validateWithLimit(100); err != nil {
+		return err
+	}
+	if request.StartTime != nil && request.EndTime != nil &&
+		request.EndTime.Sub(*request.StartTime) > historyCandleRange {
+		return validationError("history candle range cannot exceed 90 days")
+	}
+	return nil
+}
+
+func (request CandlesRequest) validateWithLimit(maximum int) error {
 	if err := validateCategory(request.Category); err != nil {
 		return err
 	}
@@ -212,8 +230,8 @@ func (request CandlesRequest) validate() error {
 	if request.Category == CategorySpot && request.Type != "" && request.Type != CandleTypeMarket {
 		return validationError("Spot candles only support market price")
 	}
-	if request.Limit < 0 || request.Limit > 1000 {
-		return validationError("candle limit must be between 1 and 1000 or zero for default")
+	if request.Limit < 0 || request.Limit > maximum {
+		return validationError("candle limit must be between 1 and %d or zero for default", maximum)
 	}
 	if request.StartTime != nil && request.EndTime != nil && request.StartTime.After(*request.EndTime) {
 		return validationError("candle startTime cannot be after endTime")

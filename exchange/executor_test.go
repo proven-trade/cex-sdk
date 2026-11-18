@@ -241,3 +241,104 @@ func validExecution(operation OperationKind) Execution {
 		},
 	}
 }
+
+func TestStreamReturnsUnbufferedBodyBeyondResponseLimit(t *testing.T) {
+	t.Parallel()
+
+	limiter, err := ratelimit.New(ratelimit.Rule{Key: "archive", Limit: 10, Window: time.Second})
+	if err != nil {
+		t.Fatalf("ratelimit.New() error = %v", err)
+	}
+	var requestCtx context.Context
+	payload := strings.Repeat("x", 64)
+	executor, err := NewExecutor(ExecutorConfig{
+		Sender: senderFunc(func(ctx context.Context, routeID transport.EgressRouteID, _ *http.Request) (*http.Response, error) {
+			requestCtx = ctx
+			if routeID != "route-a" {
+				t.Fatalf("route = %s", routeID)
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK, Header: http.Header{"X-Test": {"value"}},
+				Body: io.NopCloser(strings.NewReader(payload)),
+			}, nil
+		}),
+		Limiter:              limiter,
+		MaxResponseBodyBytes: 8,
+	})
+	if err != nil {
+		t.Fatalf("NewExecutor() error = %v", err)
+	}
+	execution := validExecution(OperationRead)
+	execution.Timeout = time.Second
+	execution.Charges = []ratelimit.Charge{{Key: "archive", Units: 1}}
+	response, err := executor.Stream(context.Background(), execution)
+	if err != nil {
+		t.Fatalf("Stream() error = %v", err)
+	}
+	body, err := io.ReadAll(response.Body)
+	if err != nil || string(body) != payload || response.Header.Get("X-Test") != "value" {
+		t.Fatalf("Stream() body = %q, header = %v, error = %v", body, response.Header, err)
+	}
+	if requestCtx.Err() != nil {
+		t.Fatal("request context was canceled before Close")
+	}
+	if err := response.Body.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if requestCtx.Err() == nil {
+		t.Fatal("Close() did not release the request context")
+	}
+	snapshot, err := limiter.Snapshot("archive")
+	if err != nil || snapshot.Used != 1 {
+		t.Fatalf("limiter snapshot = %+v, error = %v", snapshot, err)
+	}
+}
+
+func TestStreamAppliesTimeoutOnlyUntilHeaders(t *testing.T) {
+	t.Parallel()
+
+	headerWait := mustExecutor(t, senderFunc(func(ctx context.Context, _ transport.EgressRouteID, _ *http.Request) (*http.Response, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}), emptyLimiter(t))
+	execution := validExecution(OperationRead)
+	execution.Timeout = 10 * time.Millisecond
+	if _, err := headerWait.Stream(context.Background(), execution); !errors.Is(err, trade.ErrTimeout) {
+		t.Fatalf("Stream() header wait error = %v, want ErrTimeout", err)
+	}
+
+	slowBody := mustExecutor(t, senderFunc(func(ctx context.Context, _ transport.EgressRouteID, _ *http.Request) (*http.Response, error) {
+		reader, writer := io.Pipe()
+		go func() {
+			time.Sleep(30 * time.Millisecond)
+			if ctx.Err() != nil {
+				_ = writer.CloseWithError(ctx.Err())
+				return
+			}
+			_, _ = writer.Write([]byte("late body"))
+			_ = writer.Close()
+		}()
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: reader}, nil
+	}), emptyLimiter(t))
+	response, err := slowBody.Stream(context.Background(), execution)
+	if err != nil {
+		t.Fatalf("Stream() error = %v", err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil || string(body) != "late body" {
+		t.Fatalf("slow body = %q, error = %v", body, err)
+	}
+}
+
+func TestStreamRejectsMutations(t *testing.T) {
+	t.Parallel()
+
+	executor := mustExecutor(t, senderFunc(func(context.Context, transport.EgressRouteID, *http.Request) (*http.Response, error) {
+		t.Fatal("sender was called")
+		return nil, nil
+	}), emptyLimiter(t))
+	if _, err := executor.Stream(context.Background(), validExecution(OperationMutation)); err == nil {
+		t.Fatal("Stream() mutation error = nil")
+	}
+}

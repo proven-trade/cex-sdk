@@ -77,6 +77,21 @@ reference, err := client.PlaceOrder(
 
 가격과 수량은 `float64`가 아닌 decimal 문자열입니다. `ClientOrderID`는 OKX 규칙에 맞게 영문자와 숫자로 최대 32자까지 허용합니다.
 
+## 과거 캔들
+
+`Candles`(`GET /api/v5/market/candles`)는 최근 1,440개만 반환합니다. 그보다 오래된 구간은 `HistoryCandles`(`GET /api/v5/market/history-candles`)로 조회합니다. 두 메서드는 같은 `CandlesRequest`를 사용하며 요청당 최대 300개입니다.
+
+`After`는 해당 시각보다 오래된 봉, `Before`는 해당 시각보다 최신 봉을 요청합니다. 응답은 최신 봉부터 정렬되므로 응답의 가장 오래된 `Timestamp`를 다음 요청의 `After`로 넘기면 상장 시점까지 거슬러 올라갈 수 있습니다. `Before`가 `After`보다 이르지 않으면 요청 전에 검증 오류를 반환합니다.
+
+`Candle1Second`는 `HistoryCandles`에서만 허용하며 OKX는 최근 3개월만 제공합니다.
+
+```go
+after := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
+candles, err := client.HistoryCandles(ctx, okx.CandlesRequest{
+	InstrumentID: "BTC-USDT", Interval: okx.Candle1Minute, After: &after, Limit: 300,
+})
+```
+
 ## 요청 제한
 
 SDK limiter는 공식 제한의 실제 scope를 분리합니다.
@@ -88,6 +103,7 @@ SDK limiter는 공식 제한의 실제 scope를 분리합니다.
 | 호가 | route | 40/2초 |
 | 최근 체결 | route | 100/2초 |
 | 캔들 | route | 40/2초 |
+| 과거 캔들 | route | 20/2초 |
 | 잔고·포지션 | 계정 | 10/2초 |
 | 주문 생성·취소·단건 조회 | 계정 + 상품 + HTTP method | 60/2초 |
 | 미체결 주문 | 계정 | 60/2초 |

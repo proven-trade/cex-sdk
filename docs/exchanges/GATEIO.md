@@ -54,6 +54,41 @@ ticker, err := client.Ticker(ctx, "BTC_USDT", trade.WithEgressRoute("seoul-b"))
 
 가격, 수량, 금액, 수수료는 `float64`로 변환하지 않고 문자열로 보존합니다. 객체와 배열 항목의 `Raw`에는 해당 원본 JSON을 보존합니다. 캔들은 `timestamp, quote volume, close, high, low, open, base volume, closed` 순서로 해석하며, 구형 7개 필드 응답은 `BaseVolume`을 빈 문자열로 둡니다.
 
+## 과거 데이터 덤프
+
+REST 캔들은 Spot·Futures 모두 최근 10,000개보다 오래된 구간을 `Candlestick too long ago`로 거부하고, Spot 공개 체결은 30일보다 오래된 구간을 거부합니다. 그 이전 데이터는 Gate.io 공식 저장소 `https://download.gatedata.org`의 월별 gzip CSV를 `exchange/gateio/archive` 패키지로 읽습니다.
+
+| 메서드 | 덤프 | 비고 |
+|---|---|---|
+| `Candles` | `{market}/candlesticks_{1m,5m,1h,4h,1d}` | 시간 오름차순, 열 순서는 REST와 같은 `t,v,c,h,l,o` |
+| `Trades` | Spot `spot/deals`, Futures `{market}/trades` | 파일 기록 순서 그대로 반환 |
+| `TradeCandles` | 체결 덤프 | 한 달 전체를 지정 구간 캔들로 합성해 오름차순 반환 |
+
+`Market`은 `MarketSpot`, `MarketFuturesUSDT`, `MarketFuturesBTC`이고 `Symbol`은 `BTC_USDT` 형식입니다. 파일은 호출자가 `Close`해야 하는 스트림으로 읽으며 수백 MB 파일도 메모리에 올리지 않습니다. 요청은 다른 클라이언트와 같은 `Executor`와 요청별 송신 경로를 사용하고, `trade.WithTimeout`은 응답 헤더 수신까지만 적용합니다. 본문 수신 시간은 context로 제어합니다. 저장소는 요청 제한을 공개하지 않으므로 동시 다운로드 수는 호출자가 조절해야 합니다.
+
+없는 파일은 `archive.ErrFileNotFound`와 `trade.ErrUnsupportedCapability`로 반환합니다. 2026-11 기준 BTC_USDT 실측 게시 범위는 다음과 같습니다.
+
+- Spot 체결: 2018-01부터 지난달까지
+- Spot 1·5분 캔들: 2017년부터 2024-05까지, 2024-04 누락
+- Spot 1시간·4시간·1일 캔들: 2017년부터 지난달까지
+- USDT Futures 캔들·체결: 2020-01부터 지난달까지
+
+덤프는 월 단위로 게시되므로 당월 중 REST 캔들 10,000개 창보다 오래된 구간(1분봉 기준 약 7일 이전)은 다음 달 덤프가 나오기 전까지 어느 경로로도 받을 수 없습니다. 이 구간이 필요하면 WebSocket 또는 REST로 상시 수집해야 합니다.
+
+Spot 캔들 덤프의 거래량은 저장소가 부동소수점으로 기록해 `6.137529907399998`처럼 원문 자릿수를 그대로 보존합니다. Futures 캔들과 체결의 수량은 계약 수이고, 체결의 음수 수량은 매도 방향이므로 `Amount`에는 절댓값을, `Side`에는 방향을 넣습니다. Spot 체결의 방향 값 `1`은 매수, `2`는 매도입니다.
+
+```go
+archiveClient, err := archive.New(archive.Config{Executor: executor, DefaultEgressRouteID: "seoul-a"})
+if err != nil {
+	return err
+}
+candles, err := archiveClient.TradeCandles(ctx, archive.TradesRequest{
+	Market: archive.MarketSpot, Symbol: "BTC_USDT", Year: 2025, Month: time.March,
+}, time.Minute)
+```
+
+`TradeCandles`의 구간은 월 경계와 일치하도록 하루를 나누어떨어져야 합니다. 저장소의 오래된 체결 파일은 최신 체결부터, 최근 파일은 오래된 체결부터 기록돼 있어 첫 두 체결 ID로 방향을 판별합니다. microsecond 시각을 쓰는 최근 파일에서는 합성 결과가 저장소 캔들과 일치합니다. 2018년 무렵의 초 단위 파일은 같은 초의 체결을 ID 순서로 시가·종가에 반영하므로 저장소 캔들과 시가·종가가 다를 수 있습니다. 캔들 덤프가 있는 월은 `Candles`를 우선 사용하고 체결 합성은 캔들 덤프가 없는 월에 사용하세요.
+
 ## 공통 Spot API
 
 `NewUnifiedSpot`으로 생성한 어댑터는 `unified.SpotClient`의 마켓, 현재가, 호가, 최근 체결, 캔들, 잔고, 주문 생성·조회·취소·미체결 목록을 구현합니다. 공통 `BTC/USDT`는 Gate.io의 `BTC_USDT`로 변환하며 모든 메서드의 요청별 송신 경로 옵션을 native API까지 전달합니다.

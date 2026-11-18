@@ -24,6 +24,20 @@ private API를 사용하려면 다음 세 값이 `credential.Provider`의 `crede
 | `COIN-FUTURES` | 아직 미지원 |
 | `USDC-FUTURES` | 아직 미지원 |
 
+## 과거 캔들
+
+`Candles`(`GET /api/v3/market/candles`)는 최근 90일 이내 구간만 반환합니다. 그보다 오래된 구간은 `HistoryCandles`(`GET /api/v3/market/history-candles`)로 조회합니다. 두 메서드는 같은 `CandlesRequest`를 사용하지만 `HistoryCandles`는 요청당 최대 100개이고 `StartTime`과 `EndTime`을 함께 지정하면 범위가 90일을 넘을 수 없습니다. 이 제약은 요청 전에 검증합니다.
+
+응답의 가장 오래된 봉 시각을 다음 요청의 `EndTime`으로 넘기면 상장 시점까지 거슬러 올라갈 수 있습니다. 공식 문서에 따르면 `EndTime`이 봉 경계를 1ms라도 넘으면 한 구간 이른 봉이 포함될 수 있으므로 수집기는 봉 시각으로 중복을 제거해야 합니다. 과거 캔들은 공개 시세와 같은 `20/IP/초` bucket을 endpoint별로 사용합니다.
+
+```go
+end := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
+candles, err := client.HistoryCandles(ctx, bitget.CandlesRequest{
+	Category: bitget.CategorySpot, Symbol: "BTCUSDT",
+	Interval: bitget.Candle1Minute, EndTime: &end, Limit: 100,
+})
+```
+
 ## 요청 제한
 
 요청 한 건은 다음 두 제한을 원자적으로 차감합니다.

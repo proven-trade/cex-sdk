@@ -128,16 +128,26 @@ func (adapter *UnifiedSpot) RecentTrades(
 	}
 	trades := make([]unified.PublicTrade, len(native.Trades))
 	for index, item := range native.Trades {
-		timestamp, parseErr := krakenSecondsToMillis(item.Time)
-		if parseErr != nil {
-			return nil, fmt.Errorf("decode Kraken trade timestamp: %w", parseErr)
-		}
-		trades[index] = unified.PublicTrade{
-			ID: strconv.FormatInt(item.TradeID, 10), Price: item.Price, Quantity: item.Volume,
-			Side: toUnifiedKrakenSide(item.Side), Timestamp: timestamp,
+		trades[index], err = item.Unified()
+		if err != nil {
+			return nil, err
 		}
 	}
 	return trades, nil
+}
+
+// Unified는 Kraken 공개 체결을 millisecond 시각의 공통 체결로 변환한다.
+// OHLC가 최근 720개만 제공하므로 과거 캔들은 RecentTrades의 Last를 다음 Since로 넘기며
+// 받은 체결을 unified.TradeCandleBuilder에 넣어 합성한다.
+func (item PublicTrade) Unified() (unified.PublicTrade, error) {
+	timestamp, err := krakenSecondsToMillis(item.Time)
+	if err != nil {
+		return unified.PublicTrade{}, fmt.Errorf("decode Kraken trade timestamp: %w", err)
+	}
+	return unified.PublicTrade{
+		ID: strconv.FormatInt(item.TradeID, 10), Price: item.Price, Quantity: item.Volume,
+		Side: toUnifiedKrakenSide(item.Side), Timestamp: timestamp,
+	}, nil
 }
 
 // Candles는 Kraken Spot OHLCV를 조회하고 3분봉은 1분봉으로 합성한다.

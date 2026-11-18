@@ -80,6 +80,43 @@ Kraken 응답의 상품 key는 요청 alias와 다를 수 있다. 예를 들어 
 
 OHLC 응답의 마지막 항목은 아직 끝나지 않은 현재 구간이며 `Since` 값과 관계없이 항상 포함된다. 확정 봉만 필요한 전략은 현재 시각과 interval을 비교해 마지막 항목을 제외해야 한다.
 
+### 과거 캔들
+
+OHLC는 `Since`를 과거로 지정해도 최근 720개 밖의 구간을 반환하지 않는다. 그 이전 캔들은 상장 시점부터 보존되는 `Trades` 이력으로 합성한다. `RecentTrades`의 `Last`를 다음 `Since`에 넘겨 오래된 체결부터 차례로 받고, `PublicTrade.Unified`로 변환한 체결을 `unified.TradeCandleBuilder`에 넣는다. 합성기는 진행 중인 구간 하나만 보관하므로 페이지 경계에서 구간이 나뉘지 않는다.
+
+```go
+builder, err := unified.NewTradeCandleBuilder(time.Minute, unified.TradeOrderAscending)
+if err != nil {
+	return err
+}
+since := strconv.FormatInt(listingTime.UnixNano(), 10)
+for {
+	page, err := client.RecentTrades(ctx, kraken.RecentTradesRequest{Pair: "XBTUSD", Since: since, Count: 1000})
+	if err != nil {
+		return err
+	}
+	if len(page.Trades) == 0 {
+		break
+	}
+	for _, item := range page.Trades {
+		tick, err := item.Unified()
+		if err != nil {
+			return err
+		}
+		candle, completed, err := builder.Add(tick)
+		if err != nil {
+			return err
+		}
+		if completed {
+			store(candle)
+		}
+	}
+	since = page.Last
+}
+```
+
+체결이 없는 구간은 만들지 않으며 `Flush`로 꺼낸 마지막 구간은 이후 체결이 더 있을 수 있다. 체결 한 페이지는 최대 1,000건이므로 거래량이 많은 상품의 전체 이력은 많은 요청을 소비하며 공개 요청 제한을 따른다.
+
 ## 주문과 계정
 
 ```go

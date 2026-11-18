@@ -134,11 +134,7 @@ func compareDecimals(left, right string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	scale := leftValue.scale
-	if rightValue.scale > scale {
-		scale = rightValue.scale
-	}
-	return scaleInteger(leftValue, scale).Cmp(scaleInteger(rightValue, scale)), nil
+	return compareScaledDecimals(leftValue, rightValue), nil
 }
 
 func addScaledDecimals(left, right scaledDecimal) scaledDecimal {

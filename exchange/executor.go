@@ -147,22 +147,18 @@ func NewExecutor(config ExecutorConfig) (*Executor, error) {
 	}, nil
 }
 
+// StreamResponse는 본문을 버퍼링하지 않은 원본 HTTP 응답이다.
+// Body는 호출자가 반드시 닫아야 하며 닫으면 요청 context도 해제된다.
+type StreamResponse struct {
+	StatusCode int
+	Header     http.Header
+	Body       io.ReadCloser
+}
+
 // Execute는 limiter 확보 이후 요청을 만들고 지정한 송신 경로로 전송한다.
 func (executor *Executor) Execute(ctx context.Context, execution Execution) (Response, error) {
-	if ctx == nil {
-		return Response{}, fmt.Errorf("execution context cannot be nil")
-	}
-	if !execution.Exchange.Valid() {
-		return Response{}, fmt.Errorf("execution exchange is required")
-	}
-	if strings.TrimSpace(string(execution.EgressRouteID)) == "" {
-		return Response{}, trade.ErrMissingEgressRoute
-	}
-	if execution.Build == nil {
-		return Response{}, fmt.Errorf("request builder is required")
-	}
-	if execution.Operation != OperationRead && execution.Operation != OperationMutation {
-		return Response{}, fmt.Errorf("unsupported operation kind %d", execution.Operation)
+	if err := execution.validate(ctx); err != nil {
+		return Response{}, err
 	}
 
 	requestCtx := ctx
@@ -197,52 +193,16 @@ func (executor *Executor) executeAttempt(
 	attempt int,
 ) (Response, bool, error) {
 	started := time.Now()
-	endpointID := execution.EndpointID
-	if err := executor.limiter.Wait(requestCtx, execution.Charges...); err != nil {
-		category := trade.ErrorInternal
-		retryable := false
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			category = trade.ErrorTimeout
-			retryable = true
-		}
-		apiError := &trade.APIError{
-			Category:  category,
-			Exchange:  execution.Exchange,
-			AccountID: execution.AccountID,
-			Retryable: retryable,
-			Cause:     err,
-		}
-		executor.observe(execution, endpointID, attempt, started, 0, apiError)
-		return Response{}, false, apiError
-	}
-
-	request, err := execution.Build(requestCtx)
+	httpResponse, endpointID, retry, err := executor.send(requestCtx, execution, attempt, started)
 	if err != nil {
-		executor.observe(execution, endpointID, attempt, started, 0, err)
-		return Response{}, false, err
-	}
-	if request == nil {
-		err = fmt.Errorf("request builder returned nil request")
-		executor.observe(execution, endpointID, attempt, started, 0, err)
-		return Response{}, false, err
-	}
-	if endpointID == "" && request.URL != nil {
-		endpointID = request.Method + " " + request.URL.Path
-	}
-
-	httpResponse, err := executor.sender.Do(requestCtx, execution.EgressRouteID, request)
-	if err != nil {
-		apiError := execution.transportError(err)
-		retry := execution.Operation == OperationRead && retryableAPIError(apiError) && requestCtx.Err() == nil
-		executor.observe(execution, endpointID, attempt, started, 0, apiError)
-		return Response{}, retry, apiError
+		return Response{}, retry, err
 	}
 
 	body, err := io.ReadAll(io.LimitReader(httpResponse.Body, executor.maxResponseBodyBytes+1))
 	_ = httpResponse.Body.Close()
 	if err != nil {
 		apiError := execution.responseError(fmt.Errorf("read response body: %w", err))
-		retry := execution.Operation == OperationRead && requestCtx.Err() == nil
+		retry = execution.Operation == OperationRead && requestCtx.Err() == nil
 		executor.observe(execution, endpointID, attempt, started, httpResponse.StatusCode, apiError)
 		return Response{}, retry, apiError
 	}
@@ -263,9 +223,131 @@ func (executor *Executor) executeAttempt(
 	if httpResponse.StatusCode == http.StatusTooManyRequests || httpResponse.StatusCode == http.StatusTeapot {
 		executor.applyRetryAfter(response.Header, execution.Charges)
 	}
-	retry := execution.Operation == OperationRead && retryableReadStatus(response.StatusCode)
+	retry = execution.Operation == OperationRead && retryableReadStatus(response.StatusCode)
 	executor.observe(execution, endpointID, attempt, started, response.StatusCode, nil)
 	return response, retry, nil
+}
+
+// Stream은 limiter 확보 후 요청을 보내고 본문을 읽지 않은 채 반환한다.
+// MaxResponseBodyBytes를 넘는 공개 대용량 파일처럼 흐름으로 처리해야 하는 읽기 요청에만 사용한다.
+// Execution.Timeout은 응답 헤더 수신까지만 적용하고 본문 수신 시간은 ctx로 제어한다.
+// 본문을 일부 소비한 뒤에는 안전하게 다시 보낼 수 없으므로 자동 재시도하지 않는다.
+func (executor *Executor) Stream(ctx context.Context, execution Execution) (StreamResponse, error) {
+	if err := execution.validate(ctx); err != nil {
+		return StreamResponse{}, err
+	}
+	if execution.Operation != OperationRead {
+		return StreamResponse{}, fmt.Errorf("streamed execution must be a read operation")
+	}
+
+	streamCtx, cancel := context.WithCancel(ctx)
+	var headerTimer *time.Timer
+	if execution.Timeout > 0 {
+		headerTimer = time.AfterFunc(execution.Timeout, cancel)
+	}
+	started := time.Now()
+	httpResponse, endpointID, _, err := executor.send(streamCtx, execution, 1, started)
+	if headerTimer != nil && !headerTimer.Stop() && err == nil {
+		_ = httpResponse.Body.Close()
+		err = execution.transportError(context.DeadlineExceeded)
+		executor.observe(execution, endpointID, 1, started, 0, err)
+	}
+	if err != nil {
+		cancel()
+		return StreamResponse{}, err
+	}
+
+	header := httpResponse.Header.Clone()
+	if httpResponse.StatusCode == http.StatusTooManyRequests || httpResponse.StatusCode == http.StatusTeapot {
+		executor.applyRetryAfter(header, execution.Charges)
+	}
+	executor.observe(execution, endpointID, 1, started, httpResponse.StatusCode, nil)
+	return StreamResponse{
+		StatusCode: httpResponse.StatusCode,
+		Header:     header,
+		Body:       &cancelOnCloseBody{ReadCloser: httpResponse.Body, cancel: cancel},
+	}, nil
+}
+
+type cancelOnCloseBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (body *cancelOnCloseBody) Close() error {
+	err := body.ReadCloser.Close()
+	body.cancel()
+	return err
+}
+
+func (execution Execution) validate(ctx context.Context) error {
+	if ctx == nil {
+		return fmt.Errorf("execution context cannot be nil")
+	}
+	if !execution.Exchange.Valid() {
+		return fmt.Errorf("execution exchange is required")
+	}
+	if strings.TrimSpace(string(execution.EgressRouteID)) == "" {
+		return trade.ErrMissingEgressRoute
+	}
+	if execution.Build == nil {
+		return fmt.Errorf("request builder is required")
+	}
+	if execution.Operation != OperationRead && execution.Operation != OperationMutation {
+		return fmt.Errorf("unsupported operation kind %d", execution.Operation)
+	}
+	return nil
+}
+
+// send는 limiter 대기, 요청 생성, 송신을 수행하고 본문을 읽지 않은 응답을 반환한다.
+// 실패하면 관측값을 기록하고 읽기 재시도 가능 여부를 함께 반환한다.
+func (executor *Executor) send(
+	requestCtx context.Context,
+	execution Execution,
+	attempt int,
+	started time.Time,
+) (*http.Response, string, bool, error) {
+	endpointID := execution.EndpointID
+	if err := executor.limiter.Wait(requestCtx, execution.Charges...); err != nil {
+		category := trade.ErrorInternal
+		retryable := false
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			category = trade.ErrorTimeout
+			retryable = true
+		}
+		apiError := &trade.APIError{
+			Category:  category,
+			Exchange:  execution.Exchange,
+			AccountID: execution.AccountID,
+			Retryable: retryable,
+			Cause:     err,
+		}
+		executor.observe(execution, endpointID, attempt, started, 0, apiError)
+		return nil, endpointID, false, apiError
+	}
+
+	request, err := execution.Build(requestCtx)
+	if err != nil {
+		executor.observe(execution, endpointID, attempt, started, 0, err)
+		return nil, endpointID, false, err
+	}
+	if request == nil {
+		err = fmt.Errorf("request builder returned nil request")
+		executor.observe(execution, endpointID, attempt, started, 0, err)
+		return nil, endpointID, false, err
+	}
+	if endpointID == "" && request.URL != nil {
+		endpointID = request.Method + " " + request.URL.Path
+	}
+
+	httpResponse, err := executor.sender.Do(requestCtx, execution.EgressRouteID, request)
+	if err != nil {
+		apiError := execution.transportError(err)
+		retry := execution.Operation == OperationRead && retryableAPIError(apiError) && requestCtx.Err() == nil
+		executor.observe(execution, endpointID, attempt, started, 0, apiError)
+		return nil, endpointID, retry, apiError
+	}
+	return httpResponse, endpointID, false, nil
 }
 
 func (policy ReadRetryPolicy) validate() error {
