@@ -93,6 +93,28 @@ func TestKlinesReadsMicrosecondSpotMonthlyFile(t *testing.T) {
 	}
 }
 
+func TestKlinesReadsNonASCIISymbol(t *testing.T) {
+	t.Parallel()
+
+	filePath := "/data/spot/daily/klines/币安人生USDT/1m/币安人生USDT-1m-2026-11-16.zip"
+	server, sender := newArchiveServer(t, map[string]archiveFile{filePath: {csv: "1794787200000000,0.1,0.2,0.1,0.2,10,1794787259999999,1.5,3,5,0.75,0\n"}})
+	client := newTestClient(t, server.URL, sender, 0)
+
+	reader, err := client.Klines(context.Background(), KlinesRequest{
+		Market: MarketSpot, Symbol: "币安人生USDT", Interval: binance.Kline1Minute, Year: 2026, Month: time.November, Day: 16,
+	})
+	if err != nil {
+		t.Fatalf("Klines() error = %v", err)
+	}
+	defer reader.Close()
+	if first, err := reader.Next(); err != nil || first.OpenTime != 1_794_787_200_000 || first.TradeCount != 3 {
+		t.Fatalf("first kline = %+v, error = %v", first, err)
+	}
+	if _, paths := sender.snapshot(); len(paths) != 2 || paths[1] != filePath {
+		t.Fatalf("requests = %v", paths)
+	}
+}
+
 func TestKlinesSkipsUSDMDailyHeader(t *testing.T) {
 	t.Parallel()
 
@@ -165,6 +187,8 @@ func TestKlinesErrors(t *testing.T) {
 	for name, request := range map[string]KlinesRequest{
 		"market":      {Market: "options", Symbol: "BTCUSDT", Interval: binance.Kline1Minute, Year: 2024, Month: 1},
 		"symbol":      {Market: MarketSpot, Symbol: "btc-usdt", Interval: binance.Kline1Minute, Year: 2024, Month: 1},
+		"path symbol": {Market: MarketSpot, Symbol: "BTC/../ETH", Interval: binance.Kline1Minute, Year: 2024, Month: 1},
+		"escape":      {Market: MarketSpot, Symbol: "BTC%2FETH", Interval: binance.Kline1Minute, Year: 2024, Month: 1},
 		"interval":    {Market: MarketSpot, Symbol: "BTCUSDT", Interval: "7m", Year: 2024, Month: 1},
 		"usdm 1s":     {Market: MarketUSDM, Symbol: "BTCUSDT", Interval: binance.Kline1Second, Year: 2024, Month: 1},
 		"year":        {Market: MarketSpot, Symbol: "BTCUSDT", Interval: binance.Kline1Minute, Year: 2016, Month: 1},
