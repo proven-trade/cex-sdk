@@ -2,9 +2,17 @@
 
 이 프로젝트의 사용자 영향 변경 사항은 이 파일에 기록합니다. 버전은 Semantic Versioning을 따릅니다.
 
-## Unreleased
+## 1.0.3
 
-이번 변경에는 공개 주문 계약과 상태 의미의 호환되지 않는 변경이 포함되므로 다음 릴리스는 v2입니다.
+### Added
+
+- OKX `HistoryCandles`(`/api/v5/market/history-candles`)와 1초 캔들
+- Bitget `HistoryCandles`(`/api/v3/market/history-candles`)
+- Kraken `PublicTrade.Unified`와 공통 `unified.TradeCandleBuilder`로 체결 이력 기반 과거 캔들 합성
+- Gate.io 공식 과거 데이터 덤프를 읽는 `exchange/gateio/archive` 패키지
+- 본문을 버퍼링하지 않는 읽기 전용 `Executor.Stream`
+
+## 1.0.2
 
 ### Breaking
 
@@ -18,11 +26,7 @@
 - `MarketInfo` 주문 단위·최소 주문값과 exact-decimal `ValidateOrder`
 - 분산 rate-limit backend 계약과 REST 실행 관측 훅
 - 읽기 REST의 제한적 재시도와 WebSocket decode 재연결 복구
-- OKX `HistoryCandles`(`/api/v5/market/history-candles`)와 1초 캔들
-- Bitget `HistoryCandles`(`/api/v3/market/history-candles`)
-- Kraken `PublicTrade.Unified`와 공통 `unified.TradeCandleBuilder`로 체결 이력 기반 과거 캔들 합성
-- Gate.io 공식 과거 데이터 덤프를 읽는 `exchange/gateio/archive` 패키지
-- 본문을 버퍼링하지 않는 읽기 전용 `Executor.Stream`
+- Binance USDⓈ-M algo 조건부 주문 endpoint
 
 ### Changed
 
