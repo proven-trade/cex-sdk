@@ -48,6 +48,8 @@ type StreamClientConfig struct {
 	ReconnectPolicy         corestream.ReconnectPolicy
 	Backoff                 corestream.Backoff
 	MaxReconnectAttempts    int
+	// IdleTimeout이 0보다 크면 이 시간 동안 데이터 메시지가 없을 때 연결을 끊고 재연결한다.
+	IdleTimeout time.Duration
 }
 
 // StreamClient는 Crypto.com 공개 시세와 private 사용자 WebSocket 세션을 생성한다.
@@ -66,6 +68,7 @@ type StreamClient struct {
 	reconnectPolicy       corestream.ReconnectPolicy
 	backoff               corestream.Backoff
 	maxReconnectAttempts  int
+	idleTimeout           time.Duration
 	nextID                atomic.Int64
 }
 
@@ -152,7 +155,7 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 		userCommandInterval:   time.Second / time.Duration(config.UserRequestsPerSecond),
 		now:                   config.Now, observer: config.Observer,
 		reconnectPolicy: config.ReconnectPolicy, backoff: config.Backoff,
-		maxReconnectAttempts: config.MaxReconnectAttempts,
+		maxReconnectAttempts: config.MaxReconnectAttempts, idleTimeout: config.IdleTimeout,
 	}, nil
 }
 
@@ -196,7 +199,7 @@ func (client *StreamClient) PublicStream(
 		Request:   corestream.DialRequest{Endpoint: client.marketURL},
 		OnConnect: managed.resubscribe, Observer: client.observer,
 		ReconnectPolicy: client.streamReconnectPolicy, Backoff: client.backoff,
-		MaxReconnectAttempts: client.maxReconnectAttempts,
+		MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
 	})
 	if err != nil {
 		return nil, err

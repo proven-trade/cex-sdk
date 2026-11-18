@@ -32,15 +32,17 @@ var pingCommand = []byte(`{"method":"PING"}`)
 
 // StreamClientConfig는 MEXC Spot V3 public·private Protobuf WebSocket 설정이다.
 type StreamClientConfig struct {
-	Connector                  corestream.Connector
-	RESTClient                 *Client
-	DefaultEgressRouteID       transport.EgressRouteID
-	WebSocketURL               string
-	AllowInsecureWebSocket     bool
-	Observer                   corestream.StateObserver
-	ReconnectPolicy            corestream.ReconnectPolicy
-	Backoff                    corestream.Backoff
-	MaxReconnectAttempts       int
+	Connector              corestream.Connector
+	RESTClient             *Client
+	DefaultEgressRouteID   transport.EgressRouteID
+	WebSocketURL           string
+	AllowInsecureWebSocket bool
+	Observer               corestream.StateObserver
+	ReconnectPolicy        corestream.ReconnectPolicy
+	Backoff                corestream.Backoff
+	MaxReconnectAttempts   int
+	// IdleTimeout이 0보다 크면 이 시간 동안 데이터 메시지가 없을 때 연결을 끊고 재연결한다.
+	IdleTimeout                time.Duration
 	PingInterval               time.Duration
 	PingTimeout                time.Duration
 	ListenKeyKeepaliveInterval time.Duration
@@ -56,6 +58,7 @@ type StreamClient struct {
 	reconnectPolicy            corestream.ReconnectPolicy
 	backoff                    corestream.Backoff
 	maxReconnectAttempts       int
+	idleTimeout                time.Duration
 	pingInterval               time.Duration
 	pingTimeout                time.Duration
 	listenKeyKeepaliveInterval time.Duration
@@ -102,7 +105,7 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 		connector: config.Connector, restClient: config.RESTClient,
 		defaultRouteID: defaultRouteID, webSocketURL: webSocketURL,
 		observer: config.Observer, reconnectPolicy: config.ReconnectPolicy,
-		backoff: config.Backoff, maxReconnectAttempts: config.MaxReconnectAttempts,
+		backoff: config.Backoff, maxReconnectAttempts: config.MaxReconnectAttempts, idleTimeout: config.IdleTimeout,
 		pingInterval: config.PingInterval, pingTimeout: config.PingTimeout,
 		listenKeyKeepaliveInterval: config.ListenKeyKeepaliveInterval,
 	}, nil
@@ -147,7 +150,7 @@ func (client *StreamClient) PublicStream(
 		Request:   corestream.DialRequest{Endpoint: client.webSocketURL},
 		OnConnect: managed.resubscribe, Observer: client.observer,
 		ReconnectPolicy: client.streamReconnectPolicy, Backoff: client.backoff,
-		MaxReconnectAttempts: client.maxReconnectAttempts,
+		MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
 	})
 	if err != nil {
 		return nil, err
@@ -242,7 +245,7 @@ func (client *StreamClient) UserDataStream(
 		Connector: client.connector, EgressRouteID: routeID,
 		RequestSource: userData.dialRequest, OnConnect: managed.resubscribe,
 		Observer: client.observer, ReconnectPolicy: client.streamReconnectPolicy,
-		Backoff: client.backoff, MaxReconnectAttempts: client.maxReconnectAttempts,
+		Backoff: client.backoff, MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
 	})
 	if err != nil {
 		return nil, err

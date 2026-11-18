@@ -28,7 +28,7 @@ private API를 사용하려면 다음 세 값이 `credential.Provider`의 `crede
 
 `Candles`(`GET /api/v3/market/candles`)는 최근 90일 이내 구간만 반환합니다. 그보다 오래된 구간은 `HistoryCandles`(`GET /api/v3/market/history-candles`)로 조회합니다. 두 메서드는 같은 `CandlesRequest`를 사용하지만 `HistoryCandles`는 요청당 최대 100개이고 `StartTime`과 `EndTime`을 함께 지정하면 범위가 90일을 넘을 수 없습니다. 이 제약은 요청 전에 검증합니다.
 
-응답의 가장 오래된 봉 시각을 다음 요청의 `EndTime`으로 넘기면 상장 시점까지 거슬러 올라갈 수 있습니다. 공식 문서에 따르면 `EndTime`이 봉 경계를 1ms라도 넘으면 한 구간 이른 봉이 포함될 수 있으므로 수집기는 봉 시각으로 중복을 제거해야 합니다. 과거 캔들은 공개 시세와 같은 `20/IP/초` bucket을 endpoint별로 사용합니다.
+응답의 가장 오래된 봉 시각을 다음 요청의 `EndTime`으로 넘기면 상장 시점까지 거슬러 올라갈 수 있습니다. 페이지 경계의 봉이 양쪽 응답에 모두 포함될 수 있으므로 수집기는 봉 시각으로 중복을 제거해야 합니다. 과거 캔들 endpoint의 한도는 `5/IP/초`이며(응답 헤더 `x-mbx-used-remain-limit` 실측), SDK는 이 경로에 별도 `5/초` bucket을 사용합니다.
 
 ```go
 end := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -45,6 +45,7 @@ candles, err := client.HistoryCandles(ctx, bitget.CandlesRequest{
 1. route 단위 전체 제한 `6000/IP/분`
 2. endpoint별 문서 제한
    - 공개 시세: `20/IP/초`
+   - 과거 캔들(`history-candles`): `5/IP/초`
    - 조회 private API: `20/UID/초`
    - 주문 생성·취소: `10/UID/초`
 
@@ -118,9 +119,13 @@ public channel의 1차 typed 범위는 다음과 같습니다.
 - `ticker`: `[]StreamTicker`
 - `books`, `books1`, `books5`, `books50`: `[]StreamOrderBook`
 - `publicTrade`: `[]StreamPublicTrade`
-- `kline`: `[]Candle`
+- `kline`: `[]StreamCandle` (REST `Candle`의 위치 배열과 달리 `start`·`open`·`close`·`high`·`low`·`volume`·`turnover` 객체)
 
 `PublicStreamArgument`와 `KlineStreamArgument`가 Spot·USDT Futures 인자를 만듭니다. 동적 `Subscribe`와 `Unsubscribe`에 성공하면 현재 구독 목록을 갱신하고, 연결이 끊어졌을 때 같은 route에서 전체 목록을 다시 구독합니다.
+
+Bitget은 4096바이트를 넘는 구독 요청을 `30002 Unrecognized request`로 거부합니다(kline 인자 약 50개). SDK는 구독·해제·재구독 요청을 입력 순서대로 4096바이트 이하 메시지로 나눕니다. 재연결 재구독은 연결당 초당 10개 메시지 제한에 맞춰 110ms 간격으로 보내고, 동적 `Subscribe`·`Unsubscribe`는 나눈 메시지마다 `SubscriptionInterval` 간격을 지킵니다. 일부만 보낸 뒤 실패하면 보낸 묶음까지만 재연결 복구 목록에 반영합니다. 대량 구독은 `PublicStream` 생성 시 인자로 넘기는 편이 빠릅니다.
+
+구독 오류 프레임(`{"event":"error","code":30001,...}`)의 숫자 `code`는 문자열로 보존해 `StreamMessage{Event: "error"}`로 handler에 전달합니다. 연결은 유지되므로 존재하지 않는 상품 하나 때문에 다른 구독이 끊기지 않습니다.
 
 ### Spot 로컬 오더북과 자동 갭 복구
 

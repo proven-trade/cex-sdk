@@ -477,6 +477,9 @@ func TestDefaultReconnectPolicy(t *testing.T) {
 		{name: "unauthorized", err: &HandshakeError{HTTPStatus: http.StatusUnauthorized}, want: false},
 		{name: "invalid endpoint", err: &permanentError{cause: errors.New("invalid endpoint")}, want: false},
 		{name: "canceled", err: context.Canceled, want: false},
+		{name: "deadline", err: context.DeadlineExceeded, want: false},
+		{name: "ping timeout", err: &pingError{cause: context.DeadlineExceeded}, want: true},
+		{name: "idle timeout", err: ErrIdleTimeout, want: true},
 		{name: "nil", err: nil, want: false},
 	}
 	for _, test := range tests {

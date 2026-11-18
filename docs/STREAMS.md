@@ -71,6 +71,12 @@ err = session.Run(ctx, func(ctx context.Context, message stream.Message) error {
 
 `Run`은 연결이 끝날 때까지 블로킹하며 한 세션에서 한 번만 호출할 수 있습니다. handler는 메시지 순서를 보존하기 위해 직렬로 실행됩니다. 처리 시간이 긴 작업은 애플리케이션이 크기가 제한된 큐와 자체 backpressure 정책을 사용해야 합니다. 일반 handler 오류는 데이터 처리 실패로 간주해 종료합니다. 거래소 decoder가 `stream.ReconnectOnMessageError(err)`를 반환하면 현재 frame·연결만 손상된 것으로 보고 같은 route로 재연결합니다.
 
+### Heartbeat와 수신 유휴 시간
+
+`PingInterval`마다 보내는 ping은 별도 goroutine에서 실행합니다. pong을 기다리는 동안에도 수신과 handler 처리가 계속되므로, application pong을 `Read`가 읽어야 끝나는 거래소(OKX·Bybit·Bitget 등)나 control ping을 쓰는 거래소에서도 메시지가 많은 스트림이 pong 대기 때문에 멈추지 않습니다. 이전 ping이 끝나지 않았으면 다음 ping은 건너뜁니다. ping이 `PingTimeout` 안에 끝나지 않거나 실패하면 `stream.ErrPingFailed`를 원인으로 연결을 끊고 재연결합니다. 이 오류는 원본 원인(`context.DeadlineExceeded` 등)도 함께 감싸지만 기본 재연결 정책은 재연결 대상으로 봅니다.
+
+`IdleTimeout`이 0보다 크면 마지막 수신 메시지 이후 그 시간 동안 메시지가 없을 때 `stream.ErrIdleTimeout`을 원인으로 연결을 끊고 재연결합니다. 서버나 중간 장비가 조용히 끊은 반쯤 열린 연결처럼 ping만으로 드러나지 않는 끊김을 감지합니다. `Connection`이 `stream.HeartbeatDetector`를 구현하면 heartbeat 응답은 수신으로 세지 않습니다. OKX, Bitget, Bybit, Coinone, KuCoin 어댑터는 application pong을 이렇게 구분합니다. 모든 거래소 `StreamClientConfig`에 같은 이름의 `IdleTimeout`이 있습니다. 값은 구독한 채널의 push 주기보다 충분히 길게 잡아야 합니다. 예를 들어 Bybit kline은 거래가 없어도 60초 안에 push하므로 2분 정도가 적당합니다.
+
 ## 임시 인증 정보 갱신
 
 거래소가 private stream용 임시 endpoint, listen key 또는 토큰을 발급하는 경우 정적 `Request` 대신 `RequestSource`를 사용합니다.
@@ -94,7 +100,7 @@ RequestSource: func(ctx context.Context) (stream.DialRequest, error) {
 
 ## 재연결 정책
 
-기본 정책은 네트워크 오류와 서버 오류를 재시도하고, 영구적인 HTTP 4xx handshake 오류는 재시도하지 않습니다. 예외적으로 일시적일 수 있는 `408`, `418`, `429`는 재시도합니다.
+기본 정책은 네트워크 오류, 서버 오류, ping 실패(`ErrPingFailed`), 수신 유휴 시간 초과(`ErrIdleTimeout`)를 재시도하고, 영구적인 HTTP 4xx handshake 오류와 `Run` context의 취소·만료는 재시도하지 않습니다. 예외적으로 일시적일 수 있는 `408`, `418`, `429`는 재시도합니다.
 
 - 기본 backoff: `250ms`에서 시작해 `30s`까지 증가하는 full jitter
 - `Retry-After`: 숫자 초 또는 HTTP 날짜 형식을 인식하고 backoff보다 길면 우선 적용

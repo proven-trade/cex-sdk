@@ -21,6 +21,11 @@ import (
 const (
 	DefaultBaseURL        = "https://api.upbit.com"
 	DefaultRequestTimeout = 10 * time.Second
+	// DefaultPublicRequestsPerSecond는 시세 그룹별 SDK 한도다. 거래소 한도는 IP당 초당 10회이지만
+	// 창 경계 지터로 지속 부하에서 429가 나지 않도록 여유를 둔다.
+	DefaultPublicRequestsPerSecond = 8
+	// MaxPublicRequestsPerSecond는 거래소가 허용하는 시세 그룹별 IP당 초당 요청 수다.
+	MaxPublicRequestsPerSecond = 10
 )
 
 // NonceSource는 인증 요청마다 중복되지 않는 nonce를 생성한다.
@@ -36,6 +41,9 @@ type Config struct {
 	AllowInsecureHTTP    bool
 	RequestTimeout       time.Duration
 	NonceSource          NonceSource
+	// PublicRequestsPerSecond는 시세 그룹(market, ticker, orderbook, trade, candle)별 route당 초당 요청 수다.
+	// 0이면 DefaultPublicRequestsPerSecond를 사용하며 1~10만 허용한다.
+	PublicRequestsPerSecond int
 }
 
 // Client는 업비트 Spot REST API를 제공한다.
@@ -47,6 +55,7 @@ type Client struct {
 	baseURL              *url.URL
 	requestTimeout       time.Duration
 	nonceSource          NonceSource
+	publicPerSecond      int
 }
 
 // New는 업비트 Spot REST 클라이언트를 생성한다.
@@ -81,6 +90,12 @@ func New(config Config) (*Client, error) {
 	if config.NonceSource == nil {
 		config.NonceSource = randomNonce
 	}
+	if config.PublicRequestsPerSecond == 0 {
+		config.PublicRequestsPerSecond = DefaultPublicRequestsPerSecond
+	}
+	if config.PublicRequestsPerSecond < 1 || config.PublicRequestsPerSecond > MaxPublicRequestsPerSecond {
+		return nil, fmt.Errorf("Upbit public requests per second must be between 1 and %d", MaxPublicRequestsPerSecond)
+	}
 
 	var credentialsCopy *credential.Descriptor
 	if config.Credentials != nil {
@@ -109,6 +124,7 @@ func New(config Config) (*Client, error) {
 		baseURL:              parsedBaseURL,
 		requestTimeout:       config.RequestTimeout,
 		nonceSource:          config.NonceSource,
+		publicPerSecond:      config.PublicRequestsPerSecond,
 	}, nil
 }
 
@@ -123,7 +139,8 @@ func (client *Client) executePublic(
 	if err != nil {
 		return commonexchange.Response{}, err
 	}
-	charges, rateKey, err := rateLimitCharges(client.executor.Limiter(), resolved.EgressRouteID, "", group)
+	limit := client.publicPerSecond
+	charges, rateKey, err := rateLimitCharges(client.executor.Limiter(), resolved.EgressRouteID, "", group, limit)
 	if err != nil {
 		return commonexchange.Response{}, err
 	}
@@ -135,7 +152,7 @@ func (client *Client) executePublic(
 		},
 	})
 	if err == nil {
-		observeRemaining(client.executor.Limiter(), rateKey, group, response.Header)
+		observeRemaining(client.executor.Limiter(), rateKey, group, limit, response.Header)
 	}
 	return response, err
 }
@@ -173,7 +190,7 @@ func (client *Client) executeSigned(
 		}
 	}
 	charges, rateKey, err := rateLimitCharges(
-		client.executor.Limiter(), resolved.EgressRouteID, client.credentials.AccountID, group,
+		client.executor.Limiter(), resolved.EgressRouteID, client.credentials.AccountID, group, group.perSecond,
 	)
 	if err != nil {
 		return commonexchange.Response{}, err
@@ -226,7 +243,7 @@ func (client *Client) executeSigned(
 		},
 	})
 	if err == nil {
-		observeRemaining(client.executor.Limiter(), rateKey, group, response.Header)
+		observeRemaining(client.executor.Limiter(), rateKey, group, group.perSecond, response.Header)
 	}
 	return response, err
 }

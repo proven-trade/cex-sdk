@@ -36,6 +36,10 @@ type SessionConfig struct {
 	MaxReconnectDelay    time.Duration
 	PingInterval         time.Duration
 	PingTimeout          time.Duration
+	// IdleTimeout이 0보다 크면 마지막 수신 메시지 이후 이 시간 동안 메시지가 없을 때
+	// 연결을 끊고 ErrIdleTimeout 원인으로 재연결한다. Connection이 HeartbeatDetector를
+	// 구현하면 SDK heartbeat 응답은 수신으로 세지 않는다.
+	IdleTimeout time.Duration
 }
 
 // Session은 한 송신 경로에 고정된 자동 재연결 WebSocket 세션이다.
@@ -79,6 +83,9 @@ func NewSession(config SessionConfig) (*Session, error) {
 	}
 	if config.PingInterval < 0 || config.PingTimeout < 0 {
 		return nil, fmt.Errorf("ping durations cannot be negative")
+	}
+	if config.IdleTimeout < 0 {
+		return nil, fmt.Errorf("idle timeout cannot be negative")
 	}
 	if config.MaxReconnectDelay < 0 {
 		return nil, fmt.Errorf("maximum reconnect delay cannot be negative")
@@ -345,12 +352,24 @@ func (session *Session) consume(ctx context.Context, connection Connection, hand
 	}()
 
 	var ping <-chan time.Time
-	var ticker *time.Ticker
 	if session.config.PingInterval > 0 {
-		ticker = time.NewTicker(session.config.PingInterval)
+		ticker := time.NewTicker(session.config.PingInterval)
 		defer ticker.Stop()
 		ping = ticker.C
 	}
+	// ping은 별도 goroutine에서 보내고 소비 루프는 pong을 기다리는 동안에도 수신 메시지를 계속 비운다.
+	// 그렇지 않으면 pong보다 먼저 도착한 데이터가 reader를 막아 pong을 읽지 못한다.
+	pingResults := make(chan error, 1)
+	pingInFlight := false
+
+	var idle <-chan time.Time
+	var idleTimer *time.Timer
+	if session.config.IdleTimeout > 0 {
+		idleTimer = time.NewTimer(session.config.IdleTimeout)
+		defer idleTimer.Stop()
+		idle = idleTimer.C
+	}
+	heartbeats, _ := connection.(HeartbeatDetector)
 	for {
 		select {
 		case <-ctx.Done():
@@ -361,21 +380,45 @@ func (session *Session) consume(ctx context.Context, connection Connection, hand
 			if result.err != nil {
 				return result.err, false
 			}
+			if idleTimer != nil && (heartbeats == nil || !heartbeats.IsHeartbeat(result.message)) {
+				resetTimer(idleTimer, session.config.IdleTimeout)
+			}
 			if err := handler(ctx, result.message); err != nil {
 				cancel()
 				var reconnect *reconnectMessageError
 				return err, !errors.As(err, &reconnect)
 			}
 		case <-ping:
-			pingContext, pingCancel := context.WithTimeout(ctx, session.config.PingTimeout)
-			err := connection.Ping(pingContext)
-			pingCancel()
+			if pingInFlight {
+				continue
+			}
+			pingInFlight = true
+			go func() {
+				pingContext, pingCancel := context.WithTimeout(readContext, session.config.PingTimeout)
+				defer pingCancel()
+				pingResults <- connection.Ping(pingContext)
+			}()
+		case err := <-pingResults:
+			pingInFlight = false
 			if err != nil {
 				cancel()
-				return err, false
+				return &pingError{cause: err}, false
 			}
+		case <-idle:
+			cancel()
+			return ErrIdleTimeout, false
 		}
 	}
+}
+
+func resetTimer(timer *time.Timer, duration time.Duration) {
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
+	timer.Reset(duration)
 }
 
 func (session *Session) waitToReconnect(ctx context.Context, cause error, attempt int) error {
@@ -428,7 +471,11 @@ func (session *Session) observe(change StateChange) {
 }
 
 // DefaultReconnectPolicy는 영구적인 4xx handshake 오류를 제외한 연결 오류를 재시도한다.
+// ping 실패와 수신 유휴 시간 초과는 context.DeadlineExceeded를 감싸더라도 연결 문제이므로 재연결한다.
 func DefaultReconnectPolicy(err error) bool {
+	if errors.Is(err, ErrPingFailed) || errors.Is(err, ErrIdleTimeout) {
+		return true
+	}
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrSessionClosed) {
 		return false
 	}

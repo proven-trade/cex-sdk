@@ -10,13 +10,40 @@ import (
 
 type streamWireMessage struct {
 	Event        string          `json:"event"`
-	Code         string          `json:"code"`
+	Code         streamCode      `json:"code"`
 	Message      string          `json:"msg"`
 	ConnectionID string          `json:"connId"`
 	Argument     StreamArgument  `json:"arg"`
 	Action       string          `json:"action"`
 	Timestamp    int64           `json:"ts"`
 	Data         json.RawMessage `json:"data"`
+}
+
+// streamCode는 Bitget이 JSON string 또는 number로 보내는 응답 code를 문자열로 보존한다.
+// v3 구독 오류 프레임은 `"code":30001`처럼 number를 사용한다.
+type streamCode string
+
+func (code *streamCode) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	switch {
+	case bytes.Equal(trimmed, []byte("null")):
+		*code = ""
+		return nil
+	case len(trimmed) > 0 && trimmed[0] == '"':
+		var text string
+		if err := json.Unmarshal(trimmed, &text); err != nil {
+			return err
+		}
+		*code = streamCode(text)
+		return nil
+	default:
+		var number json.Number
+		if err := json.Unmarshal(trimmed, &number); err != nil {
+			return fmt.Errorf("Bitget stream code must be a string or number: %w", err)
+		}
+		*code = streamCode(number.String())
+		return nil
+	}
 }
 
 // DecodeStreamMessage는 Bitget JSON 또는 application pong을 공통 메시지로 변환한다.
@@ -37,7 +64,7 @@ func DecodeStreamMessage(message corestream.Message) (StreamMessage, error) {
 	}
 	return StreamMessage{
 		Event:        wire.Event,
-		Code:         wire.Code,
+		Code:         string(wire.Code),
 		Message:      wire.Message,
 		ConnectionID: wire.ConnectionID,
 		Argument:     wire.Argument,

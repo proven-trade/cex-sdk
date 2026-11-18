@@ -67,7 +67,7 @@ func (client *StreamClient) PrivateStream(
 		Request:   corestream.DialRequest{Endpoint: client.userURL},
 		OnConnect: managed.authenticate, Observer: client.observer,
 		ReconnectPolicy: client.streamReconnectPolicy, Backoff: client.backoff,
-		MaxReconnectAttempts: client.maxReconnectAttempts,
+		MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
 	})
 	if err != nil {
 		return nil, err

@@ -422,3 +422,47 @@ func allZero(value []byte) bool {
 	}
 	return true
 }
+
+func TestPublicRequestsPerSecondKeepsHeadroom(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		writer.Header().Set("Remaining-Req", "group=candle; min=600; sec=7")
+		_, _ = io.WriteString(writer, `[]`)
+	}))
+	defer server.Close()
+
+	client, limiter := newTestClient(t, server.URL, &directSender{}, &recordingProvider{}, []transport.EgressRouteID{"route-a"})
+	if _, err := client.MinuteCandles(context.Background(), MinuteCandlesRequest{Market: "KRW-BTC", Unit: Minute1, Count: 1}); err != nil {
+		t.Fatalf("MinuteCandles() error = %v", err)
+	}
+	snapshot, err := limiter.Snapshot("upbit:route:route-a:candle:1second")
+	if err != nil || snapshot.Rule.Limit != DefaultPublicRequestsPerSecond || snapshot.Used != DefaultPublicRequestsPerSecond-7 {
+		t.Fatalf("candle limiter snapshot = %+v, error = %v", snapshot, err)
+	}
+
+	executor, err := commonexchange.NewExecutor(commonexchange.ExecutorConfig{Sender: &directSender{}, Limiter: limiter})
+	if err != nil {
+		t.Fatalf("NewExecutor() error = %v", err)
+	}
+	for _, invalid := range []int{-1, MaxPublicRequestsPerSecond + 1} {
+		if _, err := New(Config{Executor: executor, DefaultEgressRouteID: "route-a", PublicRequestsPerSecond: invalid}); err == nil {
+			t.Fatalf("New(PublicRequestsPerSecond=%d) error = nil", invalid)
+		}
+	}
+	custom, err := New(Config{
+		Executor: executor, DefaultEgressRouteID: "route-b", BaseURL: server.URL, AllowInsecureHTTP: true,
+		PublicRequestsPerSecond: MaxPublicRequestsPerSecond,
+	})
+	if err != nil {
+		t.Fatalf("New(max) error = %v", err)
+	}
+	if _, err := custom.MinuteCandles(context.Background(), MinuteCandlesRequest{Market: "KRW-BTC", Unit: Minute1, Count: 1}); err != nil {
+		t.Fatalf("custom MinuteCandles() error = %v", err)
+	}
+	snapshot, err = limiter.Snapshot("upbit:route:route-b:candle:1second")
+	if err != nil || snapshot.Rule.Limit != MaxPublicRequestsPerSecond || snapshot.Used != 3 {
+		t.Fatalf("custom limiter snapshot = %+v, error = %v", snapshot, err)
+	}
+}

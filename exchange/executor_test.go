@@ -342,3 +342,65 @@ func TestStreamRejectsMutations(t *testing.T) {
 		t.Fatal("Stream() mutation error = nil")
 	}
 }
+
+func TestExecuteBlocksAndRetriesBodyLevelRateLimit(t *testing.T) {
+	t.Parallel()
+	for _, operation := range []OperationKind{OperationRead, OperationMutation} {
+		operation := operation
+		t.Run(strconv.Itoa(int(operation)), func(t *testing.T) {
+			t.Parallel()
+			limiter, err := ratelimit.New(ratelimit.Rule{Key: "ip", Limit: 100, Window: time.Second})
+			if err != nil {
+				t.Fatalf("ratelimit.New() error = %v", err)
+			}
+			var sentAt []time.Time
+			var observed []ExecutionObservation
+			executor, err := NewExecutor(ExecutorConfig{
+				Sender: senderFunc(func(context.Context, transport.EgressRouteID, *http.Request) (*http.Response, error) {
+					sentAt = append(sentAt, time.Now())
+					body := `{"retCode":10006}`
+					if len(sentAt) > 1 {
+						body = `{"retCode":0}`
+					}
+					return &http.Response{
+						StatusCode: http.StatusOK, Header: make(http.Header),
+						Body: io.NopCloser(strings.NewReader(body)),
+					}, nil
+				}),
+				Limiter: limiter, ReadRetryPolicy: &ReadRetryPolicy{MaxAttempts: 2},
+				Observer: ExecutionObserverFunc(func(value ExecutionObservation) { observed = append(observed, value) }),
+			})
+			if err != nil {
+				t.Fatalf("NewExecutor() error = %v", err)
+			}
+			execution := validExecution(operation)
+			execution.Charges = []ratelimit.Charge{{Key: "ip", Units: 1}}
+			execution.RateLimit = func(response Response) (time.Duration, bool) {
+				return 80 * time.Millisecond, strings.Contains(string(response.Body), "10006")
+			}
+			response, err := executor.Execute(context.Background(), execution)
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if len(observed) == 0 || observed[0].ErrorCategory != trade.ErrorRateLimited {
+				t.Fatalf("first observation = %+v, want rate limited", observed)
+			}
+			if operation == OperationMutation {
+				if len(sentAt) != 1 || !strings.Contains(string(response.Body), "10006") {
+					t.Fatalf("mutation calls = %d, body = %s", len(sentAt), response.Body)
+				}
+				snapshot, err := limiter.Snapshot("ip")
+				if err != nil || !snapshot.BlockedUntil.After(time.Now()) {
+					t.Fatalf("mutation did not block limiter: %+v, %v", snapshot, err)
+				}
+				return
+			}
+			if len(sentAt) != 2 || string(response.Body) != `{"retCode":0}` {
+				t.Fatalf("read calls = %d, body = %s", len(sentAt), response.Body)
+			}
+			if gap := sentAt[1].Sub(sentAt[0]); gap < 70*time.Millisecond {
+				t.Fatalf("retry was sent %s after rate limit, want after block", gap)
+			}
+		})
+	}
+}

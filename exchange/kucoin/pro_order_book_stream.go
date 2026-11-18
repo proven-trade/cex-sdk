@@ -90,7 +90,7 @@ func (client *StreamClient) ProOrderBookStream(
 		Connector: client.connector, EgressRouteID: routeID,
 		Request: corestream.DialRequest{Endpoint: client.proPublicURL}, OnConnect: stream.subscribe,
 		Observer: client.observer, ReconnectPolicy: client.streamReconnectPolicy,
-		Backoff: client.backoff, MaxReconnectAttempts: client.maxReconnectAttempts,
+		Backoff: client.backoff, MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
 		PingInterval: client.pingInterval, PingTimeout: client.pingTimeout,
 	})
 	if err != nil {

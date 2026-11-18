@@ -6,6 +6,7 @@ import (
 	"errors"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -426,4 +427,152 @@ func newTestBitgetStreamClient(
 		t.Fatalf("NewStreamClient() error = %v", err)
 	}
 	return client
+}
+
+func TestKlineStreamArgumentSetsIntervalBeforeValidation(t *testing.T) {
+	t.Parallel()
+
+	argument, err := KlineStreamArgument(CategorySpot, "btcusdt", "1m")
+	if err != nil {
+		t.Fatalf("KlineStreamArgument() error = %v", err)
+	}
+	want := StreamArgument{InstrumentType: "spot", Topic: "kline", Symbol: "BTCUSDT", Interval: "1m"}
+	if argument != want {
+		t.Fatalf("KlineStreamArgument() = %+v, want %+v", argument, want)
+	}
+	if _, err := KlineStreamArgument(CategorySpot, "BTCUSDT", ""); !errors.Is(err, trade.ErrValidation) {
+		t.Fatalf("empty interval error = %v, want ErrValidation", err)
+	}
+	if _, err := PublicStreamArgument(CategorySpot, "kline", "BTCUSDT"); !errors.Is(err, trade.ErrValidation) {
+		t.Fatalf("kline without interval error = %v, want ErrValidation", err)
+	}
+}
+
+func TestDecodeStreamMessageAcceptsNumericErrorCode(t *testing.T) {
+	t.Parallel()
+
+	frame := `{"event":"error","code":30001,"msg":"{\"instType\":\"spot\",\"symbol\":\"NOPEUSDT\",\"topic\":\"kline\",\"interval\":\"1m\"} doesn't exist","connId":"abc"}`
+	decoded, err := DecodeStreamMessage(corestream.Message{Data: []byte(frame)})
+	if err != nil || decoded.Event != "error" || decoded.Code != "30001" || decoded.ConnectionID != "abc" {
+		t.Fatalf("DecodeStreamMessage(numeric code) = %+v, %v", decoded, err)
+	}
+	decoded, err = DecodeStreamMessage(corestream.Message{Data: []byte(`{"event":"login","code":"0","msg":""}`)})
+	if err != nil || decoded.Code != "0" {
+		t.Fatalf("DecodeStreamMessage(string code) = %+v, %v", decoded, err)
+	}
+	if _, err := DecodeStreamMessage(corestream.Message{Data: []byte(`{"event":"error","code":{"x":1}}`)}); err == nil {
+		t.Fatal("DecodeStreamMessage(object code) error = nil")
+	}
+}
+
+func TestStreamOperationBatchesStayWithinMessageLimit(t *testing.T) {
+	t.Parallel()
+
+	arguments := make([]StreamArgument, 0, 120)
+	for index := range 120 {
+		argument, err := KlineStreamArgument(CategoryUSDTFutures, "COIN"+strconv.Itoa(index)+"USDT", "1m")
+		if err != nil {
+			t.Fatalf("KlineStreamArgument() error = %v", err)
+		}
+		arguments = append(arguments, argument)
+	}
+	batches, err := streamOperationBatches("subscribe", arguments)
+	if err != nil {
+		t.Fatalf("streamOperationBatches() error = %v", err)
+	}
+	if len(batches) < 2 {
+		t.Fatalf("batches = %d, want split", len(batches))
+	}
+	var rejoined []StreamArgument
+	for index, batch := range batches {
+		if len(batch.payload) > maxStreamMessageBytes {
+			t.Fatalf("batch %d is %d bytes", index, len(batch.payload))
+		}
+		var decoded streamOperation
+		if err := json.Unmarshal(batch.payload, &decoded); err != nil || decoded.Operation != "subscribe" ||
+			!slices.Equal(decoded.Arguments, batch.arguments) {
+			t.Fatalf("batch %d payload = %s, error = %v", index, batch.payload, err)
+		}
+		if index < len(batches)-1 {
+			next, _ := json.Marshal(batches[index+1].arguments[0])
+			if len(batch.payload)+len(next)+1 <= maxStreamMessageBytes {
+				t.Fatalf("batch %d was split before it was full", index)
+			}
+		}
+		rejoined = append(rejoined, batch.arguments...)
+	}
+	if !slices.Equal(rejoined, arguments) {
+		t.Fatal("batches changed argument order")
+	}
+	single, err := streamOperationBatches("unsubscribe", arguments[:1])
+	if err != nil || len(single) != 1 {
+		t.Fatalf("single batch = %+v, error = %v", single, err)
+	}
+	oversized := StreamArgument{InstrumentType: "spot", Topic: "ticker", Symbol: strings.Repeat("A", maxStreamMessageBytes)}
+	if _, err := streamOperationBatches("subscribe", []StreamArgument{oversized}); !errors.Is(err, trade.ErrValidation) {
+		t.Fatalf("oversized argument error = %v, want ErrValidation", err)
+	}
+}
+
+func TestPublicStreamResubscribesInSizedBatches(t *testing.T) {
+	t.Parallel()
+
+	connection := newWSTestConnection()
+	client := newTestBitgetStreamClient(t, &wsTestConnector{connections: []*wsTestConnection{connection}}, nil, time.Now, nil)
+	arguments := make([]StreamArgument, 0, 60)
+	for index := range 60 {
+		argument, err := KlineStreamArgument(CategorySpot, "COIN"+strconv.Itoa(index)+"USDT", "1m")
+		if err != nil {
+			t.Fatalf("KlineStreamArgument() error = %v", err)
+		}
+		arguments = append(arguments, argument)
+	}
+	public, err := client.PublicStream(StreamRequest{Arguments: arguments})
+	if err != nil {
+		t.Fatalf("PublicStream() error = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- public.Run(ctx, func(context.Context, StreamMessage) error { return nil })
+	}()
+	var received []StreamArgument
+	for len(received) < len(arguments) {
+		payload := waitForWSWrite(t, connection)
+		if len(payload) > maxStreamMessageBytes {
+			t.Fatalf("resubscribe payload is %d bytes", len(payload))
+		}
+		var request streamOperation
+		if err := json.Unmarshal(payload, &request); err != nil || request.Operation != "subscribe" {
+			t.Fatalf("resubscribe payload = %s, error = %v", payload, err)
+		}
+		received = append(received, request.Arguments...)
+	}
+	if len(received) != len(arguments) {
+		t.Fatalf("resubscribed %d arguments, want %d", len(received), len(arguments))
+	}
+	cancel()
+	<-done
+}
+
+func TestStreamCandleDecodesKlineObjects(t *testing.T) {
+	t.Parallel()
+
+	frame := `{"action":"update","arg":{"instType":"usdt-futures","topic":"kline","symbol":"BTCUSDT","interval":"1m"},"data":[{"start":"1794993180000","open":"64675.3","close":"64690","high":"64690","low":"64673.4","volume":"6.4454","turnover":"416899.45912"}],"ts":1794993206434}`
+	message, err := DecodeStreamMessage(corestream.Message{Data: []byte(frame)})
+	if err != nil {
+		t.Fatalf("DecodeStreamMessage() error = %v", err)
+	}
+	var candles []StreamCandle
+	if err := message.DecodeData(&candles); err != nil {
+		t.Fatalf("DecodeData() error = %v", err)
+	}
+	want := StreamCandle{
+		Start: "1794993180000", Open: "64675.3", Close: "64690", High: "64690",
+		Low: "64673.4", Volume: "6.4454", Turnover: "416899.45912",
+	}
+	if len(candles) != 1 || candles[0] != want {
+		t.Fatalf("candles = %+v, want %+v", candles, want)
+	}
 }

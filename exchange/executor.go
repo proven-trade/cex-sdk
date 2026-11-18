@@ -42,6 +42,12 @@ const (
 // BuildRequest는 limiter 대기가 끝난 뒤 최종 직렬화와 서명을 수행한다.
 type BuildRequest func(context.Context) (*http.Request, error)
 
+// RateLimitDetector는 HTTP 429·418 밖에서 거래소가 알린 요청 한도 초과를 판별한다.
+// 예를 들어 Bybit은 HTTP 200 본문의 retCode 10006으로 IP 한도 초과를 알린다.
+// limited가 true이면 실행기는 Charges 키를 block 기간 동안 막고(0 이하이면 1초)
+// 읽기 요청은 block이 풀린 뒤 ReadRetryPolicy 안에서 다시 보낸다.
+type RateLimitDetector func(Response) (block time.Duration, limited bool)
+
 // Execution은 HTTP 요청 한 건의 공통 실행 정보를 담는다.
 type Execution struct {
 	Exchange      model.ExchangeID
@@ -52,6 +58,7 @@ type Execution struct {
 	Charges       []ratelimit.Charge
 	Operation     OperationKind
 	Build         BuildRequest
+	RateLimit     RateLimitDetector
 }
 
 // ReadRetryPolicy는 읽기 전용 REST 요청에만 적용되는 제한적 재시도 정책이다.
@@ -222,6 +229,18 @@ func (executor *Executor) executeAttempt(
 	}
 	if httpResponse.StatusCode == http.StatusTooManyRequests || httpResponse.StatusCode == http.StatusTeapot {
 		executor.applyRetryAfter(response.Header, execution.Charges)
+	} else if execution.RateLimit != nil {
+		if block, limited := execution.RateLimit(response); limited {
+			if block <= 0 {
+				block = time.Second
+			}
+			executor.blockCharges(execution.Charges, block)
+			executor.observe(execution, endpointID, attempt, started, response.StatusCode, &trade.APIError{
+				Category: trade.ErrorRateLimited, Exchange: execution.Exchange,
+				AccountID: execution.AccountID, Retryable: true,
+			})
+			return response, execution.Operation == OperationRead, nil
+		}
 	}
 	retry = execution.Operation == OperationRead && retryableReadStatus(response.StatusCode)
 	executor.observe(execution, endpointID, attempt, started, response.StatusCode, nil)
@@ -473,7 +492,10 @@ func (execution Execution) responseError(err error) error {
 }
 
 func (executor *Executor) applyRetryAfter(headers http.Header, charges []ratelimit.Charge) {
-	duration := retryAfterDuration(headers.Get("Retry-After"), time.Now())
+	executor.blockCharges(charges, retryAfterDuration(headers.Get("Retry-After"), time.Now()))
+}
+
+func (executor *Executor) blockCharges(charges []ratelimit.Charge, duration time.Duration) {
 	keys := make([]string, 0, len(charges))
 	seen := make(map[string]struct{}, len(charges))
 	for _, charge := range charges {

@@ -44,10 +44,12 @@ type StreamClientConfig struct {
 	ReconnectPolicy        corestream.ReconnectPolicy
 	Backoff                corestream.Backoff
 	MaxReconnectAttempts   int
-	PingInterval           time.Duration
-	PingTimeout            time.Duration
-	SubscriptionInterval   time.Duration
-	ConnectIDSource        ConnectIDSource
+	// IdleTimeout이 0보다 크면 이 시간 동안 데이터 메시지가 없을 때 연결을 끊고 재연결한다.
+	IdleTimeout          time.Duration
+	PingInterval         time.Duration
+	PingTimeout          time.Duration
+	SubscriptionInterval time.Duration
+	ConnectIDSource      ConnectIDSource
 }
 
 // StreamClient는 KuCoin Classic·Pro Spot WebSocket 세션을 생성한다.
@@ -61,6 +63,7 @@ type StreamClient struct {
 	reconnectPolicy        corestream.ReconnectPolicy
 	backoff                corestream.Backoff
 	maxReconnectAttempts   int
+	idleTimeout            time.Duration
 	pingInterval           time.Duration
 	pingTimeout            time.Duration
 	subscriptionInterval   time.Duration
@@ -111,7 +114,7 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 		proPublicURL:           proPublicURL,
 		allowInsecureWebSocket: config.AllowInsecureWebSocket,
 		observer:               config.Observer, reconnectPolicy: config.ReconnectPolicy,
-		backoff: config.Backoff, maxReconnectAttempts: config.MaxReconnectAttempts,
+		backoff: config.Backoff, maxReconnectAttempts: config.MaxReconnectAttempts, idleTimeout: config.IdleTimeout,
 		pingInterval: config.PingInterval, pingTimeout: config.PingTimeout,
 		subscriptionInterval: config.SubscriptionInterval,
 		connectIDSource:      config.ConnectIDSource,
@@ -311,8 +314,8 @@ func (client *StreamClient) newStreamSession(
 		},
 		OnConnect: onConnect, Observer: client.observer,
 		ReconnectPolicy: client.streamReconnectPolicy, Backoff: client.backoff,
-		MaxReconnectAttempts: client.maxReconnectAttempts,
-		PingInterval:         client.pingInterval, PingTimeout: client.pingTimeout,
+		MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
+		PingInterval: client.pingInterval, PingTimeout: client.pingTimeout,
 	})
 }
 
@@ -763,6 +766,14 @@ func (connection *kucoinConnection) Ping(ctx context.Context) error {
 	case <-connection.pong:
 		return nil
 	}
+}
+
+var _ corestream.HeartbeatDetector = (*kucoinConnection)(nil)
+
+// IsHeartbeat는 SDK ping의 응답을 수신 유휴 시간 계산에서 제외하도록 표시한다.
+func (connection *kucoinConnection) IsHeartbeat(message corestream.Message) bool {
+	_, ok := kucoinPongID(message.Data)
+	return ok
 }
 
 func (connection *kucoinConnection) Close(code int, reason string) error {

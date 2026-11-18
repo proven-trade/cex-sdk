@@ -11,6 +11,8 @@ import (
 	"github.com/proven-trade/cex-sdk/transport"
 )
 
+// rateGroup은 업비트 Remaining-Req 그룹이다. perSecond는 거래소가 공지한 한도이며
+// 시세 그룹의 SDK 한도는 Config.PublicRequestsPerSecond로 정한다.
 type rateGroup struct {
 	name      string
 	perSecond int
@@ -32,6 +34,7 @@ func rateLimitCharges(
 	routeID transport.EgressRouteID,
 	accountID string,
 	group rateGroup,
+	limit int,
 ) ([]ratelimit.Charge, string, error) {
 	scope, scopeID := "route", string(routeID)
 	if group.account {
@@ -42,19 +45,25 @@ func rateLimitCharges(
 	}
 	key := rateLimitKey(scope, scopeID, group.name)
 	if err := limiter.SetRule(ratelimit.Rule{
-		Key: key, Limit: group.perSecond, Window: time.Second,
+		Key: key, Limit: limit, Window: time.Second,
 	}); err != nil {
 		return nil, "", err
 	}
 	return []ratelimit.Charge{{Key: key, Units: 1}}, key, nil
 }
 
-func observeRemaining(limiter *ratelimit.Limiter, key string, group rateGroup, header http.Header) {
+// observeRemaining은 거래소 기준 남은 요청 수를 SDK 한도 기준 사용량으로 환산한다.
+// SDK 한도가 거래소 한도보다 낮으면 그 차이만큼 여유를 남긴 채 사용량을 맞춘다.
+func observeRemaining(limiter *ratelimit.Limiter, key string, group rateGroup, limit int, header http.Header) {
 	name, remaining, ok := parseRemainingRequest(header.Get("Remaining-Req"))
 	if !ok || name != group.name || remaining > group.perSecond {
 		return
 	}
-	_ = limiter.ObserveUsed(key, group.perSecond-remaining)
+	used := limit - remaining
+	if used <= 0 {
+		return
+	}
+	_ = limiter.ObserveUsed(key, used)
 }
 
 func parseRemainingRequest(value string) (string, int, bool) {

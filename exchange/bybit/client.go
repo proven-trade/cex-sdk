@@ -164,6 +164,7 @@ func (client *Client) executePublicWithBuildHook(
 		Timeout:       resolved.Timeout,
 		Charges:       charges,
 		Operation:     commonexchange.OperationRead,
+		RateLimit:     detectRateLimit,
 		Build: func(context.Context) (*http.Request, error) {
 			if beforeBuild != nil {
 				beforeBuild()
@@ -228,6 +229,7 @@ func (client *Client) executeSigned(
 		Timeout:       resolved.Timeout,
 		Charges:       charges,
 		Operation:     operation,
+		RateLimit:     detectRateLimit,
 		Build: func(buildContext context.Context) (*http.Request, error) {
 			resolvedMaterial, resolveErr := client.credentialProvider.Resolve(
 				buildContext, client.credentials.SecretRef,
@@ -369,6 +371,36 @@ func (client *Client) decodeBodyError(
 		Retryable: retryable, HTTPStatus: response.StatusCode,
 		Cause: fmt.Errorf("decode Bybit JSON response: %w", cause),
 	}
+}
+
+// ipRateLimitWindow는 Bybit IP 한도(5초당 600회)의 창 길이다.
+const ipRateLimitWindow = 5 * time.Second
+
+// detectRateLimit은 HTTP 200 본문의 retCode 10006을 요청 한도 초과로 판별한다.
+// X-Bapi-Limit-Reset-Timestamp가 미래 시각이면 그때까지, 없으면 IP 창 하나만큼 막는다.
+func detectRateLimit(response commonexchange.Response) (time.Duration, bool) {
+	if response.StatusCode != http.StatusOK {
+		return 0, false
+	}
+	var envelope struct {
+		ReturnCode int `json:"retCode"`
+	}
+	if json.Unmarshal(response.Body, &envelope) != nil || envelope.ReturnCode != 10006 {
+		return 0, false
+	}
+	return rateLimitResetDelay(response.Header, time.Now()), true
+}
+
+func rateLimitResetDelay(header http.Header, now time.Time) time.Duration {
+	resetMillis, err := strconv.ParseInt(strings.TrimSpace(header.Get("X-Bapi-Limit-Reset-Timestamp")), 10, 64)
+	if err != nil {
+		return ipRateLimitWindow
+	}
+	delay := time.UnixMilli(resetMillis).Sub(now)
+	if delay <= 0 || delay > time.Minute {
+		return ipRateLimitWindow
+	}
+	return delay
 }
 
 func classifyError(

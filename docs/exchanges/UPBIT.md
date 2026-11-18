@@ -45,11 +45,11 @@ SDK는 공개 API를 송신 경로별 IP bucket으로, private API를 `AccountID
 
 | 그룹 | 로컬 제한 | 범위 |
 |---|---:|---|
-| `market`, `ticker`, `orderbook`, `trade`, `candle` | 각 10회/초 | IP route |
+| `market`, `ticker`, `orderbook`, `trade`, `candle` | 각 8회/초(기본값, 거래소 한도 10회/초) | IP route |
 | `default` | 30회/초 | 계정 pocket |
 | `order` | 12회/초 | 계정 pocket |
 
-2026-08-21 적용된 주문 그룹 상향값 `12회/초`를 반영했습니다. 응답의 `Remaining-Req` 중 `group`과 `sec` 값을 로컬 limiter에 반영합니다. HTTP 429와 418은 `Retry-After`가 있으면 그 기간, 없으면 최소 1초 동안 관련 bucket을 차단합니다.
+시세 그룹은 거래소 한도와 같은 10회/초로 두면 창 경계 지터 때문에 지속 부하에서 429가 발생하므로 기본 8회/초로 여유를 둡니다. `Config.PublicRequestsPerSecond`로 1~10 사이에서 조정할 수 있습니다. `Remaining-Req`의 남은 요청 수는 SDK 한도 기준 사용량으로 환산하므로 한도를 낮춰도 여유가 유지됩니다. 2026-08-21 적용된 주문 그룹 상향값 `12회/초`를 반영했습니다. 응답의 `Remaining-Req` 중 `group`과 `sec` 값을 로컬 limiter에 반영합니다. HTTP 429와 418은 `Retry-After`가 있으면 그 기간, 없으면 최소 1초 동안 관련 bucket을 차단합니다.
 
 여러 공인 송신 IP를 사용해도 pocket 단위 제한은 증가하지 않습니다. route 선택은 API Key IP 허용 목록 준수와 네트워크 격리를 위한 기능이며 거래소 제한 우회 용도가 아닙니다.
 

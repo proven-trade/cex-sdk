@@ -18,6 +18,7 @@
 - [MIT License](LICENSE)
 - [Binance Spot WebSocket](docs/exchanges/BINANCE_WEBSOCKET.md)
 - [Binance USDⓈ-M Futures REST·WebSocket](docs/exchanges/BINANCE_USDM.md)
+- [Binance 공개 데이터 덤프](docs/exchanges/BINANCE_ARCHIVE.md)
 - [Bybit V5 Spot·Linear REST](docs/exchanges/BYBIT.md)
 - [OKX V5 Spot·SWAP REST](docs/exchanges/OKX.md)
 - [Coinbase Advanced Trade Spot](docs/exchanges/COINBASE.md)
@@ -217,6 +218,7 @@ defer session.Close()
 - 공식 HMAC SHA-256 서명 벡터
 - IP·계정 단위 요청 제한과 `Retry-After` 반영
 - 주문 mutation의 불명확한 네트워크 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
+- `exchange/binance/archive`: `data.binance.vision` Spot·USDⓈ-M 캔들 월·일 덤프와 SHA-256 검증([문서](docs/exchanges/BINANCE_ARCHIVE.md))
 
 공개 Go API는 v1부터 Semantic Versioning 호환성을 따르며, 이후 호환되지 않는 API 변경은 새 major version에서 제공합니다. 거래소 자체 응답·정책 변경과 `experimental` 상품의 운영 검증 수준은 지원 매트릭스와 변경 이력에 별도로 기록합니다.
 
@@ -476,6 +478,7 @@ defer session.Close()
 - WebSocket protocol ping/pong heartbeat와 IP당 연결 수 운영 계약
 - Spot `spot.obu` 50·400단계 snapshot/증분 로컬 오더북과 update ID gap 시 같은 송신 경로 자동 재연결
 - `unified.SpotClient` 전체 계약과 공통 적합성 테스트
+- `exchange/gateio/archive`: `download.gatedata.org` 월별 캔들·체결 덤프와 체결 기반 캔들 합성
 
 세부 인증·주문·요청 제한·연결 계약은 [Gate.io API v4 Spot 문서](docs/exchanges/GATEIO.md)를 참고합니다.
 

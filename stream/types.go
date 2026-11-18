@@ -17,7 +17,27 @@ var (
 	ErrSessionClosed = errors.New("stream session is closed")
 	// ErrSessionAlreadyRun은 같은 세션의 Run을 두 번 호출했음을 나타낸다.
 	ErrSessionAlreadyRun = errors.New("stream session has already run")
+	// ErrPingFailed는 heartbeat ping 전송 또는 응답 대기가 실패해 연결을 끊었음을 나타낸다.
+	// StateChange.Cause에서 errors.Is로 구분하며 원본 원인도 함께 노출한다.
+	ErrPingFailed = errors.New("stream ping failed")
+	// ErrIdleTimeout은 SessionConfig.IdleTimeout 동안 메시지를 받지 못해 연결을 끊었음을 나타낸다.
+	ErrIdleTimeout = errors.New("stream receive idle timeout")
 )
+
+type pingError struct {
+	cause error
+}
+
+func (err *pingError) Error() string { return ErrPingFailed.Error() + ": " + err.cause.Error() }
+func (err *pingError) Unwrap() []error {
+	return []error{ErrPingFailed, err.cause}
+}
+
+// HeartbeatDetector는 Read가 반환한 메시지 중 SDK가 보낸 heartbeat의 응답을 구분한다.
+// 거래소 어댑터의 Connection이 구현하면 IdleTimeout 계산에서 해당 메시지를 제외한다.
+type HeartbeatDetector interface {
+	IsHeartbeat(Message) bool
+}
 
 // MessageType은 WebSocket text 또는 binary frame 종류다.
 type MessageType uint8

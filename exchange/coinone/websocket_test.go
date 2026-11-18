@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -665,5 +666,27 @@ func assertCoinonePrivateHeader(t *testing.T, request corestream.DialRequest, no
 	wantSignature := hex.EncodeToString(mac.Sum(nil))
 	if request.Header.Get("X-COINONE-SIGNATURE") != wantSignature {
 		t.Fatalf("private signature is invalid")
+	}
+}
+
+func TestCoinoneAcceptsSingleLetterTickers(t *testing.T) {
+	t.Parallel()
+
+	for _, target := range []string{"A", "C", "G", "S", "W", "T"} {
+		if err := validatePair("KRW", target); err != nil {
+			t.Fatalf("validatePair(KRW, %s) error = %v", target, err)
+		}
+		subscriptions := []StreamSubscription{{
+			Channel: StreamChannelChart,
+			Topics:  []StreamTopic{{QuoteCurrency: "KRW", TargetCurrency: target, Interval: Candle1Minute}},
+		}}
+		if _, err := validateStreamSubscriptions(subscriptions, false, true); err != nil {
+			t.Fatalf("chart subscription %s error = %v", target, err)
+		}
+	}
+	for _, target := range []string{"", "a", "A-B", strings.Repeat("A", 21)} {
+		if err := validatePair("KRW", target); !errors.Is(err, trade.ErrValidation) {
+			t.Fatalf("validatePair(KRW, %q) error = %v, want ErrValidation", target, err)
+		}
 	}
 }

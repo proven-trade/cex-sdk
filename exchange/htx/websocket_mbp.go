@@ -40,7 +40,7 @@ func (client *StreamClient) MBPStream(
 		Request:   corestream.DialRequest{Endpoint: client.mbpURL},
 		OnConnect: managed.resubscribe, Observer: client.observer,
 		ReconnectPolicy: client.streamReconnectPolicy, Backoff: client.backoff,
-		MaxReconnectAttempts: client.maxReconnectAttempts,
+		MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
 	})
 	if err != nil {
 		return nil, err

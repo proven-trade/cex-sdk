@@ -43,8 +43,10 @@ type StreamClientConfig struct {
 	ReconnectPolicy        corestream.ReconnectPolicy
 	Backoff                corestream.Backoff
 	MaxReconnectAttempts   int
-	PingInterval           time.Duration
-	PingTimeout            time.Duration
+	// IdleTimeout이 0보다 크면 이 시간 동안 데이터 메시지가 없을 때 연결을 끊고 재연결한다.
+	IdleTimeout  time.Duration
+	PingInterval time.Duration
+	PingTimeout  time.Duration
 }
 
 // StreamClient는 코인원 public/private WebSocket 세션을 생성한다.
@@ -61,6 +63,7 @@ type StreamClient struct {
 	reconnectPolicy      corestream.ReconnectPolicy
 	backoff              corestream.Backoff
 	maxReconnectAttempts int
+	idleTimeout          time.Duration
 	pingInterval         time.Duration
 	pingTimeout          time.Duration
 }
@@ -132,8 +135,8 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 		defaultRouteID: defaultRouteID, publicURL: publicURL, privateURL: privateURL,
 		nonceSource: config.NonceSource, now: config.Now, observer: config.Observer,
 		reconnectPolicy: config.ReconnectPolicy, backoff: config.Backoff,
-		maxReconnectAttempts: config.MaxReconnectAttempts,
-		pingInterval:         config.PingInterval, pingTimeout: config.PingTimeout,
+		maxReconnectAttempts: config.MaxReconnectAttempts, idleTimeout: config.IdleTimeout,
+		pingInterval: config.PingInterval, pingTimeout: config.PingTimeout,
 	}, nil
 }
 
@@ -300,8 +303,8 @@ func (client *StreamClient) newSession(
 		Connector: client.connector, EgressRouteID: routeID,
 		Request: request, RequestSource: requestSource, OnConnect: onConnect,
 		Observer: client.observer, ReconnectPolicy: reconnectPolicy, Backoff: client.backoff,
-		MaxReconnectAttempts: client.maxReconnectAttempts,
-		PingInterval:         client.pingInterval, PingTimeout: client.pingTimeout,
+		MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
+		PingInterval: client.pingInterval, PingTimeout: client.pingTimeout,
 	})
 }
 
@@ -685,6 +688,13 @@ func (connection *coinoneConnection) Ping(ctx context.Context) error {
 	case <-connection.pong:
 		return nil
 	}
+}
+
+var _ corestream.HeartbeatDetector = (*coinoneConnection)(nil)
+
+// IsHeartbeat는 SDK ping의 응답을 수신 유휴 시간 계산에서 제외하도록 표시한다.
+func (connection *coinoneConnection) IsHeartbeat(message corestream.Message) bool {
+	return isCoinonePong(message.Data)
 }
 
 func (connection *coinoneConnection) Close(code int, reason string) error {

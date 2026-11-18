@@ -595,3 +595,33 @@ func newTestBybitStreamClient(
 	}
 	return client
 }
+
+func TestKlineStreamTopicAcceptsDatedFuturesSymbols(t *testing.T) {
+	t.Parallel()
+
+	for _, symbol := range []string{"BTCUSDT", "BTCUSDT-27NOV26", "BTC-27MAR26"} {
+		topic, err := KlineStreamTopic(CategoryLinear, symbol, Candle1Minute)
+		if err != nil || topic != "kline.1."+symbol {
+			t.Fatalf("KlineStreamTopic(%s) = %q, %v", symbol, topic, err)
+		}
+	}
+	for _, symbol := range []string{"-BTCUSDT", "BTCUSDT-", "BTC--27MAR26", "btcusdt-27nov26"} {
+		if _, err := KlineStreamTopic(CategoryLinear, symbol, Candle1Minute); !errors.Is(err, trade.ErrValidation) {
+			t.Fatalf("KlineStreamTopic(%s) error = %v, want ErrValidation", symbol, err)
+		}
+	}
+}
+
+func TestBybitConnectionMarksOnlyPongAsHeartbeat(t *testing.T) {
+	t.Parallel()
+
+	connection := &bybitConnection{}
+	for _, frame := range []string{`{"op":"pong","args":["1"]}`, `{"success":true,"ret_msg":"pong","op":"ping"}`} {
+		if !connection.IsHeartbeat(corestream.Message{Data: []byte(frame)}) {
+			t.Fatalf("IsHeartbeat(%s) = false", frame)
+		}
+	}
+	if connection.IsHeartbeat(corestream.Message{Data: []byte(`{"topic":"kline.1.BTCUSDT","data":[]}`)}) {
+		t.Fatal("kline frame was treated as heartbeat")
+	}
+}

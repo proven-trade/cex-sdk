@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -259,9 +260,13 @@ func TestClientRejectsUnauthorizedRouteBeforeSecretResolution(t *testing.T) {
 func TestClientClassifiesRateLimitAndUnknownMutationState(t *testing.T) {
 	t.Parallel()
 
+	var tickerCalls atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		if request.URL.Path == "/v5/market/tickers" {
+			tickerCalls.Add(1)
+			reset := time.Now().Add(50 * time.Millisecond).UnixMilli()
+			writer.Header().Set("X-Bapi-Limit-Reset-Timestamp", strconv.FormatInt(reset, 10))
 			_, _ = io.WriteString(writer, `{"retCode":10006,"retMsg":"Too many visits","result":{},"time":1700000000000}`)
 			return
 		}
@@ -274,8 +279,8 @@ func TestClientClassifiesRateLimitAndUnknownMutationState(t *testing.T) {
 		[]transport.EgressRouteID{"route-a"}, func() time.Time { return time.UnixMilli(1_700_000_000_000) },
 	)
 	_, err := client.Tickers(context.Background(), TickersRequest{Category: CategorySpot})
-	if !errors.Is(err, trade.ErrRateLimited) {
-		t.Fatalf("Tickers() error = %v, want rate limited", err)
+	if !errors.Is(err, trade.ErrRateLimited) || tickerCalls.Load() != 2 {
+		t.Fatalf("Tickers() error = %v after %d calls, want rate limited after one retry", err, tickerCalls.Load())
 	}
 	_, err = client.PlaceOrder(
 		context.Background(),
@@ -407,4 +412,36 @@ func allZero(value []byte) bool {
 		}
 	}
 	return true
+}
+
+func TestRateLimitResetDelay(t *testing.T) {
+	t.Parallel()
+
+	now := time.UnixMilli(1_700_000_000_000)
+	header := make(http.Header)
+	if delay := rateLimitResetDelay(header, now); delay != ipRateLimitWindow {
+		t.Fatalf("missing header delay = %s", delay)
+	}
+	header.Set("X-Bapi-Limit-Reset-Timestamp", "1700000001250")
+	if delay := rateLimitResetDelay(header, now); delay != 1250*time.Millisecond {
+		t.Fatalf("future reset delay = %s", delay)
+	}
+	header.Set("X-Bapi-Limit-Reset-Timestamp", "1699999999000")
+	if delay := rateLimitResetDelay(header, now); delay != ipRateLimitWindow {
+		t.Fatalf("past reset delay = %s", delay)
+	}
+	limited := commonexchange.Response{StatusCode: http.StatusOK, Header: header, Body: []byte(`{"retCode":10006}`)}
+	if _, ok := detectRateLimit(limited); !ok {
+		t.Fatal("detectRateLimit(10006) = false")
+	}
+	for _, response := range []commonexchange.Response{
+		{StatusCode: http.StatusOK, Body: []byte(`{"retCode":0}`)},
+		{StatusCode: http.StatusOK, Body: []byte(`{"retCode":10016}`)},
+		{StatusCode: http.StatusBadGateway, Body: []byte(`{"retCode":10006}`)},
+		{StatusCode: http.StatusOK, Body: []byte(`not json`)},
+	} {
+		if _, ok := detectRateLimit(response); ok {
+			t.Fatalf("detectRateLimit(%d %s) = true", response.StatusCode, response.Body)
+		}
+	}
 }

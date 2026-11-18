@@ -42,8 +42,10 @@ type StreamClientConfig struct {
 	ReconnectPolicy        corestream.ReconnectPolicy
 	Backoff                corestream.Backoff
 	MaxReconnectAttempts   int
-	PingInterval           time.Duration
-	PingTimeout            time.Duration
+	// IdleTimeout이 0보다 크면 이 시간 동안 데이터 메시지가 없을 때 연결을 끊고 재연결한다.
+	IdleTimeout  time.Duration
+	PingInterval time.Duration
+	PingTimeout  time.Duration
 }
 
 // StreamClient는 빗썸 public/private WebSocket 세션을 생성한다.
@@ -61,6 +63,7 @@ type StreamClient struct {
 	reconnectPolicy      corestream.ReconnectPolicy
 	backoff              corestream.Backoff
 	maxReconnectAttempts int
+	idleTimeout          time.Duration
 	pingInterval         time.Duration
 	pingTimeout          time.Duration
 }
@@ -135,8 +138,8 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 		publicURL: publicURL, privateURL: privateURL,
 		nonceSource: config.NonceSource, ticketSource: config.TicketSource, now: config.Now,
 		observer: config.Observer, reconnectPolicy: config.ReconnectPolicy, backoff: config.Backoff,
-		maxReconnectAttempts: config.MaxReconnectAttempts,
-		pingInterval:         config.PingInterval, pingTimeout: config.PingTimeout,
+		maxReconnectAttempts: config.MaxReconnectAttempts, idleTimeout: config.IdleTimeout,
+		pingInterval: config.PingInterval, pingTimeout: config.PingTimeout,
 	}, nil
 }
 
@@ -260,8 +263,8 @@ func (client *StreamClient) newSession(
 		Connector: client.connector, EgressRouteID: routeID,
 		Request: request, RequestSource: requestSource, OnConnect: onConnect,
 		Observer: client.observer, ReconnectPolicy: client.reconnectPolicy, Backoff: client.backoff,
-		MaxReconnectAttempts: client.maxReconnectAttempts,
-		PingInterval:         client.pingInterval, PingTimeout: client.pingTimeout,
+		MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
+		PingInterval: client.pingInterval, PingTimeout: client.pingTimeout,
 	})
 }
 

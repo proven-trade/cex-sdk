@@ -38,7 +38,8 @@ const (
 	maxPublicArgumentCharacters         = 21000
 )
 
-var streamSymbolPattern = regexp.MustCompile(`^[A-Z0-9]+$`)
+// streamSymbolPattern은 instruments-info 표기를 따른다. 날짜 만기 선물은 BTCUSDT-27NOV26, BTC-27MAR26처럼 `-`를 포함한다.
+var streamSymbolPattern = regexp.MustCompile(`^[A-Z0-9]+(?:-[A-Z0-9]+)*$`)
 
 // StreamClientConfig는 Bybit V5 public/private WebSocket 설정이다.
 type StreamClientConfig struct {
@@ -56,11 +57,13 @@ type StreamClientConfig struct {
 	ReconnectPolicy        corestream.ReconnectPolicy
 	Backoff                corestream.Backoff
 	MaxReconnectAttempts   int
-	PingInterval           time.Duration
-	PingTimeout            time.Duration
-	AuthenticationTimeout  time.Duration
-	AuthenticationWindow   time.Duration
-	SubscriptionInterval   time.Duration
+	// IdleTimeout이 0보다 크면 이 시간 동안 데이터 메시지가 없을 때 연결을 끊고 재연결한다.
+	IdleTimeout           time.Duration
+	PingInterval          time.Duration
+	PingTimeout           time.Duration
+	AuthenticationTimeout time.Duration
+	AuthenticationWindow  time.Duration
+	SubscriptionInterval  time.Duration
 }
 
 // StreamClient는 Bybit V5 WebSocket 세션을 생성한다.
@@ -77,6 +80,7 @@ type StreamClient struct {
 	reconnectPolicy      corestream.ReconnectPolicy
 	backoff              corestream.Backoff
 	maxReconnectAttempts int
+	idleTimeout          time.Duration
 	pingInterval         time.Duration
 	pingTimeout          time.Duration
 	authTimeout          time.Duration
@@ -167,7 +171,7 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 		observer:             config.Observer,
 		reconnectPolicy:      config.ReconnectPolicy,
 		backoff:              config.Backoff,
-		maxReconnectAttempts: config.MaxReconnectAttempts,
+		maxReconnectAttempts: config.MaxReconnectAttempts, idleTimeout: config.IdleTimeout,
 		pingInterval:         config.PingInterval,
 		pingTimeout:          config.PingTimeout,
 		authTimeout:          config.AuthenticationTimeout,
@@ -242,9 +246,9 @@ func (client *StreamClient) PublicStream(
 		Observer:             client.observer,
 		ReconnectPolicy:      client.reconnectPolicy,
 		Backoff:              client.backoff,
-		MaxReconnectAttempts: client.maxReconnectAttempts,
-		PingInterval:         client.pingInterval,
-		PingTimeout:          client.pingTimeout,
+		MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
+		PingInterval: client.pingInterval,
+		PingTimeout:  client.pingTimeout,
 	})
 	if err != nil {
 		return nil, err
@@ -342,9 +346,9 @@ func (client *StreamClient) PrivateStream(
 		Observer:             client.observer,
 		ReconnectPolicy:      client.privateReconnectPolicy,
 		Backoff:              client.backoff,
-		MaxReconnectAttempts: client.maxReconnectAttempts,
-		PingInterval:         client.pingInterval,
-		PingTimeout:          client.pingTimeout,
+		MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
+		PingInterval: client.pingInterval,
+		PingTimeout:  client.pingTimeout,
 	})
 	if err != nil {
 		return nil, err
@@ -705,7 +709,7 @@ func validatePublicTopic(topic string) error {
 	}
 	symbol := parts[len(parts)-1]
 	if !streamSymbolPattern.MatchString(symbol) {
-		return validationError("WebSocket symbol must contain uppercase letters and digits")
+		return validationError("WebSocket symbol must contain uppercase letters, digits, and inner hyphens")
 	}
 	return nil
 }
@@ -810,12 +814,7 @@ type bybitConnection struct {
 func (connection *bybitConnection) Read(ctx context.Context) (corestream.Message, error) {
 	message, err := connection.next.Read(ctx)
 	if err == nil {
-		var response struct {
-			Operation     string `json:"op"`
-			ReturnMessage string `json:"ret_msg"`
-		}
-		if json.Unmarshal(message.Data, &response) == nil &&
-			(response.Operation == "pong" || strings.EqualFold(response.ReturnMessage, "pong")) {
+		if isBybitPong(message.Data) {
 			select {
 			case connection.pong <- struct{}{}:
 			default:
@@ -845,6 +844,22 @@ func (connection *bybitConnection) Ping(ctx context.Context) error {
 	case <-connection.pong:
 		return nil
 	}
+}
+
+var _ corestream.HeartbeatDetector = (*bybitConnection)(nil)
+
+// IsHeartbeat는 SDK ping의 응답을 수신 유휴 시간 계산에서 제외하도록 표시한다.
+func (connection *bybitConnection) IsHeartbeat(message corestream.Message) bool {
+	return isBybitPong(message.Data)
+}
+
+func isBybitPong(data []byte) bool {
+	var response struct {
+		Operation     string `json:"op"`
+		ReturnMessage string `json:"ret_msg"`
+	}
+	return json.Unmarshal(data, &response) == nil &&
+		(response.Operation == "pong" || strings.EqualFold(response.ReturnMessage, "pong"))
 }
 
 func (connection *bybitConnection) Close(code int, reason string) error {

@@ -74,6 +74,8 @@ timestamp + apiKey + receiveWindow + queryStringOrJSONBody
 
 서버가 `X-Bapi-Limit`과 `X-Bapi-Limit-Status`를 반환하고 해당 endpoint의 설정 한도와 일치하면 로컬 사용량에 반영합니다. 계정 bucket은 송신 경로를 바꿔도 공유되므로 다중 송신 IP를 UID 제한 우회 수단으로 사용하지 않습니다. VIP 또는 Pro 등급에서 실제 한도가 다르면 해당 등급을 반영하는 설정 확장이 필요합니다.
 
+Bybit은 한도 초과를 HTTP 429가 아니라 HTTP 200 본문의 `retCode: 10006`으로 알리기도 합니다. SDK는 이 응답을 받으면 해당 요청이 차감한 모든 bucket을 `X-Bapi-Limit-Reset-Timestamp`까지, 없거나 이미 지났으면 IP 창 길이인 5초 동안 막습니다. 읽기 요청은 block이 풀린 뒤 `ReadRetryPolicy` 안에서 다시 보내고, 끝내 실패하면 `trade.ErrRateLimited`를 반환합니다. 주문 생성·취소는 자동 재시도하지 않습니다. 실행 관측 훅에는 이 시도가 HTTP 200이어도 `ErrorRateLimited`로 기록됩니다. 다른 거래소 어댑터도 `commonexchange.Execution.RateLimit`에 본문 판별 함수를 넣어 같은 처리를 쓸 수 있습니다.
+
 ## 안전한 주문 실패
 
 주문 생성과 취소는 mutation으로 처리합니다. 전송 타임아웃, 연결 단절, 읽을 수 없는 응답, HTTP 5xx, Bybit `10000`·`10016` 응답처럼 실행 여부가 불명확한 결과는 `trade.ErrUnknownExecutionState`로 반환하며 자동 재시도하지 않습니다.

@@ -81,6 +81,10 @@ Algo 주문 서비스는 `/fapi/v1/algoOrder` 계열 엔드포인트로 조건�
 - 전체 계약 미체결 조회는 `OpenAlgoOrdersRequest.AllSymbols`를 명시해야 합니다.
 - 취소 응답은 식별자만 포함할 수 있으므로 최종 상태는 `AlgoOrderInfo`로 확인합니다.
 
+## 과거 캔들 덤프
+
+REST 캔들보다 오래된 구간의 대량 백필은 `exchange/binance/archive`의 `MarketUSDM` 월·일 덤프로 받습니다. 사용법과 게시 범위는 [Binance 공개 데이터 덤프 문서](BINANCE_ARCHIVE.md)를 참고하세요.
+
 ## HTTP 503과 주문 안전성
 
 Binance Futures는 HTTP 503의 문구별 의미가 다릅니다.

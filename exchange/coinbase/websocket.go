@@ -45,9 +45,11 @@ type StreamClientConfig struct {
 	ReconnectPolicy        corestream.ReconnectPolicy
 	Backoff                corestream.Backoff
 	MaxReconnectAttempts   int
-	PingInterval           time.Duration
-	PingTimeout            time.Duration
-	SubscriptionInterval   time.Duration
+	// IdleTimeout이 0보다 크면 이 시간 동안 데이터 메시지가 없을 때 연결을 끊고 재연결한다.
+	IdleTimeout          time.Duration
+	PingInterval         time.Duration
+	PingTimeout          time.Duration
+	SubscriptionInterval time.Duration
 }
 
 // StreamClient는 Coinbase market data와 user WebSocket 세션을 생성한다.
@@ -65,6 +67,7 @@ type StreamClient struct {
 	reconnectPolicy      corestream.ReconnectPolicy
 	backoff              corestream.Backoff
 	maxReconnectAttempts int
+	idleTimeout          time.Duration
 	pingInterval         time.Duration
 	pingTimeout          time.Duration
 	subscriptionInterval time.Duration
@@ -147,8 +150,8 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 		marketDataURL: marketDataURL, userDataURL: userDataURL,
 		now: config.Now, random: config.Random, observer: config.Observer,
 		reconnectPolicy: config.ReconnectPolicy, backoff: config.Backoff,
-		maxReconnectAttempts: config.MaxReconnectAttempts,
-		pingInterval:         config.PingInterval, pingTimeout: config.PingTimeout,
+		maxReconnectAttempts: config.MaxReconnectAttempts, idleTimeout: config.IdleTimeout,
+		pingInterval: config.PingInterval, pingTimeout: config.PingTimeout,
 		subscriptionInterval: config.SubscriptionInterval,
 	}, nil
 }
@@ -194,9 +197,9 @@ func (client *StreamClient) PublicStream(
 		Observer:             client.observer,
 		ReconnectPolicy:      client.reconnectPolicy,
 		Backoff:              client.backoff,
-		MaxReconnectAttempts: client.maxReconnectAttempts,
-		PingInterval:         client.pingInterval,
-		PingTimeout:          client.pingTimeout,
+		MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
+		PingInterval: client.pingInterval,
+		PingTimeout:  client.pingTimeout,
 	})
 	if err != nil {
 		return nil, err
@@ -315,9 +318,9 @@ func (client *StreamClient) UserStream(
 		Observer:             client.observer,
 		ReconnectPolicy:      client.userReconnectPolicy,
 		Backoff:              client.backoff,
-		MaxReconnectAttempts: client.maxReconnectAttempts,
-		PingInterval:         client.pingInterval,
-		PingTimeout:          client.pingTimeout,
+		MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
+		PingInterval: client.pingInterval,
+		PingTimeout:  client.pingTimeout,
 	})
 	if err != nil {
 		return nil, err

@@ -166,6 +166,19 @@ type StreamPublicTrade struct {
 	RPI         string `json:"isRPI"`
 }
 
+// StreamCandle은 public kline channel 데이터다.
+// REST 캔들의 위치 배열과 달리 WebSocket은 이름 있는 필드 객체로 보낸다.
+// Start는 봉 시작 Unix millisecond, Volume은 기준 통화, Turnover는 견적 통화 거래량이다.
+type StreamCandle struct {
+	Start    string `json:"start"`
+	Open     string `json:"open"`
+	Close    string `json:"close"`
+	High     string `json:"high"`
+	Low      string `json:"low"`
+	Volume   string `json:"volume"`
+	Turnover string `json:"turnover"`
+}
+
 // StreamAccount는 private account channel 계정 데이터다.
 type StreamAccount struct {
 	AccountEquity     string  `json:"accountEquity"`

@@ -38,17 +38,19 @@ var listenKeyPattern = regexp.MustCompile(`^[0-9A-Za-z]{1,256}$`)
 
 // StreamClientConfig는 Binance USDⓈ-M Futures public·market·private WebSocket 설정이다.
 type StreamClientConfig struct {
-	Connector                  corestream.Connector
-	RESTClient                 *Client
-	DefaultEgressRouteID       transport.EgressRouteID
-	PublicStreamURL            string
-	RegularMarketStreamURL     string
-	PrivateStreamURL           string
-	AllowInsecureWebSocket     bool
-	Observer                   corestream.StateObserver
-	ReconnectPolicy            corestream.ReconnectPolicy
-	Backoff                    corestream.Backoff
-	MaxReconnectAttempts       int
+	Connector              corestream.Connector
+	RESTClient             *Client
+	DefaultEgressRouteID   transport.EgressRouteID
+	PublicStreamURL        string
+	RegularMarketStreamURL string
+	PrivateStreamURL       string
+	AllowInsecureWebSocket bool
+	Observer               corestream.StateObserver
+	ReconnectPolicy        corestream.ReconnectPolicy
+	Backoff                corestream.Backoff
+	MaxReconnectAttempts   int
+	// IdleTimeout이 0보다 크면 이 시간 동안 데이터 메시지가 없을 때 연결을 끊고 재연결한다.
+	IdleTimeout                time.Duration
 	PingInterval               time.Duration
 	PingTimeout                time.Duration
 	SubscriptionInterval       time.Duration
@@ -67,6 +69,7 @@ type StreamClient struct {
 	reconnectPolicy            corestream.ReconnectPolicy
 	backoff                    corestream.Backoff
 	maxReconnectAttempts       int
+	idleTimeout                time.Duration
 	pingInterval               time.Duration
 	pingTimeout                time.Duration
 	subscriptionInterval       time.Duration
@@ -135,7 +138,7 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 		defaultRouteID: defaultRouteID, publicStreamURL: publicURL,
 		regularMarketStreamURL: marketURL, privateStreamURL: privateURL,
 		observer: config.Observer, reconnectPolicy: config.ReconnectPolicy,
-		backoff: config.Backoff, maxReconnectAttempts: config.MaxReconnectAttempts,
+		backoff: config.Backoff, maxReconnectAttempts: config.MaxReconnectAttempts, idleTimeout: config.IdleTimeout,
 		pingInterval: config.PingInterval, pingTimeout: config.PingTimeout,
 		subscriptionInterval:       config.SubscriptionInterval,
 		listenKeyKeepaliveInterval: config.ListenKeyKeepaliveInterval,
@@ -193,7 +196,7 @@ func (client *StreamClient) MarketStream(
 		Connector: client.connector, EgressRouteID: routeID,
 		Request: corestream.DialRequest{Endpoint: endpoint}, OnConnect: market.resubscribe,
 		Observer: client.observer, ReconnectPolicy: client.streamReconnectPolicy,
-		Backoff: client.backoff, MaxReconnectAttempts: client.maxReconnectAttempts,
+		Backoff: client.backoff, MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
 		PingInterval: client.pingInterval, PingTimeout: client.pingTimeout,
 	})
 	if err != nil {
@@ -494,8 +497,8 @@ func (client *StreamClient) UserDataStream(
 		Connector: client.connector, EgressRouteID: routeID,
 		RequestSource: userData.dialRequest, Observer: client.observer,
 		ReconnectPolicy: client.streamReconnectPolicy, Backoff: client.backoff,
-		MaxReconnectAttempts: client.maxReconnectAttempts,
-		PingInterval:         client.pingInterval, PingTimeout: client.pingTimeout,
+		MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
+		PingInterval: client.pingInterval, PingTimeout: client.pingTimeout,
 	})
 	if err != nil {
 		return nil, err

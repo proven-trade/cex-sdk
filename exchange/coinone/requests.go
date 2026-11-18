@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	currencyPattern    = regexp.MustCompile(`^[A-Z0-9]{2,20}$`)
+	currencyPattern    = regexp.MustCompile(`^[A-Z0-9]{1,20}$`)
 	decimalPattern     = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+)?$`)
 	userOrderIDPattern = regexp.MustCompile(`^[a-z0-9._-]{1,150}$`)
 )

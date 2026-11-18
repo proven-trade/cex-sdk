@@ -283,7 +283,7 @@ func TestClientAdditionalMarketDataEndpoints(t *testing.T) {
 	historySnapshot, err := limiter.Snapshot(
 		"bitget:route:route-b:endpoint:api/v3/market/history-candles:1second",
 	)
-	if err != nil || historySnapshot.Used != 1 || historySnapshot.Rule.Limit != 20 {
+	if err != nil || historySnapshot.Used != 1 || historySnapshot.Rule.Limit != 5 {
 		t.Fatalf("history-candles limiter snapshot = %+v, error = %v", historySnapshot, err)
 	}
 	snapshot, err := limiter.Snapshot("bitget:route:route-b:global:1minute")

@@ -53,10 +53,12 @@ type StreamClientConfig struct {
 	ReconnectPolicy        corestream.ReconnectPolicy
 	Backoff                corestream.Backoff
 	MaxReconnectAttempts   int
-	PingInterval           time.Duration
-	PingTimeout            time.Duration
-	LoginTimeout           time.Duration
-	SubscriptionInterval   time.Duration
+	// IdleTimeout이 0보다 크면 이 시간 동안 데이터 메시지가 없을 때 연결을 끊고 재연결한다.
+	IdleTimeout          time.Duration
+	PingInterval         time.Duration
+	PingTimeout          time.Duration
+	LoginTimeout         time.Duration
+	SubscriptionInterval time.Duration
 }
 
 // StreamClient는 OKX V5 WebSocket 세션을 생성한다.
@@ -73,6 +75,7 @@ type StreamClient struct {
 	reconnectPolicy      corestream.ReconnectPolicy
 	backoff              corestream.Backoff
 	maxReconnectAttempts int
+	idleTimeout          time.Duration
 	pingInterval         time.Duration
 	pingTimeout          time.Duration
 	loginTimeout         time.Duration
@@ -158,7 +161,7 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 		observer:             config.Observer,
 		reconnectPolicy:      config.ReconnectPolicy,
 		backoff:              config.Backoff,
-		maxReconnectAttempts: config.MaxReconnectAttempts,
+		maxReconnectAttempts: config.MaxReconnectAttempts, idleTimeout: config.IdleTimeout,
 		pingInterval:         config.PingInterval,
 		pingTimeout:          config.PingTimeout,
 		loginTimeout:         config.LoginTimeout,
@@ -231,9 +234,9 @@ func (client *StreamClient) PublicStream(
 		Observer:             client.observer,
 		ReconnectPolicy:      client.reconnectPolicy,
 		Backoff:              client.backoff,
-		MaxReconnectAttempts: client.maxReconnectAttempts,
-		PingInterval:         client.pingInterval,
-		PingTimeout:          client.pingTimeout,
+		MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
+		PingInterval: client.pingInterval,
+		PingTimeout:  client.pingTimeout,
 	})
 	if err != nil {
 		return nil, err
@@ -331,9 +334,9 @@ func (client *StreamClient) PrivateStream(
 		Observer:             client.observer,
 		ReconnectPolicy:      client.privateReconnectPolicy,
 		Backoff:              client.backoff,
-		MaxReconnectAttempts: client.maxReconnectAttempts,
-		PingInterval:         client.pingInterval,
-		PingTimeout:          client.pingTimeout,
+		MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
+		PingInterval: client.pingInterval,
+		PingTimeout:  client.pingTimeout,
 	})
 	if err != nil {
 		return nil, err
@@ -842,8 +845,7 @@ type okxConnection struct {
 func (connection *okxConnection) Read(ctx context.Context) (corestream.Message, error) {
 	message, err := connection.next.Read(ctx)
 	if err == nil {
-		trimmed := strings.TrimSpace(string(message.Data))
-		if trimmed == "pong" || trimmed == `"pong"` {
+		if isTextPong(message.Data) {
 			select {
 			case connection.pong <- struct{}{}:
 			default:
@@ -873,6 +875,18 @@ func (connection *okxConnection) Ping(ctx context.Context) error {
 	case <-connection.pong:
 		return nil
 	}
+}
+
+var _ corestream.HeartbeatDetector = (*okxConnection)(nil)
+
+// IsHeartbeat는 SDK ping의 응답을 수신 유휴 시간 계산에서 제외하도록 표시한다.
+func (connection *okxConnection) IsHeartbeat(message corestream.Message) bool {
+	return isTextPong(message.Data)
+}
+
+func isTextPong(data []byte) bool {
+	trimmed := strings.TrimSpace(string(data))
+	return trimmed == "pong" || trimmed == `"pong"`
 }
 
 func (connection *okxConnection) Close(code int, reason string) error {

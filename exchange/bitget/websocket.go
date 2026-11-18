@@ -30,6 +30,10 @@ const (
 	defaultLoginTimeout         = 10 * time.Second
 	defaultSubscriptionInterval = 15 * time.Second
 	maxStreamArguments          = 1000
+	// maxStreamMessageBytes는 구독·해제 요청 한 메시지의 최대 크기다.
+	maxStreamMessageBytes = 4096
+	// streamMessageGap은 연결당 초당 10개 메시지 제한을 넘지 않도록 나눈 재구독 메시지 사이에 두는 간격이다.
+	streamMessageGap = 110 * time.Millisecond
 )
 
 // StreamClientConfig는 Bitget v3 UTA public/private WebSocket 설정이다.
@@ -47,10 +51,12 @@ type StreamClientConfig struct {
 	ReconnectPolicy        corestream.ReconnectPolicy
 	Backoff                corestream.Backoff
 	MaxReconnectAttempts   int
-	HeartbeatInterval      time.Duration
-	HeartbeatTimeout       time.Duration
-	LoginTimeout           time.Duration
-	SubscriptionInterval   time.Duration
+	// IdleTimeout이 0보다 크면 이 시간 동안 데이터 메시지가 없을 때 연결을 끊고 재연결한다.
+	IdleTimeout          time.Duration
+	HeartbeatInterval    time.Duration
+	HeartbeatTimeout     time.Duration
+	LoginTimeout         time.Duration
+	SubscriptionInterval time.Duration
 }
 
 // StreamClient는 Bitget v3 UTA WebSocket 세션을 생성한다.
@@ -66,6 +72,7 @@ type StreamClient struct {
 	reconnectPolicy      corestream.ReconnectPolicy
 	backoff              corestream.Backoff
 	maxReconnectAttempts int
+	idleTimeout          time.Duration
 	heartbeatInterval    time.Duration
 	heartbeatTimeout     time.Duration
 	loginTimeout         time.Duration
@@ -156,7 +163,7 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 		observer:             config.Observer,
 		reconnectPolicy:      config.ReconnectPolicy,
 		backoff:              config.Backoff,
-		maxReconnectAttempts: config.MaxReconnectAttempts,
+		maxReconnectAttempts: config.MaxReconnectAttempts, idleTimeout: config.IdleTimeout,
 		heartbeatInterval:    config.HeartbeatInterval,
 		heartbeatTimeout:     config.HeartbeatTimeout,
 		loginTimeout:         config.LoginTimeout,
@@ -199,9 +206,9 @@ func (client *StreamClient) PublicStream(request StreamRequest, options ...trade
 		Observer:             client.observer,
 		ReconnectPolicy:      client.reconnectPolicy,
 		Backoff:              client.backoff,
-		MaxReconnectAttempts: client.maxReconnectAttempts,
-		PingInterval:         client.heartbeatInterval,
-		PingTimeout:          client.heartbeatTimeout,
+		MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
+		PingInterval: client.heartbeatInterval,
+		PingTimeout:  client.heartbeatTimeout,
 	})
 	if err != nil {
 		return nil, err
@@ -294,9 +301,9 @@ func (client *StreamClient) PrivateStream(request StreamRequest, options ...trad
 		Observer:             client.observer,
 		ReconnectPolicy:      client.privateReconnectPolicy,
 		Backoff:              client.backoff,
-		MaxReconnectAttempts: client.maxReconnectAttempts,
-		PingInterval:         client.heartbeatInterval,
-		PingTimeout:          client.heartbeatTimeout,
+		MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
+		PingInterval: client.heartbeatInterval,
+		PingTimeout:  client.heartbeatTimeout,
 	})
 	if err != nil {
 		return nil, err
@@ -344,8 +351,19 @@ func (managed *managedStream) resubscribe(ctx context.Context, connection corest
 	if len(arguments) == 0 {
 		return nil
 	}
-	if err := writeStreamOperation(ctx, connection, "subscribe", arguments); err != nil {
+	batches, err := streamOperationBatches("subscribe", arguments)
+	if err != nil {
 		return err
+	}
+	for index, batch := range batches {
+		if index > 0 {
+			if err := sleepContext(ctx, streamMessageGap); err != nil {
+				return err
+			}
+		}
+		if err := writeStreamPayload(ctx, connection, batch.payload); err != nil {
+			return err
+		}
 	}
 	managed.lastCommandAt = time.Now()
 	return nil
@@ -370,23 +388,31 @@ func (managed *managedStream) change(ctx context.Context, operation string, argu
 	if len(selected) == 0 {
 		return nil
 	}
-	if err := managed.waitCommandSlot(ctx); err != nil {
+	batches, err := streamOperationBatches(operation, selected)
+	if err != nil {
 		return err
 	}
-	if err := writeStreamOperation(ctx, managed.session, operation, selected); err != nil {
-		return err
-	}
-	managed.lastCommandAt = time.Now()
-	managed.mu.Lock()
-	for _, argument := range selected {
-		key := streamArgumentKey(argument)
-		if operation == "subscribe" {
-			managed.arguments[key] = argument
-		} else {
-			delete(managed.arguments, key)
+	// 나눈 메시지는 각각 구독 요청 한 건으로 집계되므로 메시지마다 명령 간격을 지킨다.
+	// 일부만 전송된 뒤 실패하면 전송한 묶음까지만 재연결 복구 목록에 반영한다.
+	for _, batch := range batches {
+		if err := managed.waitCommandSlot(ctx); err != nil {
+			return err
 		}
+		if err := writeStreamPayload(ctx, managed.session, batch.payload); err != nil {
+			return err
+		}
+		managed.lastCommandAt = time.Now()
+		managed.mu.Lock()
+		for _, argument := range batch.arguments {
+			key := streamArgumentKey(argument)
+			if operation == "subscribe" {
+				managed.arguments[key] = argument
+			} else {
+				delete(managed.arguments, key)
+			}
+		}
+		managed.mu.Unlock()
 	}
-	managed.mu.Unlock()
 	return nil
 }
 
@@ -406,7 +432,10 @@ func (managed *managedStream) snapshotArguments() []StreamArgument {
 }
 
 func (managed *managedStream) waitCommandSlot(ctx context.Context) error {
-	delay := time.Until(managed.lastCommandAt.Add(managed.interval))
+	return sleepContext(ctx, time.Until(managed.lastCommandAt.Add(managed.interval)))
+}
+
+func sleepContext(ctx context.Context, delay time.Duration) error {
 	if delay <= 0 {
 		return nil
 	}
@@ -429,11 +458,57 @@ type streamWriter interface {
 	Write(context.Context, corestream.Message) error
 }
 
-func writeStreamOperation(ctx context.Context, writer streamWriter, operation string, arguments []StreamArgument) error {
-	payload, err := json.Marshal(streamOperation{Operation: operation, Arguments: arguments})
+type streamOperationBatch struct {
+	arguments []StreamArgument
+	payload   []byte
+}
+
+// streamOperationBatches는 구독 인자를 입력 순서대로 나눠 각 메시지를 maxStreamMessageBytes 이하로 만든다.
+// Bitget은 이 크기를 넘는 구독 요청을 30002 Unrecognized request로 거부한다.
+func streamOperationBatches(operation string, arguments []StreamArgument) ([]streamOperationBatch, error) {
+	empty, err := json.Marshal(streamOperation{Operation: operation, Arguments: []StreamArgument{}})
 	if err != nil {
-		return fmt.Errorf("encode Bitget stream operation: %w", err)
+		return nil, fmt.Errorf("encode Bitget stream operation: %w", err)
 	}
+	var batches []streamOperationBatch
+	start, size := 0, len(empty)
+	flush := func(end int) error {
+		payload, err := json.Marshal(streamOperation{Operation: operation, Arguments: arguments[start:end]})
+		if err != nil {
+			return fmt.Errorf("encode Bitget stream operation: %w", err)
+		}
+		batches = append(batches, streamOperationBatch{arguments: arguments[start:end], payload: payload})
+		return nil
+	}
+	for index, argument := range arguments {
+		encoded, err := json.Marshal(argument)
+		if err != nil {
+			return nil, fmt.Errorf("encode Bitget stream argument: %w", err)
+		}
+		added := len(encoded)
+		if index > start {
+			added++
+		}
+		if size+added > maxStreamMessageBytes && index > start {
+			if err := flush(index); err != nil {
+				return nil, err
+			}
+			start, size, added = index, len(empty), len(encoded)
+		}
+		if size+added > maxStreamMessageBytes {
+			return nil, validationError("WebSocket channel exceeds %d bytes", maxStreamMessageBytes)
+		}
+		size += added
+	}
+	if start < len(arguments) {
+		if err := flush(len(arguments)); err != nil {
+			return nil, err
+		}
+	}
+	return batches, nil
+}
+
+func writeStreamPayload(ctx context.Context, writer streamWriter, payload []byte) error {
 	return writer.Write(ctx, corestream.Message{Type: corestream.MessageText, Data: payload})
 }
 
@@ -535,25 +610,22 @@ func (client *StreamClient) authorizationError(cause error) error {
 
 // PublicStreamArgument는 상품 유형, topic, symbol로 public 구독 인자를 만든다.
 func PublicStreamArgument(category Category, topic, symbol string) (StreamArgument, error) {
-	instrumentType, err := streamInstrumentType(category)
-	if err != nil {
-		return StreamArgument{}, err
-	}
-	argument := StreamArgument{InstrumentType: instrumentType, Topic: topic, Symbol: strings.ToUpper(symbol)}
-	validated, err := validateStreamArguments([]StreamArgument{argument}, false)
-	if err != nil {
-		return StreamArgument{}, err
-	}
-	return validated[0], nil
+	return publicStreamArgument(category, topic, symbol, "")
 }
 
 // KlineStreamArgument는 public candlestick 구독 인자를 만든다.
 func KlineStreamArgument(category Category, symbol, interval string) (StreamArgument, error) {
-	argument, err := PublicStreamArgument(category, "kline", symbol)
+	return publicStreamArgument(category, "kline", symbol, interval)
+}
+
+func publicStreamArgument(category Category, topic, symbol, interval string) (StreamArgument, error) {
+	instrumentType, err := streamInstrumentType(category)
 	if err != nil {
 		return StreamArgument{}, err
 	}
-	argument.Interval = interval
+	argument := StreamArgument{
+		InstrumentType: instrumentType, Topic: topic, Symbol: strings.ToUpper(symbol), Interval: interval,
+	}
 	validated, err := validateStreamArguments([]StreamArgument{argument}, false)
 	if err != nil {
 		return StreamArgument{}, err
@@ -664,8 +736,7 @@ type bitgetConnection struct {
 func (connection *bitgetConnection) Read(ctx context.Context) (corestream.Message, error) {
 	message, err := connection.next.Read(ctx)
 	if err == nil {
-		trimmed := strings.TrimSpace(string(message.Data))
-		if trimmed == "pong" || trimmed == `"pong"` {
+		if isTextPong(message.Data) {
 			select {
 			case connection.pong <- struct{}{}:
 			default:
@@ -693,6 +764,18 @@ func (connection *bitgetConnection) Ping(ctx context.Context) error {
 	case <-connection.pong:
 		return nil
 	}
+}
+
+var _ corestream.HeartbeatDetector = (*bitgetConnection)(nil)
+
+// IsHeartbeat는 SDK ping의 응답을 수신 유휴 시간 계산에서 제외하도록 표시한다.
+func (connection *bitgetConnection) IsHeartbeat(message corestream.Message) bool {
+	return isTextPong(message.Data)
+}
+
+func isTextPong(data []byte) bool {
+	trimmed := strings.TrimSpace(string(data))
+	return trimmed == "pong" || trimmed == `"pong"`
 }
 
 func (connection *bitgetConnection) Close(code int, reason string) error {

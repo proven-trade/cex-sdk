@@ -40,8 +40,10 @@ type StreamClientConfig struct {
 	ReconnectPolicy        corestream.ReconnectPolicy
 	Backoff                corestream.Backoff
 	MaxReconnectAttempts   int
-	PingInterval           time.Duration
-	PingTimeout            time.Duration
+	// IdleTimeout이 0보다 크면 이 시간 동안 데이터 메시지가 없을 때 연결을 끊고 재연결한다.
+	IdleTimeout  time.Duration
+	PingInterval time.Duration
+	PingTimeout  time.Duration
 }
 
 // StreamClient는 Gate.io API v4 Spot WebSocket 세션을 생성한다.
@@ -56,6 +58,7 @@ type StreamClient struct {
 	reconnectPolicy      corestream.ReconnectPolicy
 	backoff              corestream.Backoff
 	maxReconnectAttempts int
+	idleTimeout          time.Duration
 	pingInterval         time.Duration
 	pingTimeout          time.Duration
 	nextID               atomic.Int64
@@ -119,8 +122,8 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 		credentialProvider: config.CredentialProvider, defaultRouteID: defaultRouteID,
 		webSocketURL: webSocketURL, now: config.Now, observer: config.Observer,
 		reconnectPolicy: config.ReconnectPolicy, backoff: config.Backoff,
-		maxReconnectAttempts: config.MaxReconnectAttempts,
-		pingInterval:         config.PingInterval, pingTimeout: config.PingTimeout,
+		maxReconnectAttempts: config.MaxReconnectAttempts, idleTimeout: config.IdleTimeout,
+		pingInterval: config.PingInterval, pingTimeout: config.PingTimeout,
 	}
 	client.nextID.Store(time.Now().UnixMicro())
 	return client, nil
@@ -295,8 +298,8 @@ func (client *StreamClient) newStreamSession(
 		Request:   corestream.DialRequest{Endpoint: client.webSocketURL},
 		OnConnect: onConnect, Observer: client.observer,
 		ReconnectPolicy: client.streamReconnectPolicy, Backoff: client.backoff,
-		MaxReconnectAttempts: client.maxReconnectAttempts,
-		PingInterval:         client.pingInterval, PingTimeout: client.pingTimeout,
+		MaxReconnectAttempts: client.maxReconnectAttempts, IdleTimeout: client.idleTimeout,
+		PingInterval: client.pingInterval, PingTimeout: client.pingTimeout,
 	})
 }
 
