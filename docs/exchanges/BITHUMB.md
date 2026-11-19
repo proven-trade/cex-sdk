@@ -29,6 +29,91 @@ Secret Key는 Base64 디코딩하지 않고 HS256 서명 키로 직접 사용합
 
 호가 API는 깊이 파라미터를 받지 않습니다. 단일 마켓 조회는 최대 30호가, 복수 마켓 조회는 마켓별 최대 15호가를 거래소 응답 그대로 반환합니다.
 
+## 추가 API와 필요 권한
+
+아래 메서드도 모두 `*Client`에 있으며 같은 규칙을 따릅니다. 요청 구조체의 `validate()`가 전송 전에 입력을 검증하고, 응답의 `Raw`에 원본 JSON을 보존합니다. 필요한 권한이 `credential.Descriptor.Permissions`에 없으면 Secret 조회와 전송 전에 `trade.ErrAuthorization`(`credential.ErrPermissionNotAllowed`)으로 거부합니다. 상태를 바꾸는 요청(Mutation)은 자동 재시도하지 않으며 전송 오류, 응답 본문 읽기 실패, 성공 응답 JSON 파싱 실패, HTTP 5xx는 `trade.ErrUnknownExecutionState`로 반환합니다. 조회(Read)만 같은 route에서 제한적으로 재시도합니다.
+
+### 시장 정보 (공개 API, 인증·권한 불필요)
+
+| 메서드 | API | 비고 |
+|---|---|---|
+| `DayCandles` | `GET /v1/candles/days` | `ConvertingPriceUnit`에 `bithumb.ConvertingPriceUnitKRW`를 지정하면 `ConvertedTradePrice`에 원화 환산 종가를 담습니다. |
+| `WeekCandles`, `MonthCandles` | `GET /v1/candles/weeks`, `GET /v1/candles/months` | `FirstDayOfPeriod`에 캔들 기간의 시작일이 담깁니다. |
+| `VirtualAssetWarnings` | `GET /v1/market/virtual_asset_warning` | 경보제로 지정된 마켓의 유형(`WarningType`)·단계(`WarningStep`)·종료 일시입니다. |
+| `Notices` | `GET /v1/notices` | `Count`는 0~20이며 0이면 거래소 기본값 5건입니다. 공식 제한이 IP별 1회/초라 별도 bucket을 씁니다. |
+| `InOutFees` | `GET /v2/fee/inout/{currency}` | `FeeCurrencyAll`(`ALL`)을 주면 전체 자산을 반환합니다. 출금 수수료는 금액 기준 또는 정률 기준이며 해당하지 않는 필드는 빈 값입니다. |
+
+일·주·월 캔들의 `Timestamp`는 기존 `MinuteCandles`와 같은 `int64`입니다. 경보제·공지사항·입출금 수수료 문서의 요청 예시에는 인증 헤더가 없어 공개 API로 호출합니다.
+
+### 주문 (Read, Trade 권한)
+
+| 메서드 | API | 권한 |
+|---|---|---|
+| `OrderChance` | `GET /v1/orders/chance` | Read |
+| `SearchOrders` | `POST /v2/orders/search` | Read |
+| `TWAPOrders` | `GET /v1/twap` | Read |
+| `PlaceBatchOrders` | `POST /v2/orders/batch` | Trade |
+| `CancelBatchOrders` | `POST /v2/orders/cancel` | Trade |
+| `PlaceTWAPOrder` | `POST /v1/twap` | Trade |
+| `CancelTWAPOrder` | `DELETE /v1/twap` | Trade |
+
+- `SearchOrders`는 POST이지만 상태를 바꾸지 않는 조회라 Read 권한과 읽기 재시도 정책을 따릅니다. `OrderIDs`와 `ClientOrderIDs` 중 정확히 하나만 최대 100건까지 받으며, 거래소는 둘 다 받으면 `order_ids`를 우선하지만 SDK는 의도하지 않은 조회를 막기 위해 하나만 허용합니다. 매칭되지 않는 ID는 응답에서 빠지므로 결과가 요청보다 적을 수 있습니다.
+- `PlaceBatchOrders`는 최대 30건이며 각 주문을 `PlaceOrderRequest`와 같은 규칙으로 검증합니다. 같은 요청 안의 `ClientOrderID` 중복은 거래소가 뒤의 주문을 실패 처리하므로 전송 전에 거부합니다. 거래소는 일부 주문이 실패해도 HTTP 200을 반환하므로 항목마다 `BatchOrderResult.Succeeded()`(`order_id` 존재 여부)를 확인해야 하며, 실패 항목에는 `ErrorName`과 `ErrorMessage`만 채워집니다.
+- 다건 주문의 서명 해시 입력은 공식 예제대로 `batch_orders[0][market]=KRW-BTC&batch_orders[0][side]=bid&...&batch_orders[1][market]=...` 형식이며 JSON 본문은 `{"batch_orders":[{...}]}`입니다. 본문과 해시는 하나의 ordered parameter에서 만들어 항목 필드 순서가 항상 일치하고, 항목 필드 순서는 `PlaceOrder`와 같습니다.
+- `CancelBatchOrders`도 `OrderIDs`와 `ClientOrderIDs` 중 정확히 하나만 최대 30건까지 받습니다. 성공 응답은 취소 접수일 뿐이므로 최종 상태는 `OrderInfo`나 `SearchOrders`로 다시 확인해야 합니다. `Fail` 항목에는 사유(`Reason`)가 담깁니다.
+- 다건 주문 생성과 취소는 단건 주문과 분리된 `order-batch` bucket(20회/초)을 함께 사용합니다.
+- `OrderHistory`와 `SearchOrders`가 반환하는 `OrderSummary`에는 `CancelType`(`stp_cancel`, `user_cancel`, `admin_cancel`, `tif_cancel`)과 `CancelingOrderID`가 포함됩니다.
+- `PlaceTWAPOrder`의 `Duration`과 `Frequency`는 `time.Duration`으로 받아 초 단위 문자열로 전송합니다. `Duration`은 초 단위로 떨어지는 300~43200초, `Frequency`는 15·20·30·60·120초 중 하나여야 합니다. 매도(`ask`)는 `Volume`, 매수(`bid`)는 `Price`가 필수입니다. 문서가 매수 `price`를 단가인지 총액인지 구분해 설명하지 않으므로 SDK는 값을 변환하지 않고 그대로 전달합니다. `TWAPOrder.UUID`는 요청·취소 응답의 `AlgoOrderID`와 같고 `TWAPOrders`는 `next_key` cursor로 페이지를 넘깁니다.
+- 공식 요청 제한 안내에는 TWAP 분류가 없어 SDK는 TWAP 요청을 `order-create`, 취소를 `order-cancel`, 조회를 `private-other` bucket에 넣는다고 가정합니다. 거래소가 별도 한도를 공지하면 조정해야 합니다.
+- TWAP 문서의 Python 예제는 JWT를 HS512로 서명하지만 인증 문서와 나머지 API 예제는 HS256입니다. SDK는 모든 요청을 HS256으로 서명하므로 TWAP 호출에서 `jwt_verification` 오류가 나면 이 차이를 먼저 확인해야 합니다.
+
+### 계정·지갑 (Read 권한)
+
+| 메서드 | API | 권한 |
+|---|---|---|
+| `WalletStatuses` | `GET /v1/status/wallet` | Read |
+| `APIKeys` | `GET /v1/api_keys` | Read |
+
+`WalletStatuses`는 자산·네트워크별 지갑 상태(`WalletState`)와 블록 동기화 상태(`BlockState`)를 반환합니다. `APIKeys`는 API Key 식별자(`AccessKey`)와 만료 일시만 조회하며 Secret Key는 포함하지 않고 키를 만들거나 지우지 않으므로 Read 권한으로 호출합니다.
+
+### 입금 (Read, Transfer 권한)
+
+| 메서드 | API | 권한 |
+|---|---|---|
+| `Deposits` | `GET /v1/deposits` | Read |
+| `KRWDeposits` | `GET /v1/deposits/krw` | Read |
+| `DepositInfo` | `GET /v1/deposit` | Read |
+| `DepositAddresses` | `GET /v1/deposits/coin_addresses` | Read |
+| `DepositAddressInfo` | `GET /v1/deposits/coin_address` | Read |
+| `GenerateDepositAddress` | `POST /v1/deposits/generate_coin_address` | Transfer |
+| `DepositKRW` | `POST /v1/deposits/krw` | Transfer |
+
+- 입금 주소 생성과 원화 입금 요청은 자산이 거래소 밖으로 나가지 않는 계정 변경이므로 `credential.PermissionTransfer`가 필요합니다. Withdraw 권한으로는 호출할 수 없습니다.
+- 목록 조회의 `Page`는 1부터 시작하고 `Limit`은 최대 100이며 0이면 거래소 기본값을 씁니다. `UUIDs`와 `TxIDs`는 `uuids[]`, `txids[]` 반복 키로 전송하고 같은 순서로 서명합니다. `DepositInfo`는 `Currency`와 함께 `UUID`와 `TxID` 중 정확히 하나를 받습니다.
+- 거래소가 입금 상태 전체를 enum으로 고정하지 않으므로 `State`는 대문자와 밑줄 형식만 검증하고 값은 거래소가 판단합니다. 코인 입금 상태는 `DepositState...` 상수, 원화 입금 상태는 `DepositStateKRWProcessing`, `DepositStateKRWAccepted`, `DepositStateKRWCancelled`입니다.
+- `DepositKRW`의 `TwoFactorType`에는 공식 문서가 안내하는 `TwoFactorKakao`를 씁니다. 다른 값은 소문자 토큰 형식만 확인하고 거래소가 판단합니다.
+- 입금 주소 생성과 원화 입금 요청은 전송 결과가 불명확하면 `DepositAddressInfo`나 `KRWDeposits`로 접수 여부를 확인한 뒤에만 다시 요청해야 합니다.
+
+### 출금 (Read, Withdraw 권한)
+
+| 메서드 | API | 권한 |
+|---|---|---|
+| `Withdrawals` | `GET /v1/withdraws` | Read |
+| `KRWWithdrawals` | `GET /v1/withdraws/krw` | Read |
+| `WithdrawalInfo` | `GET /v1/withdraw` | Read |
+| `WithdrawChance` | `GET /v1/withdraws/chance` | Read |
+| `WithdrawAddresses` | `GET /v1/withdraws/coin_addresses` | Read |
+| `WithdrawCoin` | `POST /v1/withdraws/coin` | Withdraw |
+| `CancelWithdrawCoin` | `DELETE /v1/withdraws/coin` | Withdraw |
+| `WithdrawKRW` | `POST /v1/withdraws/krw` | Withdraw |
+
+- 출금 요청과 취소는 자산이 거래소 밖으로 나가므로 명시적으로 `credential.PermissionWithdraw`를 부여한 Descriptor만 호출할 수 있습니다. Read, Trade, Transfer 권한으로는 거부됩니다.
+- `WithdrawCoin`은 거래소에 등록된 출금 허용 주소(`WithdrawAddresses`)로만 요청해야 하며 `ReceiverType`이 `corporation`이면 `ReceiverCorpKoName`과 `ReceiverCorpEnName`이 필수입니다. 출금 요청은 HTTP 201로 응답하고 `Withdrawal.State`는 문서 예시처럼 `processing` 같은 소문자일 수 있어 SDK는 거래소 값을 정규화하지 않습니다.
+- 출금 요청의 전송 결과가 불명확하면 `UNKNOWN_EXECUTION_STATE`이며 자동 재시도하지 않습니다. 중복 출금을 막으려면 `WithdrawalInfo`나 `Withdrawals`로 접수 여부를 확인한 뒤에만 다시 요청해야 합니다.
+- 출금 대상 거래소의 트래블룰 개인정보 처리 동의가 필요하면 거래소가 HTTP 422와 `travel_rule_consent_required`를 반환합니다. SDK는 이를 검증 오류(`trade.ErrValidation`)로 분류하고 `errors.As(err, &consent)`로 `*bithumb.TravelRuleConsentError`(`ExchangeName`, `ConsentURL`)를 꺼낼 수 있게 합니다. 동의 URL은 로그에 남지 않도록 `Error()` 문자열에 넣지 않으며 동의를 마친 뒤에 출금을 다시 요청해야 합니다.
+- 출금 목록의 `State`는 `PROCESSING`, `DONE`, `CANCELLED`(`WithdrawalState...` 상수)만 허용합니다. `CancelWithdrawCoin`은 처리 중인 출금만 취소할 수 있습니다.
+- `WithdrawKRW`의 `TwoFactorType`은 `DepositKRW`와 같은 규칙입니다.
+
 ## JWT와 쿼리 해시
 
 인증 요청은 요청 제한 대기가 끝난 뒤 최종 파라미터를 기준으로 서명합니다.
@@ -53,8 +138,10 @@ SDK 기본 로컬 제한은 공식 안내의 공개 분류별 150회/초, privat
 | `bithumb:route:<route>:private-other:1second` | 140회/초 | 자산·주문 조회 등 private 기타 |
 | `bithumb:route:<route>:order-create:1second` | 140회/초 | 단건 주문 요청 |
 | `bithumb:route:<route>:order-cancel:1second` | 140회/초 | 단건 주문 취소 접수 |
+| `bithumb:route:<route>:public-notice:1second` | 1회/초 | 공지사항 조회 |
+| `bithumb:route:<route>:order-batch:1second` | 20회/초 | 다건 주문 생성·취소 |
 
-각 요청은 공식 API 분류에 대응하는 bucket 하나를 소비합니다. 제한값은 `Config`의 `PublicRequestsPerSecond`, `PrivateRequestsPerSecond`, `OrderRequestsPerSecond`로 더 보수적으로 조정할 수 있습니다. 다건 주문 생성·취소는 현재 SDK 범위 밖이며 공식 별도 제한 20회/초를 단건 bucket과 섞지 않습니다.
+각 요청은 공식 API 분류에 대응하는 bucket 하나를 소비합니다. 제한값은 `Config`의 `PublicRequestsPerSecond`, `PrivateRequestsPerSecond`, `OrderRequestsPerSecond`로 더 보수적으로 조정할 수 있습니다. 공지사항 조회(공식 IP별 1회/초)와 다건 주문 생성·취소(공식 20회/초, 둘이 한 bucket 공유)는 별도 한도이므로 `NoticeRequestsPerSecond`, `BatchOrderRequestsPerSecond`로 따로 조정하며 다른 bucket과 섞지 않습니다. 두 값은 0이면 공식 기본값을 쓰고 음수이면 `New`가 거부합니다. 입금·출금·API Key 조회는 공식 분류상 private 기타에 속해 `private-other` bucket을 씁니다.
 
 각 route에는 실제 공인 송신 IP가 정확히 연결되어 있어야 하며 SDK bucket도 그 route를 기준으로 분리됩니다. route 선택은 API Key IP 허용 목록 준수와 네트워크 격리를 위한 기능입니다.
 
@@ -171,10 +258,6 @@ err = book.Run(ctx, public, func(ctx context.Context, view bithumb.LocalOrderBoo
 
 미체결 주문은 v2 `next_key` cursor가 끝날 때까지 조회하며 모든 페이지에 같은 요청별 송신 경로를 전달합니다. Bithumb v1 주문 상세의 `uuid`와 v2 주문 생성·목록·취소의 `order_id` 차이는 공통 `Order.ID`로 정규화합니다.
 
-## 현재 제외 범위
-
-주문 가능 정보, 일·주·월 캔들, 다건 주문·취소·조회, TWAP, 입출금은 현재 범위에 포함하지 않습니다.
-
 ## 공식 기준 문서
 
 - [Bithumb Developer Docs](https://apidocs.bithumb.com/docs/빗썸-developer-docs)
@@ -185,6 +268,36 @@ err = book.Run(ctx, public, func(ctx context.Context, view bithumb.LocalOrderBoo
 - [주문 취소 접수](https://apidocs.bithumb.com/reference/주문-취소-접수)
 - [대기 주문 목록 조회](https://apidocs.bithumb.com/reference/대기-주문-목록-조회)
 - [종료 주문 목록 조회](https://apidocs.bithumb.com/reference/종료-주문-목록-조회)
+- [일(Day) 캔들 조회](https://apidocs.bithumb.com/reference/일day-캔들-조회)
+- [주(Week) 캔들 조회](https://apidocs.bithumb.com/reference/주week-캔들-조회)
+- [월(Month) 캔들 조회](https://apidocs.bithumb.com/reference/월month-캔들-조회)
+- [경보제 조회](https://apidocs.bithumb.com/reference/경보제-조회)
+- [공지사항 조회](https://apidocs.bithumb.com/reference/공지사항-조회)
+- [입출금 수수료 조회](https://apidocs.bithumb.com/reference/입출금-수수료-조회)
+- [주문 가능 정보 조회](https://apidocs.bithumb.com/reference/주문-가능-정보)
+- [다건 주문 조회](https://apidocs.bithumb.com/reference/다건-주문-조회)
+- [다건 주문 요청](https://apidocs.bithumb.com/reference/다건-주문-요청)
+- [다건 주문 취소 접수](https://apidocs.bithumb.com/reference/다건-주문-취소-접수)
+- [TWAP - 주문 요청](https://apidocs.bithumb.com/reference/twap-주문-요청)
+- [TWAP - 주문 내역 조회](https://apidocs.bithumb.com/reference/twap-주문내역-조회)
+- [TWAP - 주문 취소](https://apidocs.bithumb.com/reference/twap-주문-취소)
+- [입출금 현황](https://apidocs.bithumb.com/reference/입출금-현황)
+- [API 키 리스트 조회](https://apidocs.bithumb.com/reference/api-키-리스트-조회)
+- [코인 입금 리스트 조회](https://apidocs.bithumb.com/reference/입금-리스트-조회)
+- [원화 입금 리스트 조회](https://apidocs.bithumb.com/reference/원화-입금-리스트-조회)
+- [개별 입금 조회](https://apidocs.bithumb.com/reference/개별-입금-조회)
+- [입금 주소 생성 요청](https://apidocs.bithumb.com/reference/입금-주소-생성-요청)
+- [전체 입금 주소 조회](https://apidocs.bithumb.com/reference/전체-입금-주소-조회)
+- [개별 입금 주소 조회](https://apidocs.bithumb.com/reference/개별-입금-주소-조회)
+- [원화 입금](https://apidocs.bithumb.com/reference/원화-입금)
+- [코인 출금 리스트 조회](https://apidocs.bithumb.com/reference/출금-리스트-조회)
+- [원화 출금 리스트 조회](https://apidocs.bithumb.com/reference/원화-출금-리스트-조회)
+- [개별 출금 조회](https://apidocs.bithumb.com/reference/개별-출금-조회)
+- [출금 가능 정보](https://apidocs.bithumb.com/reference/출금-가능-정보)
+- [가상 자산 출금 요청](https://apidocs.bithumb.com/reference/가상-자산-출금-요청)
+- [가상 자산 출금 취소](https://apidocs.bithumb.com/reference/가상-자산-출금-취소)
+- [원화 출금 요청](https://apidocs.bithumb.com/reference/원화-출금-요청)
+- [출금 허용 주소 리스트 조회](https://apidocs.bithumb.com/reference/출금-허용-주소-리스트-조회)
 - [WebSocket 기본 정보](https://apidocs.bithumb.com/reference/기본-정보)
 - [WebSocket 호가](https://apidocs.bithumb.com/reference/호가-orderbook)
 - [WebSocket 연결 관리](https://apidocs.bithumb.com/reference/연결-관리)

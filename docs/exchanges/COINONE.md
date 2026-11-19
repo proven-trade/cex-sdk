@@ -26,6 +26,8 @@ private API를 사용하려면 `credential.Provider`가 반환하는 `credential
 | 공개 stream | `ORDERBOOK`, `TICKER`, `TRADE`, `CHART` | public WebSocket |
 | 개인 stream | `MYORDER`, `MYASSET` | private WebSocket v1 |
 
+표에 없는 REST API는 [추가 REST API](#추가-rest-api)에 카테고리별로 정리합니다.
+
 가격, 수량, 금액, 수수료는 `float64`로 변환하지 않고 `Decimal` 문자열로 보존합니다. 각 항목의 `Raw`에는 해당 응답의 원본 JSON을 보존합니다.
 
 ## 인증과 본문 무결성
@@ -67,6 +69,79 @@ private 일반 API와 주문 API는 별도 bucket입니다. 응답의 `Public-Ra
 - 종료 주문 조회는 1~100개 크기, 필수 시작·종료 시간, 최대 90일 범위와 미래 시간 금지를 검증합니다.
 
 주문 생성·취소의 전송 오류, 응답 본문 읽기 실패, 성공 응답 JSON 파싱 실패, 거래소 서버 오류는 실제 처리 여부를 단정할 수 없습니다. SDK는 자동 재시도하지 않고 `trade.ErrUnknownExecutionState`로 반환합니다. 고유한 `UserOrderID`를 사용하고 불명확한 결과는 `OrderInfo`로 확인해야 합니다.
+
+## 추가 REST API
+
+`Client`는 아래 REST API도 제공합니다. 모든 메서드는 기존 메서드와 같이 `trade.RequestOption`으로 송신 경로를 선택하고, 가격·수량·금액·수수료는 `Decimal`로, 원본 응답은 각 항목의 `Raw`로 보존합니다. private API는 요청에 필요한 `credential.Permission`을 `Descriptor.Permissions`에서 확인하며, 없으면 Secret 조회와 네트워크 요청 전에 `trade.ErrAuthorization`으로 거절합니다. 읽기 요청은 기존 읽기 재시도 정책을 따르고, 변경 요청인 `CancelAllOrders`와 `Withdraw`는 자동 재시도하지 않습니다.
+
+### 시세·마켓 정보
+
+인증과 권한이 필요 없으며 public bucket을 사용합니다.
+
+| 메서드 | API |
+|---|---|
+| `RangeUnits` | `GET /public/v2/range_units/{quote_currency}/{target_currency}` |
+| `Market` | `GET /public/v2/markets/{quote_currency}/{target_currency}` |
+| `Tickers` | `GET /public/v2/ticker_new/{quote_currency}` |
+| `UTCTicker` | `GET /public/v2/ticker_utc_new/{quote_currency}/{target_currency}` |
+| `UTCTickers` | `GET /public/v2/ticker_utc_new/{quote_currency}` |
+| `Currencies` | `GET /public/v2/currencies` |
+| `Currency` | `GET /public/v2/currencies/{currency}` |
+
+- `RangeUnits`는 가격 구간별 호가 단위(`RangeMin`, `NextRangeMin`, `PriceUnit`)를 반환합니다. 코인원은 `Market`의 `PriceUnit`을 제거할 예정이라고 안내하므로 호가 단위는 `RangeUnits`로 조회해야 합니다.
+- `Market`, `UTCTicker`, `Currency`처럼 개별 조회 응답에 정확히 한 건이 없으면 `trade.ErrExchangeUnavailable`로 반환합니다.
+- `Tickers`와 `UTCTickers`는 마켓 전체 종목을 조회합니다. `AdditionalData: true`이면 `yesterday_*` 필드가 함께 오며, UTC 티커에서도 전일 거래대금·거래량(`yesterday_quote_volume`, `yesterday_target_volume`)은 UTC 기준이 아니라 KST 티커와 같은 값입니다.
+- `Currencies`와 `Currency`는 입출금 가능 상태(`normal`, `suspended`), 입출금 수수료, 최소 출금 수량(`WithdrawalMinimumAmount`), 출금 가능한 소수점 자릿수(`MaxPrecision`)를 반환합니다.
+
+### 거래
+
+| 메서드 | API | 권한 | 작업 | bucket |
+|---|---|---|---|---|
+| `CancelAllOrders` | `POST /v2.1/order/cancel/all` | `credential.PermissionTrade` | 변경 | order |
+
+- 통화쌍 하나(`QuoteCurrency`, `TargetCurrency`)에 걸려 있는 모든 주문을 취소합니다.
+- 결과의 `CanceledCount`가 `TotalOrderCount`보다 작으면 일부 주문이 남아 있으므로 `ActiveOrders`로 확인해야 합니다.
+- 전송 오류, 서버 오류, 성공 응답의 주문 개수 누락은 실제 처리 여부를 단정할 수 없어 `trade.ErrUnknownExecutionState`로 반환합니다. `ActiveOrders`로 상태를 확인하기 전에는 다시 요청하지 않아야 합니다.
+
+### 계정·수수료·주문 리워드
+
+모두 `credential.PermissionRead`가 필요한 읽기 요청이며 일반 private bucket(주문 외 private API 합산 80회/초)을 사용합니다.
+
+| 메서드 | API |
+|---|---|
+| `Balances` | `POST /v2.1/account/balance` |
+| `TradeFees` | `POST /v2.1/account/trade_fee` |
+| `TradeFee` | `POST /v2.1/account/trade_fee/{quote_currency}/{target_currency}` |
+| `OrderRewardPrograms` | `POST /v2.1/event/order-reward/programs` |
+| `OrderRewardHistory` | `POST /v2.1/event/order-reward/history` |
+
+- `Balances`는 지정한 심볼의 잔고만 조회하며 심볼이 하나 이상 필요합니다. 전체 잔고는 `Accounts`로 조회합니다.
+- `TradeFees`는 거래 가능한 모든 종목의 maker·taker 수수료율을, `TradeFee`는 통화쌍 하나의 수수료율을 반환합니다.
+- `OrderRewardPrograms`는 진행 중인 주문 리워드 종목과 내 점수·기여도·경쟁도를 반환합니다.
+- `OrderRewardHistory`의 `From`, `To`는 초 단위 Unix 시각으로 전송하며 비우면 각각 시작 제한 없음과 현재 시점입니다. 코인원은 기간 안에서 최근일부터 역순으로 최대 30일치만 반환합니다.
+
+### 입출금
+
+모두 일반 private bucket을 사용합니다.
+
+| 메서드 | API | 권한 | 작업 |
+|---|---|---|---|
+| `DepositAddresses` | `POST /v2.1/account/deposit_address` | `credential.PermissionRead` | 읽기 |
+| `KRWTransactionHistory` | `POST /v2.1/transaction/krw/history` | `credential.PermissionRead` | 읽기 |
+| `CoinTransactionHistory` | `POST /v2.1/transaction/coin/history` | `credential.PermissionRead` | 읽기 |
+| `CoinTransactionDetail` | `POST /v2.1/transaction/coin/history/detail` | `credential.PermissionRead` | 읽기 |
+| `WithdrawalLimit` | `POST /v2.1/transaction/coin/withdrawal/limit` | `credential.PermissionRead` | 읽기 |
+| `WithdrawalAddressBook` | `POST /v2.1/transaction/coin/withdrawal/address_book` | `credential.PermissionRead` | 읽기 |
+| `Withdraw` | `POST /v2.1/transaction/coin/withdrawal` | `credential.PermissionWithdraw` | 변경 |
+
+- `DepositAddresses`는 이미 발급된 입금 주소를 조회할 뿐 새 주소를 만들지 않으므로 Read 권한으로 호출합니다. 요청의 `Currencies` 필드를 비우면 전체를 조회하고 입금이 불가능한 가상자산은 응답에서 제외됩니다. `SecondaryAddress`는 Memo·Tag가 없으면 빈 문자열입니다.
+- `KRWTransactionHistory`와 `CoinTransactionHistory`의 `Type`을 비우면 입금과 출금을 모두 조회하고 `TransferTypeDeposit`, `TransferTypeWithdrawal`이면 `is_deposit`을 지정합니다. `Size`는 1~100이며 비우면 100건이고 `ToID`는 해당 ID 이전 내역을 조회하는 cursor입니다.
+- 입출금 내역의 `From`, `To`는 millisecond로 전송하며 비우면 각각 현재 시점 90일 전과 현재 시점입니다. 90일을 넘는 기간, `From`이 `To`보다 늦거나 같은 기간, 미래 시각은 요청 전에 거절합니다.
+- `CoinTransactionDetail`은 출금 응답의 ID로 입출금 한 건의 진행 상태를 조회하며 응답에 정확히 한 건이 없으면 `trade.ErrExchangeUnavailable`로 반환합니다.
+- 코인원은 포트폴리오 API Key로 원화·가상자산 입출금 내역, 단건 조회, 출금 한도, 출금 주소 목록, 출금을 지원하지 않습니다. 포트폴리오를 지원하지 않는 API를 뜻하는 error code 315(`The API does not support a portfolio.`)는 SDK가 `trade.ErrAuthorization`으로 분류합니다.
+- `Withdraw`는 코인원 홈페이지 > Open API > API 출금주소록에 추가 정보 등록과 추가 채널 인증을 마친 주소로만 출금할 수 있습니다. `Address`와 `SecondaryAddress`는 대소문자를 구분하므로 SDK가 정규화하지 않습니다.
+- `Descriptor.Permissions`에 `credential.PermissionWithdraw`를 명시한 자격증명만 `Withdraw`를 호출할 수 있습니다. 전송 오류, 서버 오류, 응답 해석 실패, 응답의 transaction ID 누락은 출금 접수 여부를 단정할 수 없어 `trade.ErrUnknownExecutionState`로 반환하며 자동 재시도하지 않습니다. `CoinTransactionHistory`로 접수 여부를 확인하기 전에는 같은 출금을 다시 요청하지 않아야 합니다.
+- `Withdraw` 성공 응답의 `Withdrawal.ID`는 `CoinTransactionDetail`로 진행 상태를 확인할 때 사용합니다. 거래소가 error code로 거절한 출금(예: 154 API 출금 주소 미등록, 3003 일일 출금 한도 초과)은 `ExchangeCode`와 `ExchangeMessage`를 보존한 `trade.APIError`로 반환합니다.
 
 ## 오류 처리
 
@@ -162,3 +237,24 @@ Coinone 주문 상세의 현재 `order` 객체 응답과 이전 평면 응답을
 - [Public WebSocket](https://docs.coinone.co.kr/reference/public-websocket-1)
 - [WebSocket 오더북](https://docs.coinone.co.kr/reference/public-websocket-orderbook)
 - [Private WebSocket](https://docs.coinone.co.kr/reference/private-websocket-1)
+- [포트폴리오 기능 신규 지원](https://docs.coinone.co.kr/changelog/%ED%8F%AC%ED%8A%B8%ED%8F%B4%EB%A6%AC%EC%98%A4-%EA%B8%B0%EB%8A%A5-%EC%8B%A0%EA%B7%9C-%EC%A7%80%EC%9B%90)
+- [개별 호가 단위 조회](https://docs.coinone.co.kr/reference/range-unit)
+- [개별 종목 정보 조회](https://docs.coinone.co.kr/reference/market)
+- [전체 티커 정보 조회](https://docs.coinone.co.kr/reference/tickers)
+- [전체 티커 정보 조회 (UTC)](https://docs.coinone.co.kr/reference/utc-tickers)
+- [개별 티커 정보 조회 (UTC)](https://docs.coinone.co.kr/reference/utc-ticker)
+- [전체 가상자산 정보 조회](https://docs.coinone.co.kr/reference/currencies)
+- [개별 가상자산 정보 조회](https://docs.coinone.co.kr/reference/currency)
+- [종목 별 전체 주문 취소](https://docs.coinone.co.kr/reference/cancel-orders)
+- [특정 자산 잔고 조회](https://docs.coinone.co.kr/reference/find-balance-by-currencies)
+- [전체 수수료 조회](https://docs.coinone.co.kr/reference/find-all-trade-fees)
+- [개별 종목 수수료 조회](https://docs.coinone.co.kr/reference/find-trade-fee-by-pair)
+- [주문 리워드 종목 정보 조회](https://docs.coinone.co.kr/reference/order-reward-programs)
+- [주문 리워드 내역 조회](https://docs.coinone.co.kr/reference/order-reward-history)
+- [가상자산 입금 주소 조회](https://docs.coinone.co.kr/reference/virtual-asset-deposit-address)
+- [원화 입출금 내역 조회](https://docs.coinone.co.kr/reference/krw-transaction-history)
+- [가상자산 입출금 내역 조회](https://docs.coinone.co.kr/reference/coin-transaction-history)
+- [가상자산 입출금 내역 단건 조회](https://docs.coinone.co.kr/reference/single-coin-transaction-history)
+- [가상자산 출금 한도 조회](https://docs.coinone.co.kr/reference/coin-withdrawal-limit)
+- [출금 주소 목록 조회](https://docs.coinone.co.kr/reference/coin-withdrawal-address-book)
+- [가상자산 출금](https://docs.coinone.co.kr/reference/coin-withdrawal)

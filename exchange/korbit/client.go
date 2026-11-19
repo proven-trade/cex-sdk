@@ -19,12 +19,16 @@ import (
 )
 
 const (
-	DefaultBaseURL                  = "https://api.korbit.co.kr"
+	// DefaultBaseURL은 공식 문서가 REST 기준 주소로 안내하는 Digital X(구 Korbit) 주소다.
+	// 이전 주소 https://api.korbit.co.kr도 아직 응답하지만 문서 기준이 아니므로 필요하면 Config.BaseURL로 지정한다.
+	DefaultBaseURL                  = "https://api.digitalx.miraeasset.com"
 	DefaultRequestTimeout           = 10 * time.Second
 	DefaultReceiveWindow            = 5000
 	DefaultPublicRequestsPerSecond  = 50
 	DefaultPrivateRequestsPerSecond = 50
 	DefaultOrderRequestsPerSecond   = 30
+	// DefaultAssetRequestsPerSecond는 입출금·원화 입출금·계정 간 이전 API의 계정별 기본 제한이다.
+	DefaultAssetRequestsPerSecond = 5
 )
 
 // Config는 코빗 Open API v2 Spot REST 클라이언트 설정이다.
@@ -42,6 +46,7 @@ type Config struct {
 	PublicRequestsPerSecond  int
 	PrivateRequestsPerSecond int
 	OrderRequestsPerSecond   int
+	AssetRequestsPerSecond   int
 }
 
 // Client는 코빗 Open API v2 Spot REST API를 요청별 송신 경로 선택과 함께 제공한다.
@@ -58,6 +63,7 @@ type Client struct {
 	publicRequestsPerSecond  int
 	privateRequestsPerSecond int
 	orderRequestsPerSecond   int
+	assetRequestsPerSecond   int
 }
 
 // New는 코빗 Open API v2 Spot REST 클라이언트를 생성한다.
@@ -113,7 +119,11 @@ func New(config Config) (*Client, error) {
 	if config.OrderRequestsPerSecond == 0 {
 		config.OrderRequestsPerSecond = DefaultOrderRequestsPerSecond
 	}
-	if config.PublicRequestsPerSecond < 1 || config.PrivateRequestsPerSecond < 1 || config.OrderRequestsPerSecond < 1 {
+	if config.AssetRequestsPerSecond == 0 {
+		config.AssetRequestsPerSecond = DefaultAssetRequestsPerSecond
+	}
+	if config.PublicRequestsPerSecond < 1 || config.PrivateRequestsPerSecond < 1 ||
+		config.OrderRequestsPerSecond < 1 || config.AssetRequestsPerSecond < 1 {
 		return nil, fmt.Errorf("Korbit request limits must be positive")
 	}
 
@@ -147,6 +157,7 @@ func New(config Config) (*Client, error) {
 		publicRequestsPerSecond:  config.PublicRequestsPerSecond,
 		privateRequestsPerSecond: config.PrivateRequestsPerSecond,
 		orderRequestsPerSecond:   config.OrderRequestsPerSecond,
+		assetRequestsPerSecond:   config.AssetRequestsPerSecond,
 	}, nil
 }
 
@@ -212,7 +223,7 @@ func (client *Client) executePrivate(
 	}
 	limit, charges, err := privateRateLimit(
 		client.executor.Limiter(), client.credentials.AccountID, group,
-		client.privateRequestsPerSecond, client.orderRequestsPerSecond,
+		client.privateRequestsPerSecond, client.orderRequestsPerSecond, client.assetRequestsPerSecond,
 	)
 	if err != nil {
 		return commonexchange.Response{}, err
@@ -391,9 +402,9 @@ func classifyError(status int, code string, operation commonexchange.OperationKi
 	switch code {
 	case "NO_BALANCE":
 		return trade.ErrorInsufficientBalance, false
-	case "ORDER_NOT_FOUND", "ORDER_ALREADY_CANCELED", "ORDER_ALREADY_FILLED", "ORDER_ALREADY_EXPIRED":
+	case "ORDER_NOT_FOUND", "ORDER_ALREADY_CANCELED", "ORDER_ALREADY_FILLED", "ORDER_ALREADY_EXPIRED", "NOT_FOUND":
 		return trade.ErrorOrderNotFound, false
-	case "INVALID_USER_STATUS":
+	case "INVALID_USER_STATUS", "ACCOUNT_SEQ_NOT_ALLOWED":
 		return trade.ErrorAuthorization, false
 	case "TRY_AGAIN":
 		return trade.ErrorExchangeUnavailable, true

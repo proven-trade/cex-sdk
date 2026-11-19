@@ -18,23 +18,31 @@ func TestRateLimitScopesGroupsAndHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("publicRateLimit() error = %v", err)
 	}
-	private, _, err := privateRateLimit(limiter, "account-a", rateGroupPrivate, 50, 30)
+	private, _, err := privateRateLimit(limiter, "account-a", rateGroupPrivate, 50, 30, 5)
 	if err != nil {
 		t.Fatalf("privateRateLimit() error = %v", err)
 	}
-	place, _, err := privateRateLimit(limiter, "account-a", rateGroupOrderPlace, 50, 30)
+	place, _, err := privateRateLimit(limiter, "account-a", rateGroupOrderPlace, 50, 30, 5)
 	if err != nil {
 		t.Fatalf("privateRateLimit(place) error = %v", err)
 	}
-	cancel, _, err := privateRateLimit(limiter, "account-a", rateGroupOrderCancel, 50, 30)
+	cancel, _, err := privateRateLimit(limiter, "account-a", rateGroupOrderCancel, 50, 30, 5)
 	if err != nil {
 		t.Fatalf("privateRateLimit(cancel) error = %v", err)
+	}
+	asset, _, err := privateRateLimit(limiter, "account-a", rateGroupAsset, 50, 30, 5)
+	if err != nil {
+		t.Fatalf("privateRateLimit(asset) error = %v", err)
 	}
 	if public.key != "korbit:route:route-a:public:1second" || public.limit != 50 ||
 		private.key != "korbit:account:account-a:private:1second" || private.limit != 50 ||
 		place.key != "korbit:account:account-a:order-place:1second" || place.limit != 30 ||
-		cancel.key != "korbit:account:account-a:order-cancel:1second" || cancel.limit != 30 {
-		t.Fatalf("limits = public %+v, private %+v, place %+v, cancel %+v", public, private, place, cancel)
+		cancel.key != "korbit:account:account-a:order-cancel:1second" || cancel.limit != 30 ||
+		asset.key != "korbit:account:account-a:asset:1second" || asset.limit != 5 {
+		t.Fatalf(
+			"limits = public %+v, private %+v, place %+v, cancel %+v, asset %+v",
+			public, private, place, cancel, asset,
+		)
 	}
 	header := make(http.Header)
 	header.Set("Ratelimit", "limit=50, remaining=42, reset=1")

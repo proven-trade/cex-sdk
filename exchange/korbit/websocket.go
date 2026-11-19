@@ -21,8 +21,10 @@ import (
 )
 
 const (
-	DefaultPublicWebSocketURL  = "wss://ws-api.korbit.co.kr/v2/public"
-	DefaultPrivateWebSocketURL = "wss://ws-api.korbit.co.kr/v2/private"
+	// DefaultPublicWebSocketURL과 DefaultPrivateWebSocketURL은 공식 문서가 WebSocket 기준 주소로 안내하는
+	// Digital X(구 Korbit) 주소다. 이전 주소 wss://ws-api.korbit.co.kr이 필요하면 StreamClientConfig에서 지정한다.
+	DefaultPublicWebSocketURL  = "wss://ws-api.digitalx.miraeasset.com/v2/public"
+	DefaultPrivateWebSocketURL = "wss://ws-api.digitalx.miraeasset.com/v2/private"
 	defaultStreamPingInterval  = 15 * time.Second
 	defaultStreamPingTimeout   = 5 * time.Second
 	maxStreamSubscriptions     = 1000

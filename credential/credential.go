@@ -25,9 +25,26 @@ var (
 type Permission string
 
 const (
-	PermissionRead  Permission = "read"
+	// PermissionRead는 시세·계정·주문 조회 권한이다.
+	PermissionRead Permission = "read"
+	// PermissionTrade는 주문 생성·정정·취소와 레버리지·포지션 설정 권한이다.
 	PermissionTrade Permission = "trade"
+	// PermissionTransfer는 본인·서브계정 사이 내부 이체, 서브계정·API Key 관리,
+	// 입금 주소 생성처럼 자산이 거래소 밖으로 나가지 않는 계정 변경 권한이다.
+	PermissionTransfer Permission = "transfer"
+	// PermissionWithdraw는 거래소 밖으로 자산을 보내는 출금 요청·취소 권한이다.
+	// 명시적으로 부여한 Descriptor만 출금 API를 호출할 수 있다.
+	PermissionWithdraw Permission = "withdraw"
 )
+
+func (permission Permission) valid() bool {
+	switch permission {
+	case PermissionRead, PermissionTrade, PermissionTransfer, PermissionWithdraw:
+		return true
+	default:
+		return false
+	}
+}
 
 // Descriptor는 계정의 비밀이 아닌 메타데이터와 송신 경로 허용 목록을 담는다.
 type Descriptor struct {
@@ -54,7 +71,7 @@ func (descriptor Descriptor) Validate() error {
 	}
 	seenPermissions := make(map[Permission]struct{}, len(descriptor.Permissions))
 	for _, permission := range descriptor.Permissions {
-		if permission != PermissionRead && permission != PermissionTrade {
+		if !permission.valid() {
 			return fmt.Errorf("%w: unknown permission %q", ErrInvalidDescriptor, permission)
 		}
 		if _, exists := seenPermissions[permission]; exists {

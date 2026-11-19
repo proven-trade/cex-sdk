@@ -22,7 +22,7 @@ func (client *Client) PlaceOrder(
 		return OrderReference{}, err
 	}
 	params := request.parameters()
-	body, err := encodeOrderBody(params)
+	body, err := encodeBody(params)
 	if err != nil {
 		return OrderReference{}, validationError("encode order body: %v", err)
 	}

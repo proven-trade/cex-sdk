@@ -18,6 +18,7 @@ const (
 	rateGroupPrivate     rateGroup = "private"
 	rateGroupOrderPlace  rateGroup = "order-place"
 	rateGroupOrderCancel rateGroup = "order-cancel"
+	rateGroupAsset       rateGroup = "asset"
 )
 
 type rateLimit struct {
@@ -42,14 +43,17 @@ func privateRateLimit(
 	limiter *ratelimit.Limiter,
 	accountID string,
 	group rateGroup,
-	privateRequestsPerSecond, orderRequestsPerSecond int,
+	privateRequestsPerSecond, orderRequestsPerSecond, assetRequestsPerSecond int,
 ) (rateLimit, []ratelimit.Charge, error) {
 	if strings.TrimSpace(accountID) == "" {
 		return rateLimit{}, nil, fmt.Errorf("Korbit private rate limit requires account ID")
 	}
 	limit := privateRequestsPerSecond
-	if group == rateGroupOrderPlace || group == rateGroupOrderCancel {
+	switch group {
+	case rateGroupOrderPlace, rateGroupOrderCancel:
 		limit = orderRequestsPerSecond
+	case rateGroupAsset:
+		limit = assetRequestsPerSecond
 	}
 	value := rateLimit{
 		key:   fmt.Sprintf("korbit:account:%s:%s:1second", accountID, group),

@@ -36,6 +36,13 @@ func (values *parameters) add(key, value string) {
 	}
 }
 
+// addAll은 `uuids[]`처럼 반복되는 배열 key를 값마다 하나씩 순서대로 추가한다.
+func (values *parameters) addAll(key string, items []string) {
+	for _, item := range items {
+		values.add(key, item)
+	}
+}
+
 func (values *parameters) addInt(key string, value int) {
 	if value > 0 {
 		values.add(key, strconv.Itoa(value))

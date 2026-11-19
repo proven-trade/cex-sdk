@@ -24,6 +24,9 @@ const (
 	DefaultPublicRequestsPerSecond  = 150
 	DefaultPrivateRequestsPerSecond = 140
 	DefaultOrderRequestsPerSecond   = 140
+	// 공지사항 조회와 다건 주문 생성·취소는 공식 안내에서 별도 한도를 둔다.
+	DefaultNoticeRequestsPerSecond     = 1
+	DefaultBatchOrderRequestsPerSecond = 20
 )
 
 // NonceSource는 인증 요청마다 중복되지 않는 nonce를 생성한다.
@@ -43,6 +46,10 @@ type Config struct {
 	PublicRequestsPerSecond  int
 	PrivateRequestsPerSecond int
 	OrderRequestsPerSecond   int
+	// NoticeRequestsPerSecond는 공지사항 조회 한도다. 0이면 공식 기본값 1회/초를 쓴다.
+	NoticeRequestsPerSecond int
+	// BatchOrderRequestsPerSecond는 다건 주문 생성·취소가 공유하는 한도다. 0이면 공식 기본값 20회/초를 쓴다.
+	BatchOrderRequestsPerSecond int
 }
 
 // Client는 빗썸 Spot REST API를 요청별 송신 경로 선택과 함께 제공한다.
@@ -58,6 +65,9 @@ type Client struct {
 	publicRequestsPerSecond  int
 	privateRequestsPerSecond int
 	orderRequestsPerSecond   int
+
+	noticeRequestsPerSecond     int
+	batchOrderRequestsPerSecond int
 }
 
 // New는 빗썸 Spot REST 클라이언트를 생성한다.
@@ -104,7 +114,14 @@ func New(config Config) (*Client, error) {
 	if config.OrderRequestsPerSecond == 0 {
 		config.OrderRequestsPerSecond = DefaultOrderRequestsPerSecond
 	}
-	if config.PublicRequestsPerSecond < 1 || config.PrivateRequestsPerSecond < 1 || config.OrderRequestsPerSecond < 1 {
+	if config.NoticeRequestsPerSecond == 0 {
+		config.NoticeRequestsPerSecond = DefaultNoticeRequestsPerSecond
+	}
+	if config.BatchOrderRequestsPerSecond == 0 {
+		config.BatchOrderRequestsPerSecond = DefaultBatchOrderRequestsPerSecond
+	}
+	if config.PublicRequestsPerSecond < 1 || config.PrivateRequestsPerSecond < 1 || config.OrderRequestsPerSecond < 1 ||
+		config.NoticeRequestsPerSecond < 1 || config.BatchOrderRequestsPerSecond < 1 {
 		return nil, fmt.Errorf("Bithumb request limits must be positive")
 	}
 
@@ -138,6 +155,9 @@ func New(config Config) (*Client, error) {
 		publicRequestsPerSecond:  config.PublicRequestsPerSecond,
 		privateRequestsPerSecond: config.PrivateRequestsPerSecond,
 		orderRequestsPerSecond:   config.OrderRequestsPerSecond,
+
+		noticeRequestsPerSecond:     config.NoticeRequestsPerSecond,
+		batchOrderRequestsPerSecond: config.BatchOrderRequestsPerSecond,
 	}, nil
 }
 
@@ -152,9 +172,11 @@ func (client *Client) executePublic(
 	if err != nil {
 		return commonexchange.Response{}, err
 	}
-	charges, err := rateLimitCharges(
-		client.executor.Limiter(), resolved.EgressRouteID, group, client.publicRequestsPerSecond,
-	)
+	limit := client.publicRequestsPerSecond
+	if group == rateLimitPublicNotice {
+		limit = client.noticeRequestsPerSecond
+	}
+	charges, err := rateLimitCharges(client.executor.Limiter(), resolved.EgressRouteID, group, limit)
 	if err != nil {
 		return commonexchange.Response{}, err
 	}
@@ -202,6 +224,9 @@ func (client *Client) executePrivate(
 	limit := client.privateRequestsPerSecond
 	if group == rateLimitOrderCreate || group == rateLimitOrderCancel {
 		limit = client.orderRequestsPerSecond
+	}
+	if group == rateLimitOrderBatch {
+		limit = client.batchOrderRequestsPerSecond
 	}
 	charges, err := rateLimitCharges(client.executor.Limiter(), resolved.EgressRouteID, group, limit)
 	if err != nil {
@@ -301,8 +326,10 @@ func (client *Client) decodeErrorResponse(
 ) error {
 	var envelope struct {
 		Error struct {
-			Name    json.RawMessage `json:"name"`
-			Message string          `json:"message"`
+			Name         json.RawMessage `json:"name"`
+			Message      string          `json:"message"`
+			ConsentURL   string          `json:"consent_url"`
+			ExchangeName string          `json:"exchange_name"`
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(response.Body, &envelope); err != nil {
@@ -314,11 +341,17 @@ func (client *Client) decodeErrorResponse(
 	if client.credentials != nil {
 		accountID = client.credentials.AccountID
 	}
+	var cause error
+	if strings.EqualFold(code, travelRuleConsentRequiredCode) {
+		cause = &TravelRuleConsentError{
+			ExchangeName: envelope.Error.ExchangeName, ConsentURL: envelope.Error.ConsentURL,
+		}
+	}
 	return &trade.APIError{
 		Category: category, Exchange: model.ExchangeBithumb, AccountID: accountID,
 		RequestID: firstNonEmpty(response.Header.Get("X-Request-ID"), response.Header.Get("Request-ID")),
 		Retryable: retryable, HTTPStatus: response.StatusCode,
-		ExchangeCode: code, ExchangeMessage: envelope.Error.Message,
+		ExchangeCode: code, ExchangeMessage: envelope.Error.Message, Cause: cause,
 	}
 }
 
@@ -382,17 +415,37 @@ func classifyError(status int, code string, operation commonexchange.OperationKi
 	return trade.ErrorInternal, false
 }
 
-func encodeOrderBody(params parameters) ([]byte, error) {
+// encodeBody는 ordered parameter를 JSON 객체 본문으로 변환한다.
+// 해시 입력과 본문이 같은 순서를 쓰도록 하나의 parameters에서 만든다.
+// `[]`로 끝나는 key는 같은 key의 값을 모아 최초 등장 위치에 JSON 배열로 인코딩한다.
+func encodeBody(params parameters) ([]byte, error) {
 	buffer := bytes.NewBufferString("{")
-	for index, value := range params {
-		if index > 0 {
+	written := make(map[string]struct{}, len(params))
+	for _, value := range params {
+		if _, done := written[value.key]; done {
+			continue
+		}
+		if len(written) > 0 {
 			buffer.WriteByte(',')
 		}
-		key, err := json.Marshal(value.key)
+		written[value.key] = struct{}{}
+		name, isArray := strings.CutSuffix(value.key, "[]")
+		key, err := json.Marshal(name)
 		if err != nil {
 			return nil, err
 		}
-		item, err := json.Marshal(value.value)
+		var item []byte
+		if isArray {
+			members := make([]string, 0, 1)
+			for _, candidate := range params {
+				if candidate.key == value.key {
+					members = append(members, candidate.value)
+				}
+			}
+			item, err = json.Marshal(members)
+		} else {
+			item, err = json.Marshal(value.value)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -401,6 +454,23 @@ func encodeOrderBody(params parameters) ([]byte, error) {
 		buffer.Write(item)
 	}
 	buffer.WriteByte('}')
+	return buffer.Bytes(), nil
+}
+
+// encodeBatchOrdersBody는 다건 주문 항목별 parameter를 `{"batch_orders":[...]}` 본문으로 변환한다.
+func encodeBatchOrdersBody(orders []parameters) ([]byte, error) {
+	buffer := bytes.NewBufferString(`{"batch_orders":[`)
+	for index, order := range orders {
+		if index > 0 {
+			buffer.WriteByte(',')
+		}
+		item, err := encodeBody(order)
+		if err != nil {
+			return nil, err
+		}
+		buffer.Write(item)
+	}
+	buffer.WriteString("]}")
 	return buffer.Bytes(), nil
 }
 

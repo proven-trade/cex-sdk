@@ -237,26 +237,28 @@ type OrderDetail struct {
 
 // OrderSummary는 v2 주문 목록의 주문 상태다.
 type OrderSummary struct {
-	OrderID         string          `json:"order_id"`
-	ClientOrderID   string          `json:"client_order_id"`
-	Side            Side            `json:"side"`
-	OrderType       OrderType       `json:"order_type"`
-	Price           string          `json:"price"`
-	State           OrderState      `json:"state"`
-	Market          string          `json:"market"`
-	CreatedAt       string          `json:"created_at"`
-	Volume          string          `json:"volume"`
-	RemainingVolume string          `json:"remaining_volume"`
-	ReservedFee     string          `json:"reserved_fee"`
-	RemainingFee    string          `json:"remaining_fee"`
-	PaidFee         string          `json:"paid_fee"`
-	Locked          string          `json:"locked"`
-	ExecutedVolume  string          `json:"executed_volume"`
-	ExecutedFunds   string          `json:"executed_funds"`
-	TradesCount     int             `json:"trades_count"`
-	STPType         string          `json:"stp_type"`
-	TimeInForce     TimeInForce     `json:"time_in_force"`
-	Raw             json.RawMessage `json:"-"`
+	OrderID          string          `json:"order_id"`
+	ClientOrderID    string          `json:"client_order_id"`
+	Side             Side            `json:"side"`
+	OrderType        OrderType       `json:"order_type"`
+	Price            string          `json:"price"`
+	State            OrderState      `json:"state"`
+	Market           string          `json:"market"`
+	CreatedAt        string          `json:"created_at"`
+	Volume           string          `json:"volume"`
+	RemainingVolume  string          `json:"remaining_volume"`
+	ReservedFee      string          `json:"reserved_fee"`
+	RemainingFee     string          `json:"remaining_fee"`
+	PaidFee          string          `json:"paid_fee"`
+	Locked           string          `json:"locked"`
+	ExecutedVolume   string          `json:"executed_volume"`
+	ExecutedFunds    string          `json:"executed_funds"`
+	TradesCount      int             `json:"trades_count"`
+	STPType          string          `json:"stp_type"`
+	TimeInForce      TimeInForce     `json:"time_in_force"`
+	CancelType       string          `json:"cancel_type"`
+	CancelingOrderID string          `json:"canceling_order_id"`
+	Raw              json.RawMessage `json:"-"`
 }
 
 // OrderPage는 v2 주문 목록과 다음 페이지 cursor를 보존한다.

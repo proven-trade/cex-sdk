@@ -14,7 +14,7 @@ import (
 
 var (
 	symbolPattern        = regexp.MustCompile(`^[a-z0-9]+_[a-z0-9]+$`)
-	currencyPattern      = regexp.MustCompile(`^[a-z0-9]{2,20}$`)
+	currencyPattern      = regexp.MustCompile(`^[a-z0-9]{1,20}$`)
 	positiveDecimalRegex = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+)?$`)
 	clientOrderIDPattern = regexp.MustCompile(`^[0-9A-Za-z.:_-]{1,36}$`)
 )
@@ -419,7 +419,7 @@ func orderIdentityValues(symbol string, accountSeq int, orderID int64, clientOrd
 
 func validateSymbols(symbols []string) error {
 	if len(symbols) > 100 {
-		return validationError("ticker symbols cannot exceed 100 items")
+		return validationError("symbols cannot exceed 100 items")
 	}
 	seen := make(map[string]struct{}, len(symbols))
 	for _, symbol := range symbols {

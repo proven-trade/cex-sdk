@@ -47,7 +47,6 @@
 
 - 거래 전략, 차익거래 엔진, 주문 분할 알고리즘 자체
 - OMS, 포트폴리오 회계, PnL 원장, 세금 계산
-- 입출금 실행 기능. 조회는 가능하지만 실행 권한은 별도 보안 검토 후 추가한다.
 - 거래소 화면의 모든 기능을 억지로 하나의 공통 모델로 추상화하는 것
 - 여러 공인 송신 IP를 이용해 거래소 요청 제한 또는 이용 정책을 우회하는 기능
 - 브라우저용 SDK. Secret을 다루므로 서버 런타임만 지원한다.
@@ -85,7 +84,7 @@
 | 주문 | 생성, 조회, 취소 | 정정, 일괄 주문 | 고급 주문/조건부 주문 |
 | 파생상품 | P0 기본 주문/포지션 | 레버리지, 마진/포지션 모드 | 옵션 |
 | WebSocket | P0 시세 및 개인 주문/체결 | P1 확장 | 로컬 오더북 빌더 |
-| 자산 이동 | 조회만 | 내부 이체 검토 | 입출금은 별도 승인 |
+| 자산 이동 | 조회 | 내부 이체(`PermissionTransfer`) | 출금(`PermissionWithdraw` 명시 opt-in) |
 | 다중 송신 IP | REST 요청별 선택 | WebSocket 연결별 선택/상태관리 | 장애 조치 정책 확장 |
 
 ## 6. 핵심 설계 원칙
@@ -290,7 +289,7 @@ type CredentialDescriptor struct {
 - Secret은 SDK 설정 객체, 로그, 오류 객체에 평문으로 남기지 않는다.
 - AWS Secrets Manager, Vault, 환경 변수 등을 어댑트할 `SecretProvider` 인터페이스를 둔다.
 - 캐시 시간과 갱신 실패 정책을 명시한다.
-- 출금 권한이 있는 키는 초기 버전에서 거부하거나 별도 opt-in을 요구한다.
+- 내부 이체·서브계정 관리는 `credential.PermissionTransfer`, 외부 출금 요청·취소는 `credential.PermissionWithdraw`를 Descriptor에 명시한 키만 호출할 수 있다. `PermissionTrade`는 이 권한을 포함하지 않는다.
 
 ## 10. 공급자 중립 다중 송신 IP 설계
 

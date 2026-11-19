@@ -47,7 +47,7 @@ func TestDescriptorRejectsUnknownOrDuplicatePermissions(t *testing.T) {
 	t.Parallel()
 
 	for name, permissions := range map[string][]Permission{
-		"unknown":   {"withdraw"},
+		"unknown":   {"admin"},
 		"duplicate": {PermissionRead, PermissionRead},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -78,6 +78,32 @@ func TestDescriptorRequiresConfiguredPermission(t *testing.T) {
 	}
 	if err := descriptor.RequirePermission(PermissionRead); err != nil {
 		t.Fatalf("RequirePermission(read) error = %v", err)
+	}
+	if err := descriptor.RequirePermission(PermissionTrade); !errors.Is(err, ErrPermissionNotAllowed) {
+		t.Fatalf("RequirePermission(trade) error = %v, want ErrPermissionNotAllowed", err)
+	}
+	if err := descriptor.RequirePermission(PermissionWithdraw); !errors.Is(err, ErrPermissionNotAllowed) {
+		t.Fatalf("RequirePermission(withdraw) error = %v, want ErrPermissionNotAllowed", err)
+	}
+}
+
+func TestDescriptorAcceptsTransferAndWithdrawPermissions(t *testing.T) {
+	t.Parallel()
+
+	descriptor := Descriptor{
+		AccountID:             "treasury",
+		Exchange:              model.ExchangeUpbit,
+		SecretRef:             "secret/upbit/treasury",
+		Permissions:           []Permission{PermissionRead, PermissionTransfer, PermissionWithdraw},
+		AllowedEgressRouteIDs: []transport.EgressRouteID{"eip-a"},
+	}
+	if err := descriptor.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	for _, permission := range []Permission{PermissionTransfer, PermissionWithdraw} {
+		if err := descriptor.RequirePermission(permission); err != nil {
+			t.Fatalf("RequirePermission(%s) error = %v", permission, err)
+		}
 	}
 	if err := descriptor.RequirePermission(PermissionTrade); !errors.Is(err, ErrPermissionNotAllowed) {
 		t.Fatalf("RequirePermission(trade) error = %v, want ErrPermissionNotAllowed", err)

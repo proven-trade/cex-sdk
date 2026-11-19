@@ -2,6 +2,20 @@
 
 이 프로젝트의 사용자 영향 변경 사항은 이 파일에 기록합니다. 버전은 Semantic Versioning을 따릅니다.
 
+## Unreleased
+
+### Added
+
+- `credential.PermissionTransfer`(내부 이체·서브계정·입금 주소 생성)와 `credential.PermissionWithdraw`(외부 출금). 출금 API는 Descriptor에 `PermissionWithdraw`를 명시한 키만 호출할 수 있습니다
+- Korbit: 자산 목록·공지·시장 경보, 수수료 정책·API 키·계정 목록, 자전거래 방지 체결, 코인·원화 입출금, 계정 간 이전 API와 `Config.AssetRequestsPerSecond`
+- Coinone: 호가 단위·단일 마켓·전체/UTC 티커·통화 정보, 잔고·거래 수수료·주문 리워드, 전체 취소, 입금 주소·입출금 내역·출금 한도·주소록·출금 API
+- Bithumb: 일·주·월 캔들, 경보·공지·입출금 수수료, 주문 가능 정보, 다건 주문·조회·취소, TWAP, 입출금 API
+
+### Changed
+
+- Korbit 기본 REST·WebSocket 호스트를 공식 문서 기준 `api.digitalx.miraeasset.com`·`ws-api.digitalx.miraeasset.com`으로 바꾸었습니다. 기존 호스트는 `Config.BaseURL`로 계속 지정할 수 있습니다
+- Korbit 통화 심볼 1글자를 허용하고, `NOT_FOUND`는 `ErrorOrderNotFound`, `ACCOUNT_SEQ_NOT_ALLOWED`는 `ErrorAuthorization`으로 분류합니다
+
 ## 1.1.1
 
 ### Fixed
