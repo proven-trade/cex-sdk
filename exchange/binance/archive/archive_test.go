@@ -195,6 +195,9 @@ func TestKlinesErrors(t *testing.T) {
 		"month":       {Market: MarketSpot, Symbol: "BTCUSDT", Interval: binance.Kline1Minute, Year: 2024, Month: 13},
 		"february 30": {Market: MarketSpot, Symbol: "BTCUSDT", Interval: binance.Kline1Minute, Year: 2024, Month: 2, Day: 30},
 		"negative":    {Market: MarketSpot, Symbol: "BTCUSDT", Interval: binance.Kline1Minute, Year: 2024, Month: 2, Day: -1},
+		"daily 3d":    {Market: MarketUSDM, Symbol: "BTCUSDT", Interval: binance.Kline3Days, Year: 2024, Month: 1, Day: 5},
+		"daily 1w":    {Market: MarketSpot, Symbol: "BTCUSDT", Interval: binance.Kline1Week, Year: 2024, Month: 1, Day: 5},
+		"daily 1mo":   {Market: MarketSpot, Symbol: "BTCUSDT", Interval: binance.Kline1Month, Year: 2024, Month: 1, Day: 5},
 	} {
 		if _, err := client.Klines(ctx, request); !errors.Is(err, trade.ErrValidation) {
 			t.Fatalf("%s error = %v, want ErrValidation", name, err)
@@ -217,6 +220,12 @@ func TestKlinesRequestPaths(t *testing.T) {
 		},
 		"data/futures/um/monthly/klines/BTCUSDT/3d/BTCUSDT-3d-2024-01.zip": {
 			Market: MarketUSDM, Symbol: "BTCUSDT", Interval: binance.Kline3Days, Year: 2024, Month: time.January,
+		},
+		"data/spot/monthly/klines/BTCUSDT/1w/BTCUSDT-1w-2024-01.zip": {
+			Market: MarketSpot, Symbol: "BTCUSDT", Interval: binance.Kline1Week, Year: 2024, Month: time.January,
+		},
+		"data/futures/um/daily/klines/BTCUSDT/1d/BTCUSDT-1d-2024-01-05.zip": {
+			Market: MarketUSDM, Symbol: "BTCUSDT", Interval: binance.Kline1Day, Year: 2024, Month: time.January, Day: 5,
 		},
 	}
 	for want, request := range tests {

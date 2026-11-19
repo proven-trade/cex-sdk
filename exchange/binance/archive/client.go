@@ -1,4 +1,4 @@
-// Package archive는 Binance 공개 데이터 저장소(data.binance.vision)의 캔들 덤프를 제공한다.
+// Package archive는 Binance 공개 데이터 저장소(data.binance.vision)의 캔들·체결 덤프를 제공한다.
 // REST로 상장 시점부터 받으면 weight 한도 때문에 오래 걸리는 초기 백필을 월·일 파일로 줄인다.
 package archive
 
@@ -26,7 +26,8 @@ import (
 const (
 	DefaultBaseURL       = "https://data.binance.vision"
 	DefaultHeaderTimeout = 30 * time.Second
-	// DefaultMaxFileBytes는 압축 파일 하나의 기본 최대 크기다. 1분봉 월 파일은 수 MB다.
+	// DefaultMaxFileBytes는 압축 파일 하나의 기본 최대 크기다. 1분봉 월 파일은 수 MB이고
+	// 인기 상품의 체결 월 파일은 1GB를 넘으므로 이 파일은 MaxFileBytes를 올려 받는다.
 	DefaultMaxFileBytes int64 = 256 << 20
 	maxChecksumBytes          = 4 << 10
 )
@@ -114,6 +115,74 @@ func (client *Client) Klines(
 	if err != nil {
 		return nil, err
 	}
+	return client.openKlines(ctx, filePath, false, options)
+}
+
+// MarkPriceKlines는 USDⓈ-M 마크가 캔들 덤프 파일 하나를 읽는다.
+// 검증과 오류는 Klines와 같다.
+func (client *Client) MarkPriceKlines(
+	ctx context.Context,
+	request MarkPriceKlinesRequest,
+	options ...trade.RequestOption,
+) (*KlineReader, error) {
+	filePath, err := request.path()
+	if err != nil {
+		return nil, err
+	}
+	return client.openKlines(ctx, filePath, false, options)
+}
+
+// IndexPriceKlines는 USDⓈ-M 지수가 캔들 덤프 파일 하나를 읽는다.
+// 검증과 오류는 Klines와 같다.
+func (client *Client) IndexPriceKlines(
+	ctx context.Context,
+	request IndexPriceKlinesRequest,
+	options ...trade.RequestOption,
+) (*KlineReader, error) {
+	filePath, err := request.path()
+	if err != nil {
+		return nil, err
+	}
+	return client.openKlines(ctx, filePath, false, options)
+}
+
+// PremiumIndexKlines는 USDⓈ-M 프리미엄 지수 캔들 덤프 파일 하나를 읽는다.
+// 프리미엄 지수는 선물이 지수보다 싸면 음수이므로 시가·고가·저가·종가의 음수를 허용한다.
+// 검증과 오류는 Klines와 같다.
+func (client *Client) PremiumIndexKlines(
+	ctx context.Context,
+	request PremiumIndexKlinesRequest,
+	options ...trade.RequestOption,
+) (*KlineReader, error) {
+	filePath, err := request.path()
+	if err != nil {
+		return nil, err
+	}
+	return client.openKlines(ctx, filePath, true, options)
+}
+
+func (client *Client) openKlines(
+	ctx context.Context,
+	filePath string,
+	signedPrices bool,
+	options []trade.RequestOption,
+) (*KlineReader, error) {
+	entry, err := client.open(ctx, filePath, options)
+	if err != nil {
+		return nil, err
+	}
+	return newKlineReader(filePath, entry, signedPrices), nil
+}
+
+// open은 덤프 파일 하나의 SHA-256을 .CHECKSUM 파일로 검증한 뒤 zip 안의 CSV 항목을 연다.
+// 체크섬 파일이 없거나 덤프가 없으면 ErrFileNotFound를 반환한다.
+// zip은 중앙 디렉터리가 파일 끝에 있고 검증 전에는 내용을 신뢰할 수 없으므로
+// 압축 파일은 메모리에 받고, 압축 해제와 CSV 해석은 읽는 만큼만 진행한다.
+func (client *Client) open(
+	ctx context.Context,
+	filePath string,
+	options []trade.RequestOption,
+) (io.ReadCloser, error) {
 	resolved, err := trade.ResolveRequestOptions(client.defaultEgressRouteID, options...)
 	if err != nil {
 		return nil, err
@@ -138,7 +207,7 @@ func (client *Client) Klines(
 			"%w: got %s, want %s", ErrChecksumMismatch, hex.EncodeToString(got[:]), hex.EncodeToString(want[:]),
 		))
 	}
-	return openKlines(filePath, data)
+	return openEntry(filePath, data)
 }
 
 func (client *Client) download(
@@ -194,7 +263,8 @@ func parseChecksum(data []byte, fileName string) ([sha256.Size]byte, error) {
 	return sum, nil
 }
 
-func openKlines(filePath string, data []byte) (*KlineReader, error) {
+// openEntry는 검증을 마친 zip에서 덤프 CSV 항목 하나를 연다.
+func openEntry(filePath string, data []byte) (io.ReadCloser, error) {
 	archive, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return nil, archiveError(filePath, false, fmt.Errorf("open zip: %w", err))
@@ -207,7 +277,7 @@ func openKlines(filePath string, data []byte) (*KlineReader, error) {
 	if err != nil {
 		return nil, archiveError(filePath, false, fmt.Errorf("open %s: %w", entryName, err))
 	}
-	return newKlineReader(filePath, entry), nil
+	return entry, nil
 }
 
 func statusError(status int, filePath string) error {

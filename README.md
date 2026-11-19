@@ -218,7 +218,7 @@ defer session.Close()
 - 공식 HMAC SHA-256 서명 벡터
 - IP·계정 단위 요청 제한과 `Retry-After` 반영
 - 주문 mutation의 불명확한 네트워크 결과를 `UNKNOWN_EXECUTION_STATE`로 분류
-- `exchange/binance/archive`: `data.binance.vision` Spot·USDⓈ-M 캔들 월·일 덤프와 SHA-256 검증([문서](docs/exchanges/BINANCE_ARCHIVE.md))
+- `exchange/binance/archive`: `data.binance.vision` Spot·USDⓈ-M 캔들·집계 체결·개별 체결, USDⓈ-M 마크가·지수가·프리미엄 지수 캔들 월·일 덤프와 SHA-256 검증([문서](docs/exchanges/BINANCE_ARCHIVE.md))
 
 공개 Go API는 v1부터 Semantic Versioning 호환성을 따르며, 이후 호환되지 않는 API 변경은 새 major version에서 제공합니다. 거래소 자체 응답·정책 변경과 `experimental` 상품의 운영 검증 수준은 지원 매트릭스와 변경 이력에 별도로 기록합니다.
 
