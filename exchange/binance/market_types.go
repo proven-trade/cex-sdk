@@ -129,3 +129,118 @@ func (kline *Kline) UnmarshalJSON(data []byte) error {
 	}
 	return nil
 }
+
+// AggregateTrade는 같은 taker 주문과 가격으로 합쳐진 공개 체결 한 건이다.
+type AggregateTrade struct {
+	AggregateID  int64  `json:"a"`
+	Price        string `json:"p"`
+	Quantity     string `json:"q"`
+	FirstTradeID int64  `json:"f"`
+	LastTradeID  int64  `json:"l"`
+	Time         int64  `json:"T"`
+	BuyerMaker   bool   `json:"m"`
+	BestMatch    bool   `json:"M"`
+}
+
+// BlockTrade는 블록 체결 한 건이다. 일반 체결과 달리 isBestMatch가 없다.
+type BlockTrade struct {
+	ID            int64  `json:"id"`
+	Price         string `json:"price"`
+	Quantity      string `json:"qty"`
+	QuoteQuantity string `json:"quoteQty"`
+	Time          int64  `json:"time"`
+	BuyerMaker    bool   `json:"isBuyerMaker"`
+}
+
+// AveragePrice는 상품의 현재 평균가다.
+type AveragePrice struct {
+	Minutes   int             `json:"mins"`
+	Price     string          `json:"price"`
+	CloseTime int64           `json:"closeTime"`
+	Raw       json.RawMessage `json:"-"`
+}
+
+// TickerType은 ticker 응답의 상세 수준이다.
+type TickerType string
+
+const (
+	TickerTypeFull TickerType = "FULL"
+	TickerTypeMini TickerType = "MINI"
+)
+
+// SymbolStatus는 상품 거래 상태 필터 값이다.
+type SymbolStatus string
+
+const (
+	SymbolStatusTrading    SymbolStatus = "TRADING"
+	SymbolStatusHalt       SymbolStatus = "HALT"
+	SymbolStatusBreak      SymbolStatus = "BREAK"
+	SymbolStatusCancelOnly SymbolStatus = "CANCEL_ONLY"
+)
+
+// TickerStatistics는 24시간, 거래일, rolling window 가격 변동 통계다.
+// MINI 응답에 없는 필드는 빈 값으로 남고 원본은 Raw에 보존한다.
+type TickerStatistics struct {
+	Symbol               string          `json:"symbol"`
+	PriceChange          string          `json:"priceChange"`
+	PriceChangePercent   string          `json:"priceChangePercent"`
+	WeightedAveragePrice string          `json:"weightedAvgPrice"`
+	PreviousClosePrice   string          `json:"prevClosePrice"`
+	LastPrice            string          `json:"lastPrice"`
+	LastQuantity         string          `json:"lastQty"`
+	BidPrice             string          `json:"bidPrice"`
+	BidQuantity          string          `json:"bidQty"`
+	AskPrice             string          `json:"askPrice"`
+	AskQuantity          string          `json:"askQty"`
+	OpenPrice            string          `json:"openPrice"`
+	HighPrice            string          `json:"highPrice"`
+	LowPrice             string          `json:"lowPrice"`
+	Volume               string          `json:"volume"`
+	QuoteVolume          string          `json:"quoteVolume"`
+	OpenTime             int64           `json:"openTime"`
+	CloseTime            int64           `json:"closeTime"`
+	FirstTradeID         int64           `json:"firstId"`
+	LastTradeID          int64           `json:"lastId"`
+	TradeCount           int64           `json:"count"`
+	Raw                  json.RawMessage `json:"-"`
+}
+
+// ReferencePrice는 상품의 기준가격이다. 설정된 기준가격이 없으면 Price가 nil이다.
+type ReferencePrice struct {
+	Symbol    string          `json:"symbol"`
+	Price     *string         `json:"referencePrice"`
+	Timestamp int64           `json:"timestamp"`
+	Raw       json.RawMessage `json:"-"`
+}
+
+// ReferencePriceCalculation은 기준가격 산출 방식이다.
+// 산출 방식에 따라 BucketCount·BucketWidthMillis 또는 ExternalCalculationID만 채워진다.
+type ReferencePriceCalculation struct {
+	Symbol                string          `json:"symbol"`
+	CalculationType       string          `json:"calculationType"`
+	BucketCount           int             `json:"bucketCount"`
+	BucketWidthMillis     int64           `json:"bucketWidthMs"`
+	ExternalCalculationID int64           `json:"externalCalculationId"`
+	Raw                   json.RawMessage `json:"-"`
+}
+
+// ExecutionRule은 상품에 적용되는 실행 규칙 한 건이다. 현재 PRICE_RANGE만 정의되어 있다.
+type ExecutionRule struct {
+	RuleType         string `json:"ruleType"`
+	BidLimitMultUp   string `json:"bidLimitMultUp"`
+	BidLimitMultDown string `json:"bidLimitMultDown"`
+	AskLimitMultUp   string `json:"askLimitMultUp"`
+	AskLimitMultDown string `json:"askLimitMultDown"`
+}
+
+// SymbolExecutionRules는 상품별 실행 규칙 목록이다.
+type SymbolExecutionRules struct {
+	Symbol string          `json:"symbol"`
+	Rules  []ExecutionRule `json:"rules"`
+}
+
+// ExecutionRules는 executionRules 조회 응답이다.
+type ExecutionRules struct {
+	SymbolRules []SymbolExecutionRules `json:"symbolRules"`
+	Raw         json.RawMessage        `json:"-"`
+}

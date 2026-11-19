@@ -10,6 +10,7 @@
 - Korbit: 자산 목록·공지·시장 경보, 수수료 정책·API 키·계정 목록, 자전거래 방지 체결, 코인·원화 입출금, 계정 간 이전 API와 `Config.AssetRequestsPerSecond`
 - Coinone: 호가 단위·단일 마켓·전체/UTC 티커·통화 정보, 잔고·거래 수수료·주문 리워드, 전체 취소, 입금 주소·입출금 내역·출금 한도·주소록·출금 API
 - `binance/archive`: Spot·USDⓈ-M `AggTrades`·`Trades`, USDⓈ-M `MarkPriceKlines`·`IndexPriceKlines`·`PremiumIndexKlines` 월·일 덤프
+- Binance Spot: 집계·과거·블록 체결, UI 캔들, 평균가, 24시간·거래일·롤링 티커, 실행 규칙·참조가, 테스트 주문·cancelReplace·keepPriority 정정·전체 취소, OCO/OTO/OTOCO/OPO/OPOCO 주문 리스트, SOR, 체결·할당·자전거래 방지·수수료·주문 한도·정정 이력·필터 조회 API와 [REST 문서](docs/exchanges/BINANCE.md)
 - Binance USDⓈ-M: 집계·과거 체결, 연속계약·지수가·마크가·프리미엄 캔들, 마크가·펀딩비 이력·펀딩 정보, 24시간·최우선 호가, 미결제약정과 `/futures/data` 통계, 복합지수·자산 지수·구성 거래소, 보험기금·ADL 위험·RPI 호가·거래 세션 일정 시세 API
 - Coinbase: `BestBidAsk`, 주문 정정·미리보기·`ClosePosition`, Convert, 거래 요약·키 권한·결제 수단, Portfolio 관리·자금 이동, CFM 잔고·포지션·일중 마진·sweep API
 - Bithumb: 일·주·월 캔들, 경보·공지·입출금 수수료, 주문 가능 정보, 다건 주문·조회·취소, TWAP, 입출금 API

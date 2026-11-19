@@ -16,6 +16,7 @@
 - [변경 이력](CHANGELOG.md)
 - [보안 정책](SECURITY.md)
 - [MIT License](LICENSE)
+- [Binance Spot REST](docs/exchanges/BINANCE.md)
 - [Binance Spot WebSocket](docs/exchanges/BINANCE_WEBSOCKET.md)
 - [Binance USDⓈ-M Futures REST·WebSocket](docs/exchanges/BINANCE_USDM.md)
 - [Binance 공개 데이터 덤프](docs/exchanges/BINANCE_ARCHIVE.md)

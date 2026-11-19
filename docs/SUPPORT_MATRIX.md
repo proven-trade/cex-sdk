@@ -6,7 +6,7 @@
 
 | 등급 | 거래소 | 상품 | REST | WS public | WS private | Unified | 자동 테스트 | 읽기 smoke | 거래 smoke | 문서 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| P0 | Binance | Spot | 실험 | 실험 | 실험 | 실험 | 구현 | 대기 | 대기 | [문서](exchanges/BINANCE_WEBSOCKET.md) |
+| P0 | Binance | Spot | 실험 | 실험 | 실험 | 실험 | 구현 | 대기 | 대기 | [문서](exchanges/BINANCE.md)<br>[문서](exchanges/BINANCE_WEBSOCKET.md) |
 | P0 | Binance | USDⓈ-M Futures | 실험 | 실험 | 실험 | 해당 없음 | 구현 | 대기 | 대기 | [문서](exchanges/BINANCE_USDM.md) |
 | P0 | Bitget | Spot | 실험 | 실험 | 실험 | 실험 | 구현 | 대기 | 대기 | [문서](exchanges/BITGET.md) |
 | P0 | Bitget | USDT-M Futures | 실험 | 실험 | 실험 | 해당 없음 | 구현 | 대기 | 대기 | [문서](exchanges/BITGET.md) |

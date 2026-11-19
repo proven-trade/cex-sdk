@@ -10,7 +10,7 @@ var catalogData = []ProductSupport{
 		REST: Status("experimental"), WebSocketPublic: Status("experimental"), WebSocketPrivate: Status("experimental"),
 		Unified: Status("experimental"), AutomatedTests: Status("implemented"),
 		LiveReadSmoke: Status("pending"), LiveTradeSmoke: Status("pending"),
-		Docs: []string{"docs/exchanges/BINANCE_WEBSOCKET.md"},
+		Docs: []string{"docs/exchanges/BINANCE.md", "docs/exchanges/BINANCE_WEBSOCKET.md"},
 	},
 	{
 		Exchange: model.ExchangeID("binance"), DisplayName: "Binance", Tier: "P0",

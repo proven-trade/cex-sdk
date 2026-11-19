@@ -14,7 +14,7 @@
       "automated_tests": "implemented",
       "live_read_smoke": "pending",
       "live_trade_smoke": "pending",
-      "docs": ["docs/exchanges/BINANCE_WEBSOCKET.md"]
+      "docs": ["docs/exchanges/BINANCE.md", "docs/exchanges/BINANCE_WEBSOCKET.md"]
     },
     {
       "exchange_id": "binance",
