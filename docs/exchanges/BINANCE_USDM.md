@@ -14,13 +14,17 @@ private API는 `credential.Material.APIKey`와 `credential.Material.SecretKey`�
 |---|---|
 | 연결·시간 | `Ping`, `ServerTime` |
 | 계약·시세 | `ExchangeInfo`, `TickerPrice`, `OrderBook`, `RecentTrades`, `Candles` |
+| 체결·캔들 확장 | `AggregateTrades`, `HistoricalTrades`, `ContinuousCandles`, `IndexPriceCandles`, `MarkPriceCandles`, `PremiumIndexCandles` |
+| 가격·펀딩 | `MarkPrices`, `FundingRateHistory`, `FundingInfo`, `Ticker24hr`, `BookTickers` |
+| 미결제약정·통계 | `OpenInterest`, `OpenInterestHistory`, `TopTraderAccountRatio`, `TopTraderPositionRatio`, `GlobalLongShortAccountRatio`, `TakerBuySellVolumes`, `Basis`, `DeliveryPrices` |
+| 지수·위험·일정 | `CompositeIndexInfo`, `AssetIndices`, `IndexConstituents`, `InsuranceFundBalance`, `SymbolAdlRisks`, `RPIOrderBook`, `TradingSchedule` |
 | 계정·포지션 | `Account`, `Positions`, `ChangeMarginType` |
 | 주문 | `PlaceOrder`, `OrderInfo`, `CancelOrder`, `OpenOrders`, `OrderHistory` |
 | Algo 조건부 주문 | `PlaceAlgoOrder`, `AlgoOrderInfo`, `CancelAlgoOrder`, `OpenAlgoOrders`, `AlgoOrderHistory` |
 | private 접속 키 | `StartUserDataStream`, `KeepaliveUserDataStream`, `CloseUserDataStream` |
 | WebSocket | `MarketStream`, `UserDataStream`, 동적 구독·구독 해제 |
 
-계정은 `/fapi/v3/account`, 포지션 위험은 `/fapi/v3/positionRisk`를 사용합니다. `ChangeMarginType`은 `POST /fapi/v1/marginType`으로 계약별 `ISOLATED`·`CROSSED` 모드를 변경합니다. 주문 정정, 일괄 주문, 레버리지 변경과 수입 이력은 아직 포함하지 않습니다.
+계정은 `/fapi/v3/account`, 포지션 위험은 `/fapi/v3/positionRisk`를 사용합니다. `ChangeMarginType`은 `POST /fapi/v1/marginType`으로 계약별 `ISOLATED`·`CROSSED` 모드를 변경합니다. 주문 정정, 일괄 주문, 레버리지 변경과 수입 이력은 아직 포함하지 않습니다. 체결·캔들 확장부터 지수·위험·일정까지 네 영역의 Market Data 메서드는 엔드포인트와 권한, 제한을 [Market Data REST 확장](#market-data-rest-확장)에 정리했습니다.
 
 ## 인증과 시간
 
@@ -47,6 +51,8 @@ SIGNED 요청은 URL 인코딩한 최종 파라미터에 HMAC SHA-256을 적용�
 `ExchangeInfo` 응답의 `REQUEST_WEIGHT`와 `ORDERS` 규칙으로 값을 동적으로 갱신합니다. 응답의 `X-MBX-USED-WEIGHT-1M`, `X-MBX-ORDER-COUNT-10S`, `X-MBX-ORDER-COUNT-1M`도 로컬 limiter에 반영합니다.
 
 주문 생성은 IP weight를 소비하지 않지만 계정 주문 count를 소비합니다. 여러 공인 송신 IP를 사용해도 계정 주문 제한은 늘어나지 않습니다.
+
+펀딩과 `/futures/data` 통계처럼 엔드포인트 전용 IP 5분 제한이 있는 Market Data 호출은 요청 weight와 별도로 송신 경로별 규칙을 차감합니다. 규칙과 값은 [Market Data REST 확장](#market-data-rest-확장)을 참고하세요.
 
 ## 포지션 모드와 주문 검증
 
@@ -80,6 +86,111 @@ Algo 주문 서비스는 `/fapi/v1/algoOrder` 계열 엔드포인트로 조건�
 - 단건 조회와 취소는 `AlgoID` 또는 `ClientAlgoID` 중 정확히 하나로 지정하며 계약 심볼을 보내지 않습니다.
 - 전체 계약 미체결 조회는 `OpenAlgoOrdersRequest.AllSymbols`를 명시해야 합니다.
 - 취소 응답은 식별자만 포함할 수 있으므로 최종 상태는 `AlgoOrderInfo`로 확인합니다.
+
+## Market Data REST 확장
+
+공식 Market Data REST의 체결, 캔들, 가격·펀딩, 미결제약정·통계, 지수·위험·일정 엔드포인트를 `Client` 메서드로 제공합니다. 모두 `OperationRead` 조회이며 요청 구조체의 `validate()`가 네트워크 전에 값을 검증해 잘못된 입력은 `trade.ErrValidation`으로 거부합니다. 가격과 수량은 decimal 문자열 그대로 보존하고, 목록·객체 응답은 항목마다 원본 JSON `Raw`를 함께 담습니다.
+
+권한 열의 값은 다음 뜻입니다.
+
+| 권한 | 의미 |
+|---|---|
+| 공개 | 자격증명 없이 호출합니다. 서명, `X-MBX-APIKEY`, Secret 조회와 권한 검사를 모두 하지 않습니다. |
+| `credential.PermissionRead` | 공식 `MARKET_DATA` 엔드포인트입니다. 서명과 timestamp 없이 `X-MBX-APIKEY`만 보냅니다. 자격증명이 없으면 `trade.ErrAuthentication`, 허용되지 않은 route이거나 `PermissionRead`가 없으면 Secret 조회 전에 `trade.ErrAuthorization`을 반환합니다. |
+
+### 체결
+
+| 메서드 | 엔드포인트 | 권한 | IP 제한 |
+|---|---|---|---|
+| `AggregateTrades` | `GET /fapi/v1/aggTrades` | 공개 | weight 20 |
+| `HistoricalTrades` | `GET /fapi/v1/historicalTrades` | `credential.PermissionRead` | weight 200 |
+
+- `AggregateTradesRequest`는 `FromID`와 `StartTime`·`EndTime`을 함께 보낼 수 없습니다. 두 시각을 모두 보내면 간격이 1시간 미만이어야 하고, 최근 48시간 체결만 조회됩니다. `Limit` 최대는 1,000입니다.
+- `HistoricalTradesRequest`는 `FromID`를 비우면 가장 최근 체결부터 반환하며 최근 1개월 체결만 조회됩니다. `Limit` 최대는 500이고 기존 `RecentTrades`와 같은 `PublicTrade`를 반환합니다.
+
+### 캔들
+
+| 메서드 | 엔드포인트 | 권한 | IP 제한 |
+|---|---|---|---|
+| `ContinuousCandles` | `GET /fapi/v1/continuousKlines` | 공개 | `Limit`별 weight |
+| `IndexPriceCandles` | `GET /fapi/v1/indexPriceKlines` | 공개 | `Limit`별 weight |
+| `MarkPriceCandles` | `GET /fapi/v1/markPriceKlines` | 공개 | `Limit`별 weight |
+| `PremiumIndexCandles` | `GET /fapi/v1/premiumIndexKlines` | 공개 | `Limit`별 weight |
+
+- weight는 `Limit` 1~99는 1, 100~499는 2, 500~1,000은 5, 1,001 이상은 10이며 `Limit` 최대는 1,500입니다.
+- `Limit`을 비우면 서버 기본값 500이 적용되므로 weight 5를 차감합니다.
+- `ContinuousCandles`만 `Candle1Second`(`1s`)와 `ContractTypeTradFiPerpetual`을 허용합니다. 나머지 세 메서드는 `Candles`와 같은 구간만 허용합니다.
+- 지수·마크가·프리미엄 지수 캔들의 거래량과 거래 건수 계열 필드는 공식 문서가 무시하라고 밝힌 값입니다.
+
+### 가격·펀딩
+
+| 메서드 | 엔드포인트 | 권한 | IP 제한 |
+|---|---|---|---|
+| `MarkPrices` | `GET /fapi/v1/premiumIndex` | 공개 | `Symbol` 지정 1, 생략 10 |
+| `FundingRateHistory` | `GET /fapi/v1/fundingRate` | 공개 | weight 0, 펀딩 500회/5분 공유 |
+| `FundingInfo` | `GET /fapi/v1/fundingInfo` | 공개 | weight 0, 펀딩 500회/5분 공유 |
+| `Ticker24hr` | `GET /fapi/v1/ticker/24hr` | 공개 | `Symbol` 지정 1, 생략 40 |
+| `BookTickers` | `GET /fapi/v1/ticker/bookTicker` | 공개 | `Symbol` 지정 2, 생략 5 |
+
+- `Symbol`을 생략할 수 있는 메서드는 공식 응답이 객체 하나 또는 배열로 달라지므로 항상 목록을 반환합니다. 단일 계약 응답도 한 건짜리 목록입니다.
+- `FundingRateHistory`와 `FundingInfo`는 요청 weight를 쓰지 않지만 공식 문서가 두 엔드포인트의 IP당 500회/5분 제한을 공유한다고 밝힙니다. SDK는 송신 경로별 `funding` 규칙(500/5분)을 만들어 호출마다 1을 차감합니다.
+- `FundingRateHistoryRequest`는 시각을 모두 생략하면 최근 200건을 오름차순으로 반환하며 `Limit` 최대는 1,000입니다.
+- `bookTicker` 응답의 `X-MBX-USED-WEIGHT-1M`은 공식 문서가 부정확하다고 밝히므로 limiter 관측에서 제외하고 로컬 차감값만 사용합니다.
+- `Ticker24hr`와 `MarkPrices`의 전체 조회는 weight가 크므로 필요한 계약만 지정하는 것이 안전합니다.
+
+### 미결제약정·통계
+
+| 메서드 | 엔드포인트 | 권한 | IP 제한 |
+|---|---|---|---|
+| `OpenInterest` | `GET /fapi/v1/openInterest` | 공개 | weight 1 |
+| `OpenInterestHistory` | `GET /futures/data/openInterestHist` | 공개 | weight 0, 통계 1,000회/5분 |
+| `TopTraderAccountRatio` | `GET /futures/data/topLongShortAccountRatio` | `credential.PermissionRead` | weight 0, 통계 1,000회/5분 |
+| `TopTraderPositionRatio` | `GET /futures/data/topLongShortPositionRatio` | `credential.PermissionRead` | weight 0, 통계 1,000회/5분 |
+| `GlobalLongShortAccountRatio` | `GET /futures/data/globalLongShortAccountRatio` | 공개 | weight 0, 통계 1,000회/5분 |
+| `TakerBuySellVolumes` | `GET /futures/data/takerlongshortRatio` | 공개 | weight 0, 통계 1,000회/5분 |
+| `Basis` | `GET /futures/data/basis` | 공개 | weight 0 |
+| `DeliveryPrices` | `GET /futures/data/delivery-price` | 공개 | weight 0 |
+
+- 통계 다섯 메서드는 `MarketStatisticsRequest`를 공유합니다. `Period`는 `StatisticsPeriod5Minutes`부터 `StatisticsPeriod1Day`까지(`5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `12h`, `1d`) 필수이고 `Limit` 최대는 500, 서버 기본값은 30입니다. 시각을 생략하면 최근 데이터를 반환하며 최근 30일(미결제약정 이력은 1개월)만 조회됩니다.
+- 공식 문서는 통계 다섯 엔드포인트에 IP당 1,000회/5분 제한만 적고 엔드포인트별인지 공유인지는 밝히지 않습니다. SDK는 보수적으로 송신 경로별 `futures_data` 규칙(1,000/5분) 하나를 공유해 호출마다 1을 차감합니다. `Basis`와 `DeliveryPrices`는 문서에 weight 0만 적혀 있어 5분 제한을 차감하지 않습니다.
+- `OpenInterestHistory`는 거래가 없던 구간이 응답에서 빠집니다.
+- `BasisRequest`는 `ContractTypePerpetual`, `ContractTypeCurrentQuarter`, `ContractTypeNextQuarter`만 허용하고 `Period`와 `Limit`은 통계와 같습니다.
+- `DeliveryPrice.DeliveryPrice`는 JSON 숫자 표기를 보존하는 `json.Number`입니다.
+
+### 지수·위험·일정
+
+| 메서드 | 엔드포인트 | 권한 | IP 제한 |
+|---|---|---|---|
+| `CompositeIndexInfo` | `GET /fapi/v1/indexInfo` | 공개 | weight 1 |
+| `AssetIndices` | `GET /fapi/v1/assetIndex` | 공개 | `Symbol` 지정 1, 생략 10 |
+| `IndexConstituents` | `GET /fapi/v1/constituents` | 공개 | weight 2 |
+| `InsuranceFundBalance` | `GET /fapi/v1/insuranceBalance` | 공개 | weight 1 |
+| `SymbolAdlRisks` | `GET /fapi/v1/symbolAdlRisk` | 공개 | weight 1 |
+| `RPIOrderBook` | `GET /fapi/v1/rpiDepth` | 공개 | weight 20 |
+| `TradingSchedule` | `GET /fapi/v1/tradingSchedule` | 공개 | weight 5 |
+
+- `RPIOrderBookRequest.Limit`은 비우거나 1000만 허용합니다. 기존 `OrderBook`과 같은 `OrderBook` 타입으로 반환하며 RPI(Retail Price Improvement) 주문을 집계해 포함하고 교차 가격 구간은 숨겨집니다.
+- `SymbolAdlRisks`의 `AdlRisk`는 `high`, `medium`, `low` 중 하나이며 30분마다 갱신됩니다.
+- `IndexConstituents`는 TradFi 무기한 계약의 구성 가격을 공식 문서대로 `-1`로 숨겨 반환합니다.
+- `TradingSchedule`의 `MarketSchedules`는 `EQUITY`, `COMMODITY`, `KR_EQUITY`, `HK_EQUITY`, `CN_EQUITY`, `FX` 같은 시장 분류를 키로 하는 세션 목록입니다.
+
+```go
+ratios, err := client.TopTraderPositionRatio(ctx, usdm.MarketStatisticsRequest{
+	Symbol: "BTCUSDT",
+	Period: usdm.StatisticsPeriod1Hour,
+	Limit:  24,
+})
+if err != nil {
+	return err
+}
+
+candles, err := client.ContinuousCandles(ctx, usdm.ContinuousCandlesRequest{
+	Pair:         "BTCUSDT",
+	ContractType: usdm.ContractTypePerpetual,
+	Interval:     usdm.Candle1Minute,
+	Limit:        500,
+}, trade.WithEgressRoute("seoul-b"))
+```
 
 ## 과거 캔들 덤프
 
