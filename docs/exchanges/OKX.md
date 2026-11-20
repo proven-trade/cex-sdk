@@ -9,7 +9,7 @@
 | `SPOT` | 지원 | 지원 | 해당 없음 | 현금 거래 지원 |
 | `SWAP` | 지원 | 지원 | 지원 | 교차·격리 마진 지원 |
 
-공개 시세는 상품 규칙, 전체 ticker, 호가, 최근 체결, 캔들을 포함합니다. 주문은 생성, 단건 조회, 취소, 미체결 목록, 최근 7일 이력을 포함합니다. Spot margin, 선물, 옵션, 일괄 주문, 조건부 주문, 자산 이동은 아직 범위에 포함하지 않습니다.
+공개 시세는 상품 규칙, 전체 ticker, 호가, 최근 체결, 캔들을 포함합니다. 주문은 생성, 단건 조회, 취소, 미체결 목록, 최근 7일 이력을 포함합니다. Spot margin, 선물 주문, 옵션 주문은 아직 범위에 포함하지 않습니다. 공개 시장 데이터·펀딩 계정 자산·서브계정 API는 아래 "시장 데이터·자산·서브계정 확장 API" 절을 참고합니다. 일괄 주문, 알고(조건부) 주문, 계정 설정 API는 아래 "거래·계정 확장 API" 절을 참고합니다.
 
 ## 클라이언트와 지역별 endpoint
 
@@ -116,6 +116,152 @@ SDK limiter는 공식 제한의 실제 scope를 분리합니다.
 OKX는 top-level `code`가 `0`이어도 주문 접수 항목의 `sCode`로 실패를 반환할 수 있습니다. SDK는 두 수준을 모두 검사합니다.
 
 주문 생성·취소의 전송 타임아웃, 연결 단절, 읽을 수 없는 응답, HTTP 5xx, `50004`·`50013`·`50026`·`51149`처럼 실행 여부가 불명확한 결과는 `trade.ErrUnknownExecutionState`로 반환하며 자동 재시도하지 않습니다. 고유한 `ClientOrderID`로 `OrderInfo` 또는 향후 private order stream을 조회해 최종 상태를 조정해야 합니다.
+
+## 거래·계정 확장 API
+
+모든 요청은 기존 주문 API와 같은 서명·송신 경로·제한 helper를 사용하며 변경 작업은 자동 재시도하지 않습니다. 권한 열의 Read는 `credential.PermissionRead`, Trade는 `credential.PermissionTrade`입니다.
+
+### 주문
+
+| 메서드 | endpoint | 권한 | 로컬 제한 |
+|---|---|---|---|
+| `BatchPlaceOrders` | `POST /api/v5/trade/batch-orders` | Trade | 300주문/2초, 주문 수만큼 차감 |
+| `BatchCancelOrders` | `POST /api/v5/trade/cancel-batch-orders` | Trade | 300주문/2초, 주문 수만큼 차감 |
+| `AmendOrder` | `POST /api/v5/trade/amend-order` | Trade | 60/2초 (상품별) |
+| `BatchAmendOrders` | `POST /api/v5/trade/amend-batch-orders` | Trade | 300주문/2초, 주문 수만큼 차감 |
+| `CancelAllAfter` | `POST /api/v5/trade/cancel-all-after` | Trade | 1/초 (tag별) |
+| `ClosePosition` | `POST /api/v5/trade/close-position` | Trade | 20/2초 (상품별) |
+| `OrderPrecheck` | `POST /api/v5/trade/order-precheck` | Trade | 5/2초 |
+| `Fills` | `GET /api/v5/trade/fills` (최근 3일) | Read | 60/2초 |
+| `FillsHistory` | `GET /api/v5/trade/fills-history` (최근 3개월, `InstrumentType` 필수) | Read | 10/2초 |
+
+일괄 요청은 최대 20건이며 초과하면 요청 전에 검증 오류를 반환합니다. OKX는 일부만 성공하면 top-level `code: "2"`로 응답합니다. SDK는 이를 오류로 바꾸지 않고 `PartialSuccess: true`와 항목별 `StatusCode`를 반환하므로 호출자가 항목별로 확인해야 합니다. 전부 실패(`code: "1"`)하면 첫 항목의 `sCode`로 분류한 오류와 항목별 결과를 함께 반환합니다.
+
+`AmendOrderRequest.NewSize`는 남은 수량이 아니라 정정 후 주문 전체 목표 수량입니다. `OrderPrecheck`는 주문을 제출하지 않지만 OKX 문서가 권한을 명시하지 않아 보수적으로 Trade 권한을 요구하고 읽기 작업으로 실행합니다. 다중통화·포트폴리오 마진 계정에서만 동작합니다. `CancelAllAfter`의 `TimeOut`은 0(해제) 또는 10~120초이며 같은 요청을 반복해 카운트다운을 갱신합니다.
+
+### 알고 주문
+
+| 메서드 | endpoint | 권한 | 로컬 제한 |
+|---|---|---|---|
+| `PlaceAlgoOrder` | `POST /api/v5/trade/order-algo` | Trade | 20/2초 (상품별) |
+| `CancelAlgoOrders` | `POST /api/v5/trade/cancel-algos` (최대 10건) | Trade | 20주문/2초 |
+| `AmendAlgoOrder` | `POST /api/v5/trade/amend-algos` | Trade | 20/2초 (상품별) |
+| `AlgoOrderDetail` | `GET /api/v5/trade/order-algo` | Read | 20/2초 |
+| `AlgoOrdersPending` | `GET /api/v5/trade/orders-algo-pending` | Read | 20/2초 |
+| `AlgoOrderHistory` | `GET /api/v5/trade/orders-algo-history` (`State` 또는 `AlgoID` 필수) | Read | 20/2초 |
+
+`PlaceAlgoOrder`는 `conditional`, `oco`, `trigger`, `move_order_stop`, `twap`을 지원합니다. `chase`·`smart_iceberg`, `attachAlgoOrds`, `triggerParams`는 아직 지원하지 않습니다. 목록 조회에서는 `conditional`과 `oco`만 함께 지정할 수 있습니다.
+
+### 계정
+
+| 메서드 | endpoint | 권한 | 로컬 제한 |
+|---|---|---|---|
+| `AccountConfig` | `GET /api/v5/account/config` | Read | 5/2초 |
+| `SetPositionMode` | `POST /api/v5/account/set-position-mode` | Trade | 5/2초 |
+| `SetLeverage` | `POST /api/v5/account/set-leverage` | Trade | 20/2초 |
+| `LeverageInfo` | `GET /api/v5/account/leverage-info` | Read | 20/2초 |
+| `MaxSize` | `GET /api/v5/account/max-size` | Read | 20/2초 |
+| `MaxAvailSize` | `GET /api/v5/account/max-avail-size` | Read | 20/2초 |
+| `AdjustPositionMargin` | `POST /api/v5/account/position/margin-balance` | Trade | 20/2초 |
+| `SetIsolatedMode` | `POST /api/v5/account/set-isolated-mode` | Trade | 5/2초 |
+| `TradeFee` | `GET /api/v5/account/trade-fee` | Read | 5/2초 |
+| `AccountBills` | `GET /api/v5/account/bills` (최근 7일) | Read | 5/초 |
+| `AccountBillsArchive` | `GET /api/v5/account/bills-archive` (최근 3개월) | Read | 5/2초 |
+| `PositionsHistory` | `GET /api/v5/account/positions-history` | Read | 10/2초 |
+| `AccountPositionRisk` | `GET /api/v5/account/account-position-risk` | Read | 10/2초 |
+| `MaxWithdrawal` | `GET /api/v5/account/max-withdrawal` | Read | 20/2초 |
+
+`SetPositionMode`, `SetLeverage`, `SetIsolatedMode`, `AdjustPositionMargin`은 계정 설정·증거금을 바꾸는 Trade 권한 변경 작업입니다. `bills-history-archive`(파일 신청)·`subtypes`, 차입·이자·자동 상환, 계정 모드 변경, `position-builder` 등 나머지 계정 API는 이 절에 포함하지 않습니다.
+
+## 시장 데이터·자산·서브계정 확장 API
+
+모든 요청은 기존 주문 API와 같은 서명·송신 경로·제한 helper를 사용하며 변경 작업은 자동 재시도하지 않습니다. 권한 열의 Read·Transfer·Withdraw는 각각 `credential.PermissionRead`·`PermissionTransfer`·`PermissionWithdraw`입니다. 응답 항목은 `Raw` 원문을 함께 보존합니다. 공개 endpoint의 상품 유형은 `InstrumentTypeSwap`, `InstrumentTypeFutures`, `InstrumentTypeOption`, `InstrumentTypeMargin` 상수를 사용합니다. 이 상수는 공개 데이터 조회 파라미터용이며 주문·계정 API는 계속 Spot·SWAP만 검증합니다.
+
+### 공개 시장 데이터
+
+| 메서드 | endpoint | 권한 | 로컬 제한 |
+|---|---|---|---|
+| `MarkPrices` | `GET /api/v5/public/mark-price` | 없음(공개) | 10/2초 |
+| `FundingRates` | `GET /api/v5/public/funding-rate` (`ANY`로 전체 perp) | 없음(공개) | 10/2초 |
+| `FundingRateHistory` | `GET /api/v5/public/funding-rate-history` (최대 400건) | 없음(공개) | 10/2초 |
+| `OpenInterests` | `GET /api/v5/public/open-interest` | 없음(공개) | 20/2초 |
+| `PriceLimits` | `GET /api/v5/public/price-limit` | 없음(공개) | 20/2초 |
+| `OrderBookFull` | `GET /api/v5/market/books-full` (최대 5,000단계) | 없음(공개) | 10/2초 |
+| `IndexTickers` | `GET /api/v5/market/index-tickers` | 없음(공개) | 20/2초 |
+| `IndexCandles` | `GET /api/v5/market/index-candles` | 없음(공개) | 20/2초 |
+| `HistoryIndexCandles` | `GET /api/v5/market/history-index-candles` | 없음(공개) | 10/2초 |
+| `MarkPriceCandles` | `GET /api/v5/market/mark-price-candles` | 없음(공개) | 20/2초 |
+| `HistoryMarkPriceCandles` | `GET /api/v5/market/history-mark-price-candles` | 없음(공개) | 20/2초 |
+| `PremiumHistory` | `GET /api/v5/public/premium-history` | 없음(공개) | 20/2초 |
+| `EstimatedPrices` | `GET /api/v5/public/estimated-price` (FUTURES·OPTION) | 없음(공개) | 10/2초 |
+| `DiscountRateInterestFreeQuota` | `GET /api/v5/public/discount-rate-interest-free-quota` | 없음(공개) | 2/2초 |
+| `InterestRateLoanQuotas` | `GET /api/v5/public/interest-rate-loan-quota` | 없음(공개) | 2/2초 |
+| `PositionTiers` | `GET /api/v5/public/position-tiers` | 없음(공개) | 10/2초 |
+| `InsuranceFunds` | `GET /api/v5/public/insurance-fund` | 없음(공개) | 10/2초 |
+| `SystemStatus` | `GET /api/v5/system/status` | 없음(공개) | 1/5초 |
+| `Announcements` | `GET /api/v5/support/announcements` | 없음(공개) | 5/2초 |
+| `AnnouncementTypes` | `GET /api/v5/support/announcement-types` | 없음(공개) | 1/2초 |
+
+서버 시간(`ServerTime`, `GET /api/v5/public/time`)은 기존 메서드를 그대로 사용합니다. 지수·마크가격 캔들은 `[ts,o,h,l,c,confirm]` 배열을 `PriceCandle`로 decode하며 `Limit` 최대값은 100입니다(거래 캔들의 300과 다름). `PositionTiers`는 SWAP·FUTURES·OPTION에 `InstrumentFamily`, MARGIN에 `InstrumentID` 또는 `Currency`가 필요하고 `InsuranceFunds`는 MARGIN을 제외하면 `InstrumentFamily`가 필요합니다. 요청 전에 이 조건을 검증합니다.
+
+### 펀딩 계정 자산·이체
+
+자산 endpoint는 모두 계정(User ID) 제한 bucket을 사용합니다.
+
+| 메서드 | endpoint | 권한 | 로컬 제한 |
+|---|---|---|---|
+| `AssetCurrencies` | `GET /api/v5/asset/currencies` | Read | 6/초 |
+| `AssetBalances` | `GET /api/v5/asset/balances` | Read | 6/초 |
+| `NonTradableAssets` | `GET /api/v5/asset/non-tradable-assets` | Read | 6/초 |
+| `AssetValuation` | `GET /api/v5/asset/asset-valuation` | Read | 1/초 |
+| `AssetTransfer` | `POST /api/v5/asset/transfer` | Transfer | 2/초 (통화별) |
+| `AssetTransferStates` | `GET /api/v5/asset/transfer-state` | Read | 10/초 |
+| `AssetBills` | `GET /api/v5/asset/bills` (최근 1개월) | Read | 6/초 |
+| `AssetBillsHistory` | `GET /api/v5/asset/bills-history` (2021-02 이후, 30초 간격 갱신) | Read | 1/초 |
+| `DepositAddresses` | `GET /api/v5/asset/deposit-address` | Read | 6/초 |
+| `DepositHistory` | `GET /api/v5/asset/deposit-history` | Read | 6/초 |
+| `Withdraw` | `POST /api/v5/asset/withdrawal` | Withdraw | 6/초 |
+| `CancelWithdrawal` | `POST /api/v5/asset/cancel-withdrawal` | Withdraw | 6/초 |
+| `WithdrawalHistory` | `GET /api/v5/asset/withdrawal-history` | Read | 6/초 |
+| `DepositWithdrawStatuses` | `GET /api/v5/asset/deposit-withdraw-status` | Read | 1/2초 |
+
+`DepositAddresses`는 기존 주소 조회이며 주소 생성 endpoint는 제공하지 않습니다. `AssetTransfer`, `Withdraw`, `CancelWithdrawal`은 전송 결과가 불명확해도 재시도하지 않으므로 `ClientID`를 지정해 `AssetTransferStates`·`WithdrawalHistory`로 최종 상태를 확인해야 합니다. `AssetTransferRequest.OmitPositionRisk`는 OKX가 요구하는 문자열 `"true"`로 전송됩니다. `Withdraw`의 수수료는 `Amount`에 포함되지 않으며, 일부 규제 지역 사용자는 `Receiver`(`rcvrInfo`)가 필요합니다. `DepositWithdrawStatuses`는 `WithdrawalID`와 `TxID` 중 정확히 하나만 받으며 `TxID`를 쓰면 `Currency`, `ToAddress`, `Chain`이 필요합니다.
+
+### 견적 기반 코인 전환
+
+| 메서드 | endpoint | 권한 | 로컬 제한 |
+|---|---|---|---|
+| `ConvertCurrencies` | `GET /api/v5/asset/convert/currencies` | Read | 6/초 |
+| `ConvertCurrencyPairs` | `GET /api/v5/asset/convert/currency-pair` | Read | 6/초 |
+| `ConvertEstimateQuote` | `POST /api/v5/asset/convert/estimate-quote` | Transfer | 1/5초 (통화쌍별) |
+| `ConvertTrade` | `POST /api/v5/asset/convert/trade` | Transfer | 10/초 |
+| `ConvertHistory` | `GET /api/v5/asset/convert/history` | Read | 6/초 |
+
+견적(`QuoteID`)은 `TTLMillis` 안에서만 유효하며 견적 요청은 거래를 실행하지 않습니다. `ConvertTrade`는 변경 작업이라 자동 재시도하지 않고 `ClientTradeID`로 `ConvertHistory`를 조회해 확인해야 합니다. 견적 요청도 거래 준비 단계이므로 Transfer 권한을 요구하는 변경 작업으로 처리합니다.
+
+### 서브계정
+
+서브계정 API는 마스터 계정 API Key로만 동작합니다.
+
+| 메서드 | endpoint | 권한 | 로컬 제한 |
+|---|---|---|---|
+| `SubAccounts` | `GET /api/v5/users/subaccount/list` | Read | 20/2초 |
+| `ModifySubAccountAPIKey` | `POST /api/v5/users/subaccount/modify-apikey` | Transfer | 1/초 |
+| `SetSubAccountTransferOut` | `POST /api/v5/users/subaccount/set-transfer-out` | Transfer | 1/초 |
+| `EntrustSubAccounts` | `GET /api/v5/users/entrust-subaccount-list` | Read | 1/초 |
+| `SubAccountBalances` | `GET /api/v5/account/subaccount/balances` (거래 계정) | Read | 6/2초 |
+| `SubAccountAssetBalances` | `GET /api/v5/asset/subaccount/balances` (펀딩 계정) | Read | 6/2초 |
+| `SubAccountMaxWithdrawals` | `GET /api/v5/account/subaccount/max-withdrawal` | Read | 20/2초 |
+| `SubAccountBills` | `GET /api/v5/asset/subaccount/bills` | Read | 6/초 |
+| `ManagedSubAccountBills` | `GET /api/v5/asset/subaccount/managed-subaccount-bills` | Read | 6/초 |
+| `TransferBetweenSubAccounts` | `POST /api/v5/asset/subaccount/transfer` | Transfer | 1/초 |
+
+서브계정 생성·삭제와 API Key 생성·삭제·조회(`create-subaccount`, `apikey`, `delete-apikey`), 서브계정 VIP 대출 할당은 포함하지 않습니다.
+
+### 이 절에서 제외한 항목
+
+- 라이트닝 입출금(`deposit-lightning`, `withdrawal-lightning`)과 소액 자산 전환 `convert-dust-assets`는 현재 공식 REST 문서 본문에서 endpoint를 확인하지 못해 구현하지 않았습니다. 라이트닝 출금은 변경 이력의 예시로만 남아 있습니다.
+- `books-rpi`, `history-trades`, `index-components`, `platform-24-volume`, `exchange-rate`, `liquidation-orders`, `convert-contract-coin`, `underlying`, `market-data-history`와 `rubik/stat/*` 통계 endpoint는 이번 범위에 포함하지 않았습니다.
 
 ## 요청별 송신 경로 선택
 

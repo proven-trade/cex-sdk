@@ -49,6 +49,8 @@ const (
 	OrderTypeMarket   OrderType = "mkt"
 	OrderTypeIOC      OrderType = "ioc"
 	OrderTypeFOK      OrderType = "fok"
+	// OrderTypeStop은 BatchOrder 전송 지시에서만 사용하는 stop 주문이다.
+	OrderTypeStop OrderType = "stp"
 )
 
 // ContractType은 Futures 상품 종류다.
@@ -58,6 +60,9 @@ const (
 	ContractTypeInverse  ContractType = "futures_inverse"
 	ContractTypeVanilla  ContractType = "futures_vanilla"
 	ContractTypeFlexible ContractType = "flexible_futures"
+	// ContractTypeOptions와 ContractTypeAll은 상품 상태 조회 필터에서만 사용한다.
+	ContractTypeOptions ContractType = "options"
+	ContractTypeAll     ContractType = "all"
 )
 
 // MarginLevel은 포지션 규모 구간별 증거금률이다.

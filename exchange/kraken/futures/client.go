@@ -17,6 +17,7 @@ import (
 	"github.com/proven-trade/cex-sdk/credential"
 	commonexchange "github.com/proven-trade/cex-sdk/exchange"
 	"github.com/proven-trade/cex-sdk/model"
+	"github.com/proven-trade/cex-sdk/ratelimit"
 	"github.com/proven-trade/cex-sdk/transport"
 )
 
@@ -171,6 +172,25 @@ func (client *Client) executePrivate(
 	operation commonexchange.OperationKind,
 	options ...trade.RequestOption,
 ) (commonexchange.Response, error) {
+	return client.executePrivateCharged(
+		ctx, method, path, values, permission, operation,
+		func(accountID string) ([]ratelimit.Charge, error) {
+			return privateRateLimitCharges(
+				client.executor.Limiter(), accountID, client.derivativesPointLimit, client.derivativesWindow, cost,
+			)
+		}, options...,
+	)
+}
+
+func (client *Client) executePrivateCharged(
+	ctx context.Context,
+	method, path string,
+	values url.Values,
+	permission credential.Permission,
+	operation commonexchange.OperationKind,
+	charge func(accountID string) ([]ratelimit.Charge, error),
+	options ...trade.RequestOption,
+) (commonexchange.Response, error) {
 	resolved, err := client.resolveOptions(options...)
 	if err != nil {
 		return commonexchange.Response{}, err
@@ -193,10 +213,7 @@ func (client *Client) executePrivate(
 			AccountID: client.credentials.AccountID, Cause: err,
 		}
 	}
-	charges, err := privateRateLimitCharges(
-		client.executor.Limiter(), client.credentials.AccountID,
-		client.derivativesPointLimit, client.derivativesWindow, cost,
-	)
+	charges, err := charge(client.credentials.AccountID)
 	if err != nil {
 		return commonexchange.Response{}, err
 	}

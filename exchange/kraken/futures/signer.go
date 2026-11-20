@@ -12,7 +12,7 @@ import (
 
 // SignAuthent는 Kraken Futures private REST 요청의 Authent 값을 생성한다.
 func SignAuthent(postData, nonce, endpointPath string, encodedSecret []byte) (string, error) {
-	if !strings.HasPrefix(endpointPath, "/api/v3/") || strings.ContainsAny(endpointPath, "?#\r\n") {
+	if !strings.HasPrefix(endpointPath, "/api/") || strings.ContainsAny(endpointPath, "?#\r\n") {
 		return "", fmt.Errorf("Kraken Futures endpoint path is invalid")
 	}
 	if strings.TrimSpace(nonce) == "" {

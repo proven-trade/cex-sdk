@@ -15,7 +15,7 @@
 - WebSocket 잔고, 체결, 미체결 주문, 포지션, 계정 원장, 운영 알림
 - 요청별 송신 경로 선택
 
-조건부 주문, 주문 수정, 일괄 주문, 레버리지 설정과 자금 이동은 후속 범위다. 첫 범위 밖의 주문 종류, 잘못된 수량·가격과 지원하지 않는 WebSocket 구독 조합은 전송 전에 검증 오류로 거부한다.
+주문 수정, 일괄 주문, 일괄 취소, dead man's switch, 레버리지·PnL 설정, 이체, 서브계정, 이력(history v3)과 차트 분석은 아래 "추가 REST API" 절에서 제공한다. 단일 주문 생성(`PlaceOrder`)은 기존 주문 종류만 허용하며, 그 밖의 주문 종류, 잘못된 수량·가격과 지원하지 않는 WebSocket 구독 조합은 전송 전에 검증 오류로 거부한다.
 
 ## 자격증명
 
@@ -112,11 +112,87 @@ nonce는 API key 단위다. 같은 API key를 여러 프로세스나 여러 `Cli
 
 공개 endpoint는 선택한 route, 즉 송신 IP별 로컬 pool을 사용한다. 공식 문서가 공개 REST의 단일 공통 수치를 명시하지 않으므로 기본값은 route별 초당 20건이며 `PublicRequestsPerSecond`로 보수적으로 낮출 수 있다.
 
-private derivatives endpoint는 계정별 기본 500 point/10초 pool로 제한한다. 지갑·포지션·미체결 주문·기본 체결 조회는 2 point, `lastFillTime`을 사용한 체결 조회는 25 point, 주문 생성·취소는 10 point, 주문 상태 조회는 1 point를 차감한다. 로컬 limiter는 fixed window 근사이므로 거래소의 실제 제한과 오류 관측을 대체하지 않는다. 계정 등급이나 정책이 다르면 `DerivativesPointLimit`과 `DerivativesWindow`를 조정한다.
+private derivatives endpoint는 계정별 기본 500 point/10초 pool로 제한한다. 지갑·포지션·미체결 주문·기본 체결 조회는 2 point, `lastFillTime`을 사용한 체결 조회는 25 point, 주문 생성·취소는 10 point, 주문 상태 조회는 1 point를 차감한다. 추가 REST API의 비용은 해당 절의 표를 따른다. 로컬 limiter는 fixed window 근사이므로 거래소의 실제 제한과 오류 관측을 대체하지 않는다. 계정 등급이나 정책이 다르면 `DerivativesPointLimit`과 `DerivativesWindow`를 조정한다.
 
 private 제한은 송신 경로를 바꿔도 우회되지 않도록 account ID를 기준으로 공유한다. Secret을 조회하기 전에 API key의 route 허용 목록과 read/trade 권한을 검사한다.
 
 HTTP 429의 `Retry-After`는 공통 limiter에 반영한다. HTTP 200이어도 `result`가 `error`이거나 `error`·`errors`가 존재하면 인증, 권한, 제한, 잔고 부족, 주문 없음, 거래소 장애 범주로 정규화한다.
+
+## 추가 REST API
+
+모든 호출은 기존 클라이언트의 route 선택, 요청 제한, 권한 검사를 그대로 사용한다. mutation은 자동 재시도하지 않으며 전송 결과가 불명확하면 `UNKNOWN_EXECUTION_STATE`로 반환한다. private 요청은 파라미터를 query로 서명하며 `/api/history/v3`, `/api/auth/v1` 요청의 서명 경로는 `/api/...` 그대로다(`/derivatives` 접두사만 제거).
+
+### 주문 관리 (`credential.PermissionTrade`)
+
+| 메서드 | endpoint | 비용 |
+|---|---|---|
+| `EditOrder` | `POST /editorder` | 10 |
+| `BatchOrder` | `POST /batchorder` (`json` query, 최대 500 지시: send/edit/cancel) | 9 + 지시 수 |
+| `CancelAllOrders` | `POST /cancelallorders` | 25 |
+| `CancelAllOrdersAfter` | `POST /cancelallordersafter` (`TimeoutSeconds` 0이면 해제) | 25 |
+| `SetSelfTradeStrategy` | `PUT /self-trade-strategy` | 2 |
+| `SetLeveragePreference` | `PUT /leveragepreferences` | 10 |
+| `SetPnlPreference`, `DeletePnlPreference` | `PUT`·`DELETE /pnlpreferences` | 10 |
+
+`EditOrder`는 `edited`·`filled` 외의 `editStatus`를, `CancelAllOrders`는 `cancelled`·`noOrdersToCancel` 외의 상태를 오류로 반환한다. `BatchOrder`는 호출이 성공해도 지시별 `Status`(`insufficientAvailableFunds` 등)를 확인해야 한다.
+
+### 계정·설정 조회 (`credential.PermissionRead`)
+
+| 메서드 | endpoint | 비용 |
+|---|---|---|
+| `SelfTradeStrategy` | `GET /self-trade-strategy` | 2 |
+| `LeveragePreferences` | `GET /leveragepreferences` | 2 |
+| `PnlPreferences` | `GET /pnlpreferences` | 2 |
+| `UnwindQueue` | `GET /unwindqueue` | 200 |
+| `Notifications` | `GET /notifications` | 2 (공식 비용표에 없어 보수적으로 적용) |
+| `TradingInstruments` | `GET /trading/instruments` | 2 (동일) |
+| `ListSubaccounts` | `GET /subaccounts` | 2 (동일) |
+| `CheckAPIKey` | `GET /api/auth/v1/api-keys/v3/check` | 1 (동일) |
+| `PortfolioMarginingParameters`, `SimulatePortfolio` | `GET /portfolio-margining/parameters`, `POST /portfolio-margining/simulate` | 2 (동일) |
+
+포트폴리오 마진 endpoint는 공식 문서상 현재 Kraken pre-prod(`demo-futures.kraken.com`)에서만 제공되므로 `Config.BaseURL`을 해당 환경으로 지정해야 한다. 응답의 상세 구조(`portfolioMarginBreakdown`, `greeks`, `optionsUserLimits`)는 `Raw`로 제공한다.
+
+### 이체·서브계정 (`credential.PermissionTransfer`)
+
+| 메서드 | endpoint | 비용 |
+|---|---|---|
+| `Transfer` (Futures 지갑 사이) | `POST /transfer` | 10 |
+| `Transfer` (`spot` 지갑 포함) | `POST /transfer` | 100, `credential.PermissionWithdraw` 필요 |
+| `SubaccountTransfer` | `POST /transfer/subaccount` | 10 |
+| `SubaccountTradingEnabled` | `GET /subaccount/{uid}/trading-enabled` | 2 |
+| `SetSubaccountTradingEnabled` | `PUT /subaccount/{uid}/trading-enabled` | 2 |
+
+`trading-enabled`는 공식 문서상 read-only가 아닌 General key를 요구하므로 조회도 `transfer` 권한으로 선언한다.
+
+### 이력 (`credential.PermissionRead`)
+
+`/api/history/v3`는 계정별 별도 pool(100 token/10분)을 사용한다. `AccountHistory`(executions·orders·triggers·positions)는 호출당 1, `AccountLog`는 `Count`에 따라 1~10(기본 500은 3)을 차감한다. 응답의 `Next-Continuation-Token` 헤더는 `HistoryPage.ContinuationToken`으로 반환하며 같은 `sort`로 이어서 조회해야 한다. 이벤트 `Elements`는 종류별 구조가 넓어 원문 JSON으로 제공한다.
+
+| 메서드 | endpoint |
+|---|---|
+| `AccountHistory` | `GET /api/history/v3/{executions,orders,triggers,positions}` |
+| `AccountLog` | `GET /api/history/v3/account-log` |
+
+`accountlogcsv`(CSV 내보내기)는 JSON이 아닌 CSV 응답이라 지원하지 않는다.
+
+### 공개 시장 데이터 (권한 불필요)
+
+| 메서드 | endpoint |
+|---|---|
+| `InstrumentsStatus`, `InstrumentStatus` | `GET /instruments/status`, `GET /instruments/{symbol}/status` |
+| `HistoricalFundingRates` | `GET /historical-funding-rates` |
+| `MarketHistory` | `GET /api/history/v3/market/{tradeable}/{executions,orders,price}` |
+| `ChartTickTypes`, `ChartMarkets`, `ChartResolutions` | `GET /api/charts/v1/`, `/{tick_type}`, `/{tick_type}/{symbol}` |
+| `MarketAnalytics` | `GET /api/charts/v1/analytics/{symbol}/{analytics_type}` |
+| `LiquidityPoolAnalytics` | `GET /api/charts/v1/analytics/liquidity-pool` |
+
+### 미구현
+
+RFQ(`/rfqs/*`), assignment program(`/assignmentprogram/*`), `rfq-assignment/max-leverage`, `accountlogcsv`, `portfolio-margining/simulate-iv`(내부용)은 이 범위에 포함하지 않는다.
+
+## Derivatives WebSocket v1 종료 예정
+
+Kraken 공지에 따라 Derivatives WebSocket v1(`wss://futures.kraken.com/ws/v1`)은 deprecated이며 **2027-03-01에 종료**된다. 이 패키지의 WebSocket 어댑터는 v1 전용이므로 종료 전에 Unified WebSocket(`wss://uws.kraken.com/v2`) 기반 어댑터로 이전해야 한다. REST API는 영향을 받지 않는다.
 
 ## WebSocket v1
 
