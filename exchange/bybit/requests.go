@@ -104,8 +104,9 @@ type PositionsRequest struct {
 }
 
 // PlaceOrderRequest는 Spot 또는 Linear 신규 주문이다.
+// 일괄 주문(PlaceBatchOrders)의 항목으로 쓸 때는 Category를 비워 두면 일괄 요청의 Category를 따른다.
 type PlaceOrderRequest struct {
-	Category       Category    `json:"category"`
+	Category       Category    `json:"category,omitempty"`
 	Symbol         string      `json:"symbol"`
 	Side           Side        `json:"side"`
 	OrderType      OrderType   `json:"orderType"`
@@ -117,11 +118,39 @@ type PlaceOrderRequest struct {
 	ReduceOnly     bool        `json:"reduceOnly,omitempty"`
 	CloseOnTrigger bool        `json:"closeOnTrigger,omitempty"`
 	MarketUnit     MarketUnit  `json:"marketUnit,omitempty"`
+
+	// IsLeverage는 통합 계정 Spot 주문의 차입 여부다. 0은 현물, 1은 마진 거래이며 Spot만 허용한다.
+	IsLeverage int `json:"isLeverage,omitempty"`
+	// OrderFilter는 Spot 주문 종류(Order, tpslOrder, StopOrder)이며 Spot만 허용한다.
+	OrderFilter OrderFilter `json:"orderFilter,omitempty"`
+	// TriggerDirection은 Linear 조건부 주문의 방향이다. 1은 상승, 2는 하락 도달 시 트리거한다.
+	TriggerDirection int `json:"triggerDirection,omitempty"`
+	// TriggerPrice를 지정하면 조건부(Spot은 TP/SL 또는 조건부) 주문이 된다.
+	TriggerPrice string `json:"triggerPrice,omitempty"`
+	// TriggerBy는 Linear 조건부 주문의 트리거 가격 기준이다.
+	TriggerBy TriggerBy `json:"triggerBy,omitempty"`
+	// TakeProfit과 StopLoss는 주문과 함께 설정하는 TP/SL 가격이다. reduceOnly 주문에는 설정할 수 없다.
+	TakeProfit string `json:"takeProfit,omitempty"`
+	StopLoss   string `json:"stopLoss,omitempty"`
+	// TPTriggerBy와 SLTriggerBy는 Linear TP/SL의 트리거 가격 기준이다.
+	TPTriggerBy TriggerBy `json:"tpTriggerBy,omitempty"`
+	SLTriggerBy TriggerBy `json:"slTriggerBy,omitempty"`
+	// TPSLMode는 Linear TP/SL 적용 범위다. 지정가 TP/SL은 Partial만 허용된다.
+	TPSLMode TPSLMode `json:"tpslMode,omitempty"`
+	// TPLimitPrice와 SLLimitPrice는 TP/SL 발동 시 지정가 주문 가격이며 TPOrderType·SLOrderType이 Limit일 때만 쓴다.
+	TPLimitPrice string `json:"tpLimitPrice,omitempty"`
+	SLLimitPrice string `json:"slLimitPrice,omitempty"`
+	// TPOrderType과 SLOrderType은 TP/SL 발동 시 주문 종류(Market 기본, Limit)다.
+	TPOrderType OrderType `json:"tpOrderType,omitempty"`
+	SLOrderType OrderType `json:"slOrderType,omitempty"`
+	// SMPType은 자전거래 방지 체결 정책이다.
+	SMPType SMPType `json:"smpType,omitempty"`
 }
 
 // CancelOrderRequest는 주문 ID 또는 주문 연결 ID로 취소를 요청한다.
+// 일괄 취소(CancelBatchOrders)의 항목으로 쓸 때는 Category를 비워 두면 일괄 요청의 Category를 따른다.
 type CancelOrderRequest struct {
-	Category    Category `json:"category"`
+	Category    Category `json:"category,omitempty"`
 	Symbol      string   `json:"symbol"`
 	OrderID     string   `json:"orderId,omitempty"`
 	OrderLinkID string   `json:"orderLinkId,omitempty"`
@@ -340,7 +369,7 @@ func (request PlaceOrderRequest) validate() error {
 	if request.OrderType != OrderTypeLimit && request.OrderType != OrderTypeMarket {
 		return validationError("order type must be Limit or Market")
 	}
-	if err := validatePositiveDecimal("qty", request.Quantity); err != nil {
+	if err := request.validateQuantity(); err != nil {
 		return err
 	}
 	if request.OrderType == OrderTypeLimit {
@@ -368,7 +397,7 @@ func (request PlaceOrderRequest) validate() error {
 	if request.MarketUnit != "" && (request.Category != CategorySpot || request.OrderType != OrderTypeMarket) {
 		return validationError("market unit is available only for Spot market orders")
 	}
-	return nil
+	return request.validateTradeExtensions()
 }
 
 func (request CancelOrderRequest) validate() error {

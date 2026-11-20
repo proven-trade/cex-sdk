@@ -16,6 +16,8 @@ const globalRequestsPerFiveSeconds = 600
 type endpointLimit struct {
 	perSecond int
 	account   bool
+	// units는 요청 한 건이 엔드포인트 한도에서 소비하는 양이다. 0이면 1로 계산한다.
+	units int
 }
 
 func publicLimit(perSecond int) endpointLimit {
@@ -24,6 +26,12 @@ func publicLimit(perSecond int) endpointLimit {
 
 func accountLimit(perSecond int) endpointLimit {
 	return endpointLimit{perSecond: perSecond, account: true}
+}
+
+// batchAccountLimit은 일괄 주문 엔드포인트의 계정 한도다.
+// Bybit는 일괄 요청의 한도를 요청 수가 아니라 요청에 담긴 주문 수만큼 소비한다.
+func batchAccountLimit(perSecond, orders int) endpointLimit {
+	return endpointLimit{perSecond: perSecond, account: true, units: orders}
 }
 
 func rateLimitCharges(
@@ -52,9 +60,13 @@ func rateLimitCharges(
 	}); err != nil {
 		return nil, err
 	}
+	endpointUnits := 1
+	if limit.units > 1 {
+		endpointUnits = limit.units
+	}
 	return []ratelimit.Charge{
 		{Key: globalKey, Units: 1},
-		{Key: endpointKey, Units: 1},
+		{Key: endpointKey, Units: endpointUnits},
 	}, nil
 }
 

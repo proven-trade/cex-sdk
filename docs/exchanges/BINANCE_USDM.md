@@ -20,11 +20,17 @@ private API는 `credential.Material.APIKey`와 `credential.Material.SecretKey`�
 | 지수·위험·일정 | `CompositeIndexInfo`, `AssetIndices`, `IndexConstituents`, `InsuranceFundBalance`, `SymbolAdlRisks`, `RPIOrderBook`, `TradingSchedule` |
 | 계정·포지션 | `Account`, `Positions`, `ChangeMarginType` |
 | 주문 | `PlaceOrder`, `OrderInfo`, `CancelOrder`, `OpenOrders`, `OrderHistory` |
+| 주문 확장 | `TestOrder`, `OpenOrder`, `ModifyOrder`, `PlaceBatchOrders`, `ModifyBatchOrders`, `CancelBatchOrders`, `CancelAllOpenOrders`, `CancelAllAlgoOpenOrders`, `CountdownCancelAll`, `OrderAmendments` |
+| 포지션·마진 설정 | `ChangeLeverage`, `ChangePositionMode`, `ChangeMultiAssetsMode`, `ModifyPositionMargin`, `PositionMarginHistory` |
+| 체결·청산 조회 | `UserTrades`, `ForceOrders`, `ADLQuantiles` |
+| 계정 확장 | `Balances`, `AccountConfig`, `SymbolConfigs`, `PositionMode`, `MultiAssetsMode`, `IncomeHistory`, `CommissionRate`, `LeverageBrackets`, `OrderRateLimits`, `APITradingStatus`, `FeeBurn`, `ChangeFeeBurn`, `ClassicPortfolioMarginAccount`, `SignTradFiPerpsContract` |
+| 이력 다운로드 | `RequestOrderHistoryDownload`, `OrderHistoryDownloadLink`, `RequestTradeHistoryDownload`, `TradeHistoryDownloadLink`, `RequestIncomeHistoryDownload`, `IncomeHistoryDownloadLink` |
+| Convert | `ConvertPairs`, `RequestConvertQuote`, `AcceptConvertQuote`, `ConvertOrderStatus` |
 | Algo 조건부 주문 | `PlaceAlgoOrder`, `AlgoOrderInfo`, `CancelAlgoOrder`, `OpenAlgoOrders`, `AlgoOrderHistory` |
 | private 접속 키 | `StartUserDataStream`, `KeepaliveUserDataStream`, `CloseUserDataStream` |
 | WebSocket | `MarketStream`, `UserDataStream`, 동적 구독·구독 해제 |
 
-계정은 `/fapi/v3/account`, 포지션 위험은 `/fapi/v3/positionRisk`를 사용합니다. `ChangeMarginType`은 `POST /fapi/v1/marginType`으로 계약별 `ISOLATED`·`CROSSED` 모드를 변경합니다. 주문 정정, 일괄 주문, 레버리지 변경과 수입 이력은 아직 포함하지 않습니다. 체결·캔들 확장부터 지수·위험·일정까지 네 영역의 Market Data 메서드는 엔드포인트와 권한, 제한을 [Market Data REST 확장](#market-data-rest-확장)에 정리했습니다.
+계정은 `/fapi/v3/account`, 포지션 위험은 `/fapi/v3/positionRisk`를 사용합니다. `ChangeMarginType`은 `POST /fapi/v1/marginType`으로 계약별 `ISOLATED`·`CROSSED` 모드를 변경합니다. 주문 정정·일괄 주문·전체 취소, 레버리지·포지션 모드·격리 마진 설정, 수입 이력·수수료율·이력 다운로드 같은 계정 조회와 Futures Convert는 권한과 제한을 [Trading·Account REST 확장](#tradingaccount-rest-확장)에 정리했습니다. 체결·캔들 확장부터 지수·위험·일정까지 네 영역의 Market Data 메서드는 엔드포인트와 권한, 제한을 [Market Data REST 확장](#market-data-rest-확장)에 정리했습니다.
 
 ## 인증과 시간
 
@@ -50,7 +56,7 @@ SIGNED 요청은 URL 인코딩한 최종 파라미터에 HMAC SHA-256을 적용�
 
 `ExchangeInfo` 응답의 `REQUEST_WEIGHT`와 `ORDERS` 규칙으로 값을 동적으로 갱신합니다. 응답의 `X-MBX-USED-WEIGHT-1M`, `X-MBX-ORDER-COUNT-10S`, `X-MBX-ORDER-COUNT-1M`도 로컬 limiter에 반영합니다.
 
-주문 생성은 IP weight를 소비하지 않지만 계정 주문 count를 소비합니다. 여러 공인 송신 IP를 사용해도 계정 주문 제한은 늘어나지 않습니다.
+주문 생성은 IP weight를 소비하지 않지만 계정 주문 count를 소비합니다. 여러 공인 송신 IP를 사용해도 계정 주문 제한은 늘어나지 않습니다. 일괄 주문·정정은 10초 창에 5, 1분 창에 1의 주문 count와 IP weight 5를 함께 차감합니다.
 
 펀딩과 `/futures/data` 통계처럼 엔드포인트 전용 IP 5분 제한이 있는 Market Data 호출은 요청 weight와 별도로 송신 경로별 규칙을 차감합니다. 규칙과 값은 [Market Data REST 확장](#market-data-rest-확장)을 참고하세요.
 
@@ -190,6 +196,149 @@ candles, err := client.ContinuousCandles(ctx, usdm.ContinuousCandlesRequest{
 	Interval:     usdm.Candle1Minute,
 	Limit:        500,
 }, trade.WithEgressRoute("seoul-b"))
+```
+
+## Trading·Account REST 확장
+
+공식 Trade·Account REST의 주문 정정·일괄·전체 취소, 포지션·레버리지·마진 설정, 계정·수수료·수입 이력 조회와 Futures Convert를 `Client` 메서드로 제공합니다. 요청 구조체의 `validate()`가 네트워크 전에 값을 검증해 잘못된 입력은 `trade.ErrValidation`으로 거부하고, 응답은 항목마다 원본 JSON `Raw`를 함께 담습니다. 가격·수량·잔고는 decimal 문자열 그대로 보존합니다.
+
+모든 서명 요청은 자격증명의 route와 권한을 Secret 조회 전에 검사합니다. 권한 열의 값은 다음 뜻입니다.
+
+| 권한 | 실행 종류 | 대상 |
+|---|---|---|
+| `credential.PermissionRead` | `OperationRead` | 조회 전용 엔드포인트입니다. 읽기 요청이므로 공통 실행기의 제한적 재시도가 적용됩니다. |
+| `credential.PermissionTrade` | `OperationMutation` | 주문 생성·테스트·정정·취소, 레버리지·포지션 모드·멀티에셋 모드·격리 마진·BNB 수수료 차감 설정, TradFi Perps 약관 서명입니다. 자동 재시도하지 않습니다. |
+| `credential.PermissionTransfer` | `OperationMutation` | Convert 견적 요청·수락입니다. 자동 재시도하지 않습니다. |
+| 공개 | `OperationRead` | `ConvertPairs`입니다. 서명, `X-MBX-APIKEY`, Secret 조회와 권한 검사를 모두 하지 않습니다. |
+
+불명확한 전송 결과(timeout, HTTP 5xx)는 변경 요청에서 `trade.ErrorUnknownExecutionState`로 반환합니다. 같은 요청을 다시 보내기 전에 조회 메서드로 상태를 확인합니다.
+
+### 주문 확장
+
+| 메서드 | 엔드포인트 | 권한 | 제한 |
+|---|---|---|---|
+| `TestOrder` | `POST /fapi/v1/order/test` | `credential.PermissionTrade` | 차감 없음 |
+| `OpenOrder` | `GET /fapi/v1/openOrder` | `credential.PermissionRead` | weight 1 |
+| `ModifyOrder` | `PUT /fapi/v1/order` | `credential.PermissionTrade` | 주문 count 1, weight 0 |
+| `PlaceBatchOrders` | `POST /fapi/v1/batchOrders` | `credential.PermissionTrade` | 주문 count 10초 5·1분 1, weight 5 |
+| `ModifyBatchOrders` | `PUT /fapi/v1/batchOrders` | `credential.PermissionTrade` | 주문 count 10초 5·1분 1, weight 5 |
+| `CancelBatchOrders` | `DELETE /fapi/v1/batchOrders` | `credential.PermissionTrade` | weight 1 |
+| `CancelAllOpenOrders` | `DELETE /fapi/v1/allOpenOrders` | `credential.PermissionTrade` | weight 1 |
+| `CancelAllAlgoOpenOrders` | `DELETE /fapi/v1/algoOpenOrders` | `credential.PermissionTrade` | weight 1 |
+| `CountdownCancelAll` | `POST /fapi/v1/countdownCancelAll` | `credential.PermissionTrade` | weight 10 |
+| `OrderAmendments` | `GET /fapi/v1/orderAmendment` | `credential.PermissionRead` | weight 1 |
+
+- `TestOrder`는 `PlaceOrder`와 같은 `PlaceOrderRequest`와 검증을 쓰며 주문을 매칭 엔진에 보내지 않습니다. 공식 문서에 별도 weight가 없어 주문 count와 IP weight를 차감하지 않습니다.
+- `ModifyOrder`는 미체결 `LIMIT` 주문만 정정합니다. 주문은 `OrderID` 또는 `ClientOrderID` 중 하나로, 가격은 `Price` 또는 `PriceMatch` 중 하나로 지정하며 `Quantity`는 필수입니다. `ModifyID`는 서버가 그대로 돌려주는 사용자 정의 식별자이고 `ReduceOnly`는 최소 주문 금액 검증을 건너뛰는 데만 쓰입니다. 한 주문은 10,000회 미만만 정정할 수 있습니다.
+- 일괄 요청은 한 번에 최대 5건이고 항목은 동시에 처리되어 체결 순서가 보장되지 않습니다. 응답 목록은 요청 순서와 같으며 항목마다 `BatchOrderResult.Failed()`로 거부 여부를 확인합니다. 거부된 항목은 주문 필드 없이 음수 `Code`와 `Message`만 채워집니다.
+- 일괄 주문 항목은 `PlaceOrderRequest`를 그대로 쓰므로 `PriceMatch`, `SelfTradePreventionMode`와 `GTX`·`RPI` timeInForce는 지원하지 않습니다. 일괄 정정은 `ReduceOnly`를 지원하지 않습니다. 항목 값은 모두 문자열로 직렬화해 `batchOrders` JSON 배열로 보냅니다.
+- `CancelBatchOrders`는 한 계약의 `OrderIDs` 또는 `ClientOrderIDs` 중 하나만 최대 10건 받습니다.
+- `CancelAllOpenOrders`는 일반 주문만, `CancelAllAlgoOpenOrders`는 Algo 조건부 주문(TP/SL·트레일링 스톱 포함)만 취소합니다. 응답 `AckResult.Code`가 200이면 성공이며, 문자열 `"200"`으로 와도 정수로 해석합니다.
+- `CountdownCancelAll`은 하트비트처럼 반복 호출해 카운트다운을 새 값으로 교체합니다. `Countdown`을 0으로 보내면 중지하며, 서버가 약 10밀리초마다 확인하므로 지나치게 짧은 값은 피합니다.
+- `OrderAmendments`는 `OrderID` 또는 `ClientOrderID` 중 하나로 정정 이력을 조회합니다. `Limit` 최대는 100이고 3개월보다 오래된 이력은 조회되지 않습니다.
+
+### 포지션·마진 설정
+
+| 메서드 | 엔드포인트 | 권한 | 제한 |
+|---|---|---|---|
+| `ChangeLeverage` | `POST /fapi/v1/leverage` | `credential.PermissionTrade` | weight 1 |
+| `ChangePositionMode` | `POST /fapi/v1/positionSide/dual` | `credential.PermissionTrade` | weight 1 |
+| `ChangeMultiAssetsMode` | `POST /fapi/v1/multiAssetsMargin` | `credential.PermissionTrade` | weight 1 |
+| `ModifyPositionMargin` | `POST /fapi/v1/positionMargin` | `credential.PermissionTrade` | weight 1 |
+| `PositionMarginHistory` | `GET /fapi/v1/positionMargin/history` | `credential.PermissionRead` | weight 1 |
+
+- 포지션 모드와 멀티에셋 모드는 전체 계약에 적용되며 미체결 주문이나 포지션이 있으면 거래소가 거부할 수 있습니다.
+- `ModifyPositionMargin`은 격리 마진 계약 전용입니다. `Type`은 `PositionMarginAdd`(1)와 `PositionMarginReduce`(2)이고 헤지 모드에서는 `PositionSide`를 지정해야 합니다.
+- `PositionMarginHistory`의 공식 보안 등급은 TRADE이지만 조회만 하므로 SDK는 `credential.PermissionRead`로 검사하고 `OperationRead`로 실행합니다. API Key에는 Futures 권한이 있어야 합니다. 최근 30일 이력만 조회되고 두 시각의 간격도 30일을 넘을 수 없습니다.
+
+### 체결·청산 조회
+
+| 메서드 | 엔드포인트 | 권한 | 제한 |
+|---|---|---|---|
+| `UserTrades` | `GET /fapi/v1/userTrades` | `credential.PermissionRead` | weight 5 |
+| `ForceOrders` | `GET /fapi/v1/forceOrders` | `credential.PermissionRead` | `Symbol` 지정 20, 생략 50 |
+| `ADLQuantiles` | `GET /fapi/v1/adlQuantile` | `credential.PermissionRead` | weight 5 |
+
+- `UserTrades`는 `FromID`와 `StartTime`·`EndTime`을 함께 보낼 수 없습니다. 시각을 모두 생략하면 최근 7일을 조회하고 두 시각의 간격은 7일을 넘을 수 없으며 최근 3개월만 조회됩니다. `Limit` 최대는 1,000입니다.
+- `ForceOrders`는 `AutoCloseType`을 비우면 `LIQUIDATION`과 `ADL`을 모두 반환하고 `StartTime`을 생략하면 `EndTime` 이전 7일을 조회합니다. `Limit` 최대는 100이며 기존 `Order` 타입으로 반환합니다.
+- `ADLQuantile.Quantile`은 `LONG`, `SHORT`, `BOTH` 키별 0~4 값입니다. 교차 헤지 모드에서는 `BOTH` 대신 `HEDGE` 키가 오며 이 값은 표시일 뿐입니다.
+
+### 계정 조회·설정
+
+| 메서드 | 엔드포인트 | 권한 | 제한 |
+|---|---|---|---|
+| `Balances` | `GET /fapi/v3/balance` | `credential.PermissionRead` | weight 5 |
+| `AccountConfig` | `GET /fapi/v1/accountConfig` | `credential.PermissionRead` | weight 5 |
+| `SymbolConfigs` | `GET /fapi/v1/symbolConfig` | `credential.PermissionRead` | weight 5 |
+| `PositionMode` | `GET /fapi/v1/positionSide/dual` | `credential.PermissionRead` | weight 30 |
+| `MultiAssetsMode` | `GET /fapi/v1/multiAssetsMargin` | `credential.PermissionRead` | weight 30 |
+| `IncomeHistory` | `GET /fapi/v1/income` | `credential.PermissionRead` | weight 30 |
+| `CommissionRate` | `GET /fapi/v1/commissionRate` | `credential.PermissionRead` | weight 20 |
+| `LeverageBrackets` | `GET /fapi/v1/leverageBracket` | `credential.PermissionRead` | weight 1 |
+| `OrderRateLimits` | `GET /fapi/v1/rateLimit/order` | `credential.PermissionRead` | weight 1 |
+| `APITradingStatus` | `GET /fapi/v1/apiTradingStatus` | `credential.PermissionRead` | `Symbol` 지정 1, 생략 10 |
+| `FeeBurn` | `GET /fapi/v1/feeBurn` | `credential.PermissionRead` | weight 30 |
+| `ChangeFeeBurn` | `POST /fapi/v1/feeBurn` | `credential.PermissionTrade` | weight 1 |
+| `ClassicPortfolioMarginAccount` | `GET /fapi/v1/pmAccountInfo` | `credential.PermissionRead` | weight 5 |
+| `SignTradFiPerpsContract` | `POST /fapi/v1/stock/contract` | `credential.PermissionTrade` | weight 50 |
+
+- `Balances`는 v3 잔고이며 기존 `Account`의 `assets`와 별개로 자산별 잔고만 가볍게 조회합니다.
+- `SymbolConfigs`와 `LeverageBrackets`는 `Symbol`을 생략하면 전체 계약을 반환합니다. `LeverageBrackets`는 `Symbol` 지정 여부에 따라 응답이 객체 하나 또는 배열로 달라지므로 항상 목록을 반환하고, 공식 응답이 JSON 숫자로 주는 명목가와 유지 마진율은 `json.Number`로 보존합니다. `SymbolConfig.IsAutoAddMargin`은 불리언과 `"true"`·`"false"` 문자열을 모두 받습니다.
+- `IncomeHistory`는 `IncomeType`을 비우면 모든 종류를 조회하고 시각을 모두 생략하면 최근 7일을 조회합니다. 최근 3개월만 조회되며 `Limit` 최대는 1,000입니다. 공식 문서에서 폐지된 `page` 파라미터는 지원하지 않으므로 `StartTime`·`EndTime`으로 구간을 옮깁니다.
+- `APITradingStatus.Indicators`는 계약 심볼을 키로 하며 계정 단위 지표는 `ACCOUNT` 키로 옵니다.
+- `ChangeFeeBurn`은 모든 계약에 적용되는 BNB 수수료 차감 설정입니다.
+- `ClassicPortfolioMarginAccount`는 `Asset`이 필수이며 클래식 포트폴리오 마진 계정의 이체 가능 수량을 반환합니다.
+- `SignTradFiPerpsContract`의 공식 보안 등급은 USER_DATA이지만 계정 상태를 바꾸는 요청이므로 SDK는 `credential.PermissionTrade`로 검사하고 `OperationMutation`으로 실행합니다.
+
+### 이력 다운로드
+
+| 메서드 | 엔드포인트 | 권한 | 제한 |
+|---|---|---|---|
+| `RequestOrderHistoryDownload` | `GET /fapi/v1/order/asyn` | `credential.PermissionRead` | weight 1,000, 월 10회 |
+| `OrderHistoryDownloadLink` | `GET /fapi/v1/order/asyn/id` | `credential.PermissionRead` | weight 10 |
+| `RequestTradeHistoryDownload` | `GET /fapi/v1/trade/asyn` | `credential.PermissionRead` | weight 1,000, 월 5회 |
+| `TradeHistoryDownloadLink` | `GET /fapi/v1/trade/asyn/id` | `credential.PermissionRead` | weight 10 |
+| `RequestIncomeHistoryDownload` | `GET /fapi/v1/income/asyn` | `credential.PermissionRead` | weight 1,000, 월 100회 |
+| `IncomeHistoryDownloadLink` | `GET /fapi/v1/income/asyn/id` | `credential.PermissionRead` | weight 10 |
+
+- 요청 메서드의 구간은 필수이며 1년을 넘을 수 없습니다. 월 한도는 웹 다운로드 페이지와 공유되고 거래 내역 한도는 USDⓈ-M과 COIN-M이 함께 씁니다. SDK는 월 한도를 로컬에서 세지 않습니다.
+- 요청 메서드는 월 한도와 weight 1,000을 소모하므로 서명 GET이지만 `OperationMutation`으로 실행해 자동 재시도하지 않습니다. 링크 메서드는 `OperationRead`입니다.
+- `DownloadLink.Status`가 `completed`일 때만 `URL`이 채워지며 링크는 7일 동안 유효합니다.
+
+### Convert
+
+| 메서드 | 엔드포인트 | 권한 | 제한 |
+|---|---|---|---|
+| `ConvertPairs` | `GET /fapi/v1/convert/exchangeInfo` | 공개 | weight 20 |
+| `RequestConvertQuote` | `POST /fapi/v1/convert/getQuote` | `credential.PermissionTransfer` | weight 50 |
+| `AcceptConvertQuote` | `POST /fapi/v1/convert/acceptQuote` | `credential.PermissionTransfer` | weight 200 |
+| `ConvertOrderStatus` | `GET /fapi/v1/convert/orderStatus` | `credential.PermissionRead` | weight 50 |
+
+- `ConvertPairs`는 `FromAsset`과 `ToAsset`을 모두 비우면 일부 페어만 반환합니다.
+- `ConvertQuoteRequest`는 `FromAmount`와 `ToAmount` 중 정확히 하나만 보내며 `ValidTime`을 비우면 서버 기본값 `10s`를 씁니다. `QuoteID`는 잔고가 충분할 때만 응답에 포함됩니다. 공식 서버 한도(시간당 360회, 일 500회)는 SDK가 로컬에서 세지 않습니다.
+- 견적은 구속력이 없으며 `AcceptConvertQuote`로 수락해야 변환 주문이 만들어집니다. 수락 요청의 전송 결과가 불명확하면 `ConvertOrderStatus`로 먼저 확인합니다. `ConvertOrderRequest`는 `OrderID` 또는 `QuoteID` 중 정확히 하나를 받습니다.
+- Convert 주문 ID는 숫자 또는 숫자 문자열로 오므로 `json.Number`로 보존합니다.
+
+```go
+quote, err := client.RequestConvertQuote(ctx, usdm.ConvertQuoteRequest{
+	FromAsset:  "USDT",
+	ToAsset:    "BTC",
+	FromAmount: "20",
+})
+if err != nil {
+	return err
+}
+acceptance, err := client.AcceptConvertQuote(ctx, usdm.AcceptConvertQuoteRequest{QuoteID: quote.QuoteID})
+
+results, err := client.PlaceBatchOrders(ctx, usdm.PlaceBatchOrdersRequest{Orders: orders})
+if err != nil {
+	return err
+}
+for _, result := range results {
+	if result.Failed() {
+		log.Printf("주문 거부 %d: %s", result.Code, result.Message)
+	}
+}
 ```
 
 ## 과거 캔들 덤프

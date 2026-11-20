@@ -52,11 +52,26 @@ func (catalog *limitCatalog) update(rules []RateLimit) {
 	}
 }
 
+// orderCost는 주문 count 제한 창별 차감 단위다.
+// 일괄 주문·정정은 10초 창과 1분 창의 단위가 다르다.
+type orderCost struct{ tenSeconds, minute int }
+
 func (catalog *limitCatalog) charges(
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
 	accountID string,
 	requestWeight, orderUnits int,
+) ([]ratelimit.Charge, error) {
+	return catalog.chargesFor(limiter, routeID, accountID, requestWeight, orderCost{tenSeconds: orderUnits, minute: orderUnits})
+}
+
+// chargesFor는 주문 count 단위를 10초·1분 창별로 지정해 차감 목록을 만든다.
+func (catalog *limitCatalog) chargesFor(
+	limiter *ratelimit.Limiter,
+	routeID transport.EgressRouteID,
+	accountID string,
+	requestWeight int,
+	orders orderCost,
 ) ([]ratelimit.Charge, error) {
 	catalog.mu.RLock()
 	requestLimit := catalog.requestWeight
@@ -70,8 +85,8 @@ func (catalog *limitCatalog) charges(
 		units  int
 	}{
 		{rateLimitKey("route", string(routeID), "request_weight", "1minute"), requestLimit, time.Minute, requestWeight},
-		{rateLimitKey("account", accountID, "orders", "10seconds"), tenSecondLimit, 10 * time.Second, orderUnits},
-		{rateLimitKey("account", accountID, "orders", "1minute"), minuteLimit, time.Minute, orderUnits},
+		{rateLimitKey("account", accountID, "orders", "10seconds"), tenSecondLimit, 10 * time.Second, orders.tenSeconds},
+		{rateLimitKey("account", accountID, "orders", "1minute"), minuteLimit, time.Minute, orders.minute},
 	}
 	charges := make([]ratelimit.Charge, 0, len(rules))
 	for _, rule := range rules {

@@ -128,6 +128,11 @@ func (client *Client) executePublic(ctx context.Context, path string, values url
 }
 
 func (client *Client) executeSigned(ctx context.Context, method, path string, values url.Values, weight, orders int, permission credential.Permission, operation commonexchange.OperationKind, options ...trade.RequestOption) (commonexchange.Response, error) {
+	return client.executeSignedCost(ctx, method, path, values, weight, orderCost{tenSeconds: orders, minute: orders}, permission, operation, options...)
+}
+
+// executeSignedCost는 주문 count 단위를 10초·1분 창별로 지정해 서명 요청을 실행한다.
+func (client *Client) executeSignedCost(ctx context.Context, method, path string, values url.Values, weight int, orders orderCost, permission credential.Permission, operation commonexchange.OperationKind, options ...trade.RequestOption) (commonexchange.Response, error) {
 	resolved, err := client.resolveOptions(options...)
 	if err != nil {
 		return commonexchange.Response{}, err
@@ -141,7 +146,7 @@ func (client *Client) executeSigned(ctx context.Context, method, path string, va
 	if err := client.credentials.RequirePermission(permission); err != nil {
 		return commonexchange.Response{}, &trade.APIError{Category: trade.ErrorAuthorization, Exchange: model.ExchangeBinance, AccountID: client.credentials.AccountID, Cause: err}
 	}
-	charges, err := client.limits.charges(client.executor.Limiter(), resolved.EgressRouteID, client.credentials.AccountID, weight, orders)
+	charges, err := client.limits.chargesFor(client.executor.Limiter(), resolved.EgressRouteID, client.credentials.AccountID, weight, orders)
 	if err != nil {
 		return commonexchange.Response{}, err
 	}

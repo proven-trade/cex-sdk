@@ -9,7 +9,7 @@
 | `spot` | 지원 | Unified 잔고 | 해당 없음 | 지원 |
 | `linear` | 지원 | Unified 잔고 | 지원 | 지원 |
 
-공개 시세는 상품 정보, ticker, 호가, 최근 체결, 캔들을 포함합니다. 주문은 생성, 단건 조회, 취소, 미체결 목록, 이력을 포함합니다. Inverse, Option, 자산 이동, 일괄 주문, 조건부 주문 전용 필드는 아직 범위에 포함하지 않습니다.
+공개 시세는 상품 정보, ticker, 호가, 최근 체결, 캔들을 포함합니다. 주문은 생성, 정정, 단건 조회, 취소, 전체 취소, 일괄 생성·정정·취소, 미체결 목록, 이력을 포함하며 생성 요청은 조건부 주문·TP/SL·SMP 필드를 지원합니다. Linear 포지션은 레버리지, 포지션 모드, TP/SL·트레일링 스톱, 증거금, 청산 손익, 체결 내역, 포지션 이전을 지원합니다. 새 API 목록은 [Trade·Position 확장 API](#tradeposition-확장-api)를 참고합니다. Inverse, Option, 자산 이동은 아직 범위에 포함하지 않습니다.
 
 ## 클라이언트 생성
 
@@ -70,11 +70,14 @@ timestamp + apiKey + receiveWindow + queryStringOrJSONBody
 
 - 공개 조회: 기본 `20/route/초`, 서버 시간 `50/route/초`
 - private 조회: `20/account/초`
-- 주문 생성·취소: `10/account/초`
+- 주문 생성·정정·취소·전체 취소, 포지션 설정·이전, 포지션 이전 이력 조회: `10/account/초`
+- 일괄 주문 생성·정정·취소: `10/account/초`이며 요청 수가 아니라 요청에 담은 주문 수만큼 차감합니다.
+- 청산 손익·체결 내역·Spot 주문 가능 수량 조회: `20/account/초`
+- 연결 끊김 보호(DCP) 설정: `5/account/초`
 
 서버가 `X-Bapi-Limit`과 `X-Bapi-Limit-Status`를 반환하고 해당 endpoint의 설정 한도와 일치하면 로컬 사용량에 반영합니다. 계정 bucket은 송신 경로를 바꿔도 공유되므로 다중 송신 IP를 UID 제한 우회 수단으로 사용하지 않습니다. VIP 또는 Pro 등급에서 실제 한도가 다르면 해당 등급을 반영하는 설정 확장이 필요합니다.
 
-Bybit은 한도 초과를 HTTP 429가 아니라 HTTP 200 본문의 `retCode: 10006`으로 알리기도 합니다. SDK는 이 응답을 받으면 해당 요청이 차감한 모든 bucket을 `X-Bapi-Limit-Reset-Timestamp`까지, 없거나 이미 지났으면 IP 창 길이인 5초 동안 막습니다. 읽기 요청은 block이 풀린 뒤 `ReadRetryPolicy` 안에서 다시 보내고, 끝내 실패하면 `trade.ErrRateLimited`를 반환합니다. 주문 생성·취소는 자동 재시도하지 않습니다. 실행 관측 훅에는 이 시도가 HTTP 200이어도 `ErrorRateLimited`로 기록됩니다. 다른 거래소 어댑터도 `commonexchange.Execution.RateLimit`에 본문 판별 함수를 넣어 같은 처리를 쓸 수 있습니다.
+Bybit은 한도 초과를 HTTP 429가 아니라 HTTP 200 본문의 `retCode: 10006`으로 알리기도 합니다. SDK는 이 응답을 받으면 해당 요청이 차감한 모든 bucket을 `X-Bapi-Limit-Reset-Timestamp`까지, 없거나 이미 지났으면 IP 창 길이인 5초 동안 막습니다. 읽기 요청은 block이 풀린 뒤 `ReadRetryPolicy` 안에서 다시 보내고, 끝내 실패하면 `trade.ErrRateLimited`를 반환합니다. 주문 생성·정정·취소와 모든 포지션 변경 요청은 자동 재시도하지 않습니다. 실행 관측 훅에는 이 시도가 HTTP 200이어도 `ErrorRateLimited`로 기록됩니다. 다른 거래소 어댑터도 `commonexchange.Execution.RateLimit`에 본문 판별 함수를 넣어 같은 처리를 쓸 수 있습니다.
 
 ## 안전한 주문 실패
 
@@ -228,12 +231,85 @@ private typed data는 `[]StreamOrder`, `[]StreamExecution`, `[]StreamPosition`, 
 
 WebSocket 연결은 도메인별 IP당 5분에 500회보다 자주 만들면 안 됩니다. 재연결 횟수와 장시간 연결 상태는 운영 메트릭에서 함께 감시해야 합니다.
 
+## Trade·Position 확장 API
+
+모든 메서드는 `func (client *Client) Name(ctx, request, options ...trade.RequestOption)` 형태이며 `trade.WithEgressRoute` 등 요청 옵션을 받습니다. 모든 요청은 공통 `600/IP/5초` bucket도 함께 차감하므로 아래 표의 rate bucket은 추가로 차감하는 endpoint bucket입니다. 변경(mutation) 요청은 `commonexchange.OperationMutation`으로 실행하며 자동 재시도하지 않습니다. 성공 응답은 접수 결과이므로 최종 상태는 조회 API 또는 private stream으로 확인해야 합니다.
+
+### 주문 확장
+
+| 메서드 | HTTP·경로 | 권한 | rate bucket | 설명 |
+|---|---|---|---|---|
+| `AmendOrder` | `POST /v5/order/amend` | `credential.PermissionTrade` | `10/account/초` | 미체결·부분 체결 주문의 수량·가격·TP/SL·트리거 가격을 정정합니다. 수정하지 않을 필드는 비웁니다. `TakeProfit`·`StopLoss`를 `"0"`으로 보내면 기존 TP/SL을 취소합니다. |
+| `CancelAllOrders` | `POST /v5/order/cancel-all` | `credential.PermissionTrade` | `10/account/초` | 조건에 맞는 미체결 주문을 모두 취소합니다. `Symbol`, `BaseCoin`, `SettleCoin`을 함께 지정하면 이 순서로 하나만 적용되며 Linear는 셋 중 하나가 필수입니다. Spot은 `SettleCoin`을 지원하지 않고, 모두 비우면 전체 Spot 일반 주문을 취소합니다. `OrderFilter`, `StopOrderType`으로 취소할 주문 종류를 좁힐 수 있고 결과는 `CancelAllOrdersResult`입니다. |
+| `SetDisconnectCancelAll` | `POST /v5/order/disconnected-cancel-all` | `credential.PermissionTrade` | `5/account/초` | 연결 끊김 보호(DCP) 시간 창(`TimeWindow`, 3~300초)을 설정합니다. Bybit 문서상 옵션(Unified Account) 주문에만 적용되므로 Spot·Linear 주문 보호 수단으로 쓸 수 없습니다. 반영까지 시간이 걸립니다. |
+| `SpotBorrowCheck` | `GET /v5/order/spot-borrow-check` | `credential.PermissionRead` | `20/account/초` | Spot 심볼의 현물·마진 거래 가능 최대 수량과 금액(`SpotBorrowQuota`)을 조회합니다. |
+
+### 일괄 주문
+
+| 메서드 | HTTP·경로 | 권한 | rate bucket | 설명 |
+|---|---|---|---|---|
+| `PlaceBatchOrders` | `POST /v5/order/create-batch` | `credential.PermissionTrade` | `10/account/초`, 포함한 주문 수만큼 차감 | 최대 10건의 주문을 한 번에 생성합니다. |
+| `AmendBatchOrders` | `POST /v5/order/amend-batch` | `credential.PermissionTrade` | `10/account/초`, 포함한 주문 수만큼 차감 | 최대 10건의 주문을 한 번에 정정합니다. |
+| `CancelBatchOrders` | `POST /v5/order/cancel-batch` | `credential.PermissionTrade` | `10/account/초`, 포함한 주문 수만큼 차감 | 최대 10건의 주문을 한 번에 취소합니다. |
+
+일괄 요청의 `Category`는 최상위에만 두고, 각 항목의 `Category`는 비워 두거나 일괄 요청과 같아야 합니다. 항목이 1~10건이 아니면 전송 전에 거부합니다. 결과 `BatchOrderResult.Items[i]`는 요청의 i번째 주문 결과이며 `retExtInfo.list`의 `Code`·`Message`를 포함합니다. 일부 주문만 실패해도 요청 전체는 성공으로 반환되므로 반드시 항목별 `Succeeded()`(`Code == 0`)를 확인해야 합니다. `result.list`와 `retExtInfo.list` 길이가 다르면 항목별 성공 여부를 알 수 없어 `trade.ErrUnknownExecutionState`로 반환합니다.
+
+### 포지션 설정 (Linear)
+
+| 메서드 | HTTP·경로 | 권한 | rate bucket | 설명 |
+|---|---|---|---|---|
+| `SetLeverage` | `POST /v5/position/set-leverage` | `credential.PermissionTrade` | `10/account/초` | 심볼 레버리지를 설정합니다. 단방향 모드에서는 `BuyLeverage`와 `SellLeverage`가 같아야 합니다. |
+| `SwitchPositionMode` | `POST /v5/position/switch-mode` | `credential.PermissionTrade` | `10/account/초` | `Symbol` 또는 정산 `Coin` 단위로 단방향(`PositionModeOneWay`)·헤지(`PositionModeHedge`) 모드를 전환합니다. `Symbol`이 `Coin`보다 우선합니다. |
+| `SetTradingStop` | `POST /v5/position/trading-stop` | `credential.PermissionTrade` | `10/account/초` | 포지션 TP/SL과 트레일링 스톱을 설정합니다. `"0"`은 해당 설정 취소이고, Partial 모드는 새 부분 TP/SL만 추가하며 `TPSize`와 `SLSize`가 같아야 합니다. |
+| `SetAutoAddMargin` | `POST /v5/position/set-auto-add-margin` | `credential.PermissionTrade` | `10/account/초` | 격리 마진 포지션의 자동 증거금 추가를 켜거나 끕니다. 헤지 모드는 `PositionIndex`(1 또는 2)가 필수입니다. |
+| `AddMargin` | `POST /v5/position/add-margin` | `credential.PermissionTrade` | `10/account/초` | 격리 마진 증거금을 수동 조정합니다. `Margin`은 양수면 추가, 음수면 감소이며 소수점 이하 4자리까지 허용하고 결과로 포지션 상태(`AddMarginResult`)를 반환합니다. |
+| `ConfirmPendingMMR` | `POST /v5/position/confirm-pending-mmr` | `credential.PermissionTrade` | `10/account/초` | reduce-only로 표시된 포지션의 새 리스크 한도를 확인해 표시를 해제합니다. |
+| `SymbolLeverages` | `GET /v5/position/symbol-info` | `credential.PermissionRead` | `10/account/초` | 포지션이 없어도 심볼별 격리 레버리지 설정을 조회합니다. |
+
+레버리지·포지션 모드·TP/SL·증거금·MMR 확인은 `credential.PermissionTrade`이며, 설정 응답은 `MutationAck`(원문 `Raw`)로 반환합니다. 포지션 설정은 Linear category만 허용합니다.
+
+### 포지션 조회와 이전
+
+| 메서드 | HTTP·경로 | 권한 | rate bucket | 설명 |
+|---|---|---|---|---|
+| `ClosedPnL` | `GET /v5/position/closed-pnl` | `credential.PermissionRead` | `20/account/초` | Linear 청산 손익을 cursor 기반으로 조회합니다(`ClosedPnLPage`). |
+| `Executions` | `GET /v5/execution/list` | `credential.PermissionRead` | `20/account/초` | 내 체결 내역을 cursor 기반으로 조회합니다(`ExecutionPage`). 시간 범위를 생략하면 최근 7일이며, 지정하면 7일을 넘을 수 없습니다. |
+| `MovePositions` | `POST /v5/position/move-positions` | `credential.PermissionTransfer` | `10/account/초` | 마스터-서브 또는 서브-서브 UID 사이에서 포지션을 이전합니다. 마스터 UID의 API Key로만 호출할 수 있고 한 요청에 최대 25개 `MovePositionLeg`를 담을 수 있습니다. |
+| `MovePositionHistory` | `GET /v5/position/move-history` | `credential.PermissionRead` | `10/account/초` | 포지션 이전 이력을 cursor 기반으로 조회합니다(`MovePositionPage`). 시간 범위는 7일 이하이며 `Status`는 `Processing`, `Filled`, `Rejected` 중 하나입니다. |
+
+`MovePositions`는 계정 간 자산 이동에 해당하므로 `PermissionTrade`가 아니라 `credential.PermissionTransfer`가 필요합니다. 응답의 `RejectParty`가 비어 있으면 초기 검증만 통과한 것이므로 최종 상태는 `MovePositionHistory`로 확인합니다. 조회 요청의 시간 범위는 `StartTime`·`EndTime`을 모두 지정했을 때 7일을 넘을 수 없고 `Limit`은 `ClosedPnL`·`Executions` 최대 100, `MovePositionHistory` 최대 200입니다.
+
+### 주문 생성 신규 필드
+
+`PlaceOrderRequest`에 다음 선택 필드가 추가되었고 모두 비워 두면 전송하지 않습니다. `PlaceOrderRequest`와 `CancelOrderRequest`의 `Category`는 일괄 요청 항목으로 쓸 때 비워 둘 수 있습니다. 필드는 로컬에서 먼저 검증하며 Spot·Linear에서 허용되지 않는 조합은 전송 전에 거부합니다.
+
+| 필드 | Bybit 파라미터 | 적용 | 설명 |
+|---|---|---|---|
+| `IsLeverage` | `isLeverage` | Spot | `0` 현물, `1` 마진 거래 |
+| `OrderFilter` | `orderFilter` | Spot | `OrderFilterOrder`, `OrderFilterTPSLOrder`, `OrderFilterStopOrder` |
+| `TriggerDirection` | `triggerDirection` | Linear | `1` 상승, `2` 하락 도달 시 트리거, `TriggerPrice` 필요 |
+| `TriggerPrice` | `triggerPrice` | Spot·Linear | 지정하면 조건부 주문 |
+| `TriggerBy` | `triggerBy` | Linear | `TriggerByLastPrice`, `TriggerByIndexPrice`, `TriggerByMarkPrice` |
+| `TakeProfit`, `StopLoss` | `takeProfit`, `stopLoss` | Spot·Linear | 주문과 함께 설정하는 TP/SL 가격, reduceOnly 주문에는 불가 |
+| `TPTriggerBy`, `SLTriggerBy` | `tpTriggerBy`, `slTriggerBy` | Linear | TP/SL 트리거 가격 기준 |
+| `TPSLMode` | `tpslMode` | Linear | `TPSLModeFull`, `TPSLModePartial`, 지정가 TP/SL은 Partial만 허용 |
+| `TPLimitPrice`, `SLLimitPrice` | `tpLimitPrice`, `slLimitPrice` | Spot·Linear | TP/SL 발동 시 지정가, 해당 `OrderType`이 `Limit`일 때만 사용 |
+| `TPOrderType`, `SLOrderType` | `tpOrderType`, `slOrderType` | Spot·Linear | TP/SL 발동 시 `Market`(기본) 또는 `Limit` |
+| `SMPType` | `smpType` | Spot·Linear | `SMPTypeNone`, `SMPTypeCancelMaker`, `SMPTypeCancelTaker`, `SMPTypeCancelBoth` |
+
+Linear reduceOnly·closeOnTrigger 주문은 `Quantity`를 `"0"`으로 보내 현재 심볼의 전체 포지션을 닫을 수 있습니다. Spot 주문은 `TriggerDirection`, `TriggerBy`, `TPTriggerBy`, `SLTriggerBy`, `TPSLMode`를 받지 않습니다.
+
 ## 공식 기준 문서
 
 - [Bybit V5 Integration Guidance](https://bybit-exchange.github.io/docs/v5/guide)
 - [Bybit V5 Rate Limit](https://bybit-exchange.github.io/docs/v5/rate-limit)
 - [Bybit V5 Market](https://bybit-exchange.github.io/docs/v5/market/instrument)
 - [Bybit V5 Place Order](https://bybit-exchange.github.io/docs/v5/order/create-order)
+- [Bybit V5 Amend Order](https://bybit-exchange.github.io/docs/v5/order/amend-order)
+- [Bybit V5 Cancel All Orders](https://bybit-exchange.github.io/docs/v5/order/cancel-all)
+- [Bybit V5 Batch Place Order](https://bybit-exchange.github.io/docs/v5/order/batch-place)
+- [Bybit V5 Set Leverage](https://bybit-exchange.github.io/docs/v5/position/leverage)
+- [Bybit V5 Move Position](https://bybit-exchange.github.io/docs/v5/position/move-position)
 - [Bybit V5 Wallet Balance](https://bybit-exchange.github.io/docs/v5/account/wallet-balance)
 - [Bybit V5 WebSocket Connect](https://bybit-exchange.github.io/docs/v5/ws/connect)
 - [Bybit V5 Public Orderbook](https://bybit-exchange.github.io/docs/v5/websocket/public/orderbook)
