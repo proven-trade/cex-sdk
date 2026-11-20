@@ -181,6 +181,27 @@ func (client *Client) executePrivate(
 	pair string,
 	options ...trade.RequestOption,
 ) (commonexchange.Response, error) {
+	return client.executePrivatePayload(
+		ctx, path, func(nonce string) (string, string, error) {
+			payloadValues := cloneValues(values)
+			payloadValues.Set("nonce", nonce)
+			return payloadValues.Encode(), formContentType, nil
+		}, permission, operation, limit, pair, options...,
+	)
+}
+
+// executePrivatePayload는 nonce로 본문과 Content-Type을 만드는 encoder를 받아
+// 자격 증명 확인, 서명, 전송을 수행한다. form 본문과 JSON 본문이 같은 경로를 쓴다.
+func (client *Client) executePrivatePayload(
+	ctx context.Context,
+	path string,
+	encode payloadEncoder,
+	permission credential.Permission,
+	operation commonexchange.OperationKind,
+	limit limitKind,
+	pair string,
+	options ...trade.RequestOption,
+) (commonexchange.Response, error) {
 	resolved, err := client.resolveOptions(options...)
 	if err != nil {
 		return commonexchange.Response{}, err
@@ -236,10 +257,11 @@ func (client *Client) executePrivate(
 					Cause:     errors.New("Kraken API key and Base64 secret are required"),
 				}
 			}
-			payloadValues := cloneValues(values)
 			nonce := client.nextNonce()
-			payloadValues.Set("nonce", nonce)
-			payload := payloadValues.Encode()
+			payload, contentType, encodeErr := encode(nonce)
+			if encodeErr != nil {
+				return nil, encodeErr
+			}
 			signature, signErr := SignREST(path, nonce, payload, material.SecretKey)
 			if signErr != nil {
 				return nil, &trade.APIError{
@@ -255,6 +277,7 @@ func (client *Client) executePrivate(
 			}
 			request.Header.Set("API-Key", string(material.APIKey))
 			request.Header.Set("API-Sign", signature)
+			request.Header.Set("Content-Type", contentType)
 			return request, nil
 		},
 	})

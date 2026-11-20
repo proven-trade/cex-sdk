@@ -12,6 +12,7 @@
 - `binance/archive`: Spot·USDⓈ-M `AggTrades`·`Trades`, USDⓈ-M `MarkPriceKlines`·`IndexPriceKlines`·`PremiumIndexKlines` 월·일 덤프
 - Binance Spot: 집계·과거·블록 체결, UI 캔들, 평균가, 24시간·거래일·롤링 티커, 실행 규칙·참조가, 테스트 주문·cancelReplace·keepPriority 정정·전체 취소, OCO/OTO/OTOCO/OPO/OPOCO 주문 리스트, SOR, 체결·할당·자전거래 방지·수수료·주문 한도·정정 이력·필터 조회 API와 [REST 문서](docs/exchanges/BINANCE.md)
 - Binance USDⓈ-M: 집계·과거 체결, 연속계약·지수가·마크가·프리미엄 캔들, 마크가·펀딩비 이력·펀딩 정보, 24시간·최우선 호가, 미결제약정과 `/futures/data` 통계, 복합지수·자산 지수·구성 거래소, 보험기금·ADL 위험·RPI 호가·거래 세션 일정 시세 API
+- Kraken Spot: 자산·시스템 상태·점검 일정·스프레드·그룹/L3 호가·PreTrade/PostTrade, 주문 정정·편집·일괄 등록/취소·전체 취소·dead-man, 전략 주문, 잔고·체결·포지션·원장·거래량·정정 이력·API 키, 입출금·지갑 이체·서브계정, Earn, 리포트 export API
 - Coinbase: `BestBidAsk`, 주문 정정·미리보기·`ClosePosition`, Convert, 거래 요약·키 권한·결제 수단, Portfolio 관리·자금 이동, CFM 잔고·포지션·일중 마진·sweep API
 - Upbit: 초·일·주·월·연 캔들, 마켓별 전체 티커·호가 정책, 주문 가능 정보·테스트 주문·다건 조회/취소·전체 취소·취소 후 재주문, 입금·트래블룰·출금, 포켓·통합 이체, 지갑 상태·API 키, WebSocket 구독 목록 조회와 추가 채널
 - Bithumb: 일·주·월 캔들, 경보·공지·입출금 수수료, 주문 가능 정보, 다건 주문·조회·취소, TWAP, 입출금 API
