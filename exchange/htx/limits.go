@@ -26,6 +26,26 @@ const (
 	rateGroupTradeHistory rateGroup = "trade-history"
 )
 
+// 아래 그룹은 공식 문서가 endpoint별로 더 낮거나 다른 시간 창의 한도를 명시한 요청에 쓴다.
+// 한도는 설정한 계정 quota와 공식 값 중 작은 쪽을 적용한다.
+const (
+	rateGroupBatchOrder      rateGroup = "order-batch"
+	rateGroupAlgoOrder       rateGroup = "algo-order"
+	rateGroupAccountHistory  rateGroup = "account-history"
+	rateGroupValuation       rateGroup = "valuation"
+	rateGroupPoint           rateGroup = "point"
+	rateGroupFuturesTransfer rateGroup = "futures-transfer"
+)
+
+const (
+	batchOrderRequestLimit      = 50
+	algoOrderRequestLimit       = 20
+	accountHistoryRequestLimit  = 5
+	valuationRequestLimit       = 3
+	pointRequestLimit           = 2
+	futuresTransferRequestLimit = 10
+)
+
 func publicRateLimit(
 	limiter *ratelimit.Limiter,
 	routeID transport.EgressRouteID,
@@ -57,9 +77,10 @@ func privateRateLimit(
 	if strings.TrimSpace(accountID) == "" || strings.TrimSpace(string(group)) == "" || quota < 1 {
 		return rateLimit{}, nil, fmt.Errorf("invalid HTX private rate limit")
 	}
+	window, suffix := rateGroupWindow(group)
 	value := rateLimit{
-		key:   fmt.Sprintf("htx:account:%s:%s:2seconds", accountID, group),
-		limit: quota, window: 2 * time.Second,
+		key:   fmt.Sprintf("htx:account:%s:%s:%s", accountID, group, suffix),
+		limit: quota, window: window,
 	}
 	if err := limiter.SetRule(ratelimit.Rule{
 		Key: value.key, Limit: value.limit, Window: value.window,
@@ -67,6 +88,19 @@ func privateRateLimit(
 		return rateLimit{}, nil, err
 	}
 	return value, []ratelimit.Charge{{Key: value.key, Units: 1}}, nil
+}
+
+// rateGroupWindow는 그룹별 공식 한도의 시간 창과 limiter 키 접미사를 반환한다.
+// 별도 창을 명시하지 않은 그룹은 계정 기준 2초 창을 쓴다.
+func rateGroupWindow(group rateGroup) (time.Duration, string) {
+	switch group {
+	case rateGroupValuation, rateGroupPoint:
+		return time.Second, "1second"
+	case rateGroupFuturesTransfer:
+		return time.Minute, "1minute"
+	default:
+		return 2 * time.Second, "2seconds"
+	}
 }
 
 func observeRateLimit(

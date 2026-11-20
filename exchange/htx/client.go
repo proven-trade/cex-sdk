@@ -452,7 +452,8 @@ func classifyError(
 	code = strings.ToLower(strings.TrimSpace(code))
 	message = strings.ToLower(strings.TrimSpace(message))
 	if status == http.StatusTooManyRequests ||
-		code == "too-many-requests" || code == "frequent-visit" || code == "1006" {
+		code == "too-many-requests" || code == "frequent-visit" ||
+		code == "frequent-invoke" || code == "1006" {
 		return trade.ErrorRateLimited, true
 	}
 	if status >= http.StatusInternalServerError {

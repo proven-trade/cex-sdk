@@ -233,6 +233,54 @@ err = book.Run(ctx, mbpStream, func(_ context.Context, view htx.LocalOrderBookVi
 
 sequence gap, WebSocket 연결 세대 변경 또는 refresh 정렬 실패가 발생하면 불완전한 장부를 공개하지 않고 같은 송신 경로의 `/feed` 연결에서 refresh를 다시 요청한다. `RequestSnapshot`은 공식 연결당 pull 제한에 맞춰 `req` 사이를 최소 100ms로 직렬화한다. `SynchronizationID`는 성공한 동기화 횟수, `GapCount`는 감지한 증분 공백 누계, `Generation`은 WebSocket 연결 세대를 나타낸다. 기본 증분 버퍼는 4096개이고 기본 view 깊이는 `min(20, MBPDepth)`다. stream과 장부의 symbol·depth·송신 경로가 다르면 네트워크 작업 전에 거부한다.
 
+## 확장 REST API
+
+권한 열은 SDK `credential.Descriptor`에 필요한 권한이다. 변경 요청은 모두 `OperationMutation`이며 자동 재시도하지 않는다. 전송 결과가 불명확하면 `UNKNOWN_EXECUTION_STATE`를 반환하므로 조회 API로 상태를 확인한 뒤 다시 보낸다.
+
+### 시세·참조 정보 (공개)
+
+| 메서드 | API |
+|---|---|
+| `MarketDetail` | `GET /market/detail` |
+| `MarketStatus` | `GET /v2/market-status` |
+| `SymbolSettings` | `GET /v1/settings/common/symbols` |
+| `SymbolSettingsV2` | `GET /v2/settings/common/symbols` |
+| `CurrencySettings` | `GET /v1/settings/common/currencys` |
+| `CurrencySettingsV2` | `GET /v2/settings/common/currencies` |
+| `ChainSettings` | `GET /v1/settings/common/chains` |
+| `ReferenceCurrencies` | `GET /v2/reference/currencies` |
+
+### 주문
+
+| 메서드 | API | 권한 |
+|---|---|---|
+| `PlaceBatchOrders` | `POST /v1/order/batch-orders` | Trade |
+| `CancelOpenOrders` | `POST /v1/order/orders/batchCancelOpenOrders` | Trade |
+| `CancelOrdersByIDs` | `POST /v1/order/orders/batchcancel` | Trade |
+| `CancelAllAfter` | `POST /v2/algo-orders/cancel-all-after` | Trade |
+| `RecentOrderHistory` | `GET /v1/order/history` | Read |
+| `TransactFeeRates` | `GET /v2/reference/transact-fee-rate` | Read |
+| `PlaceAlgoOrder` | `POST /v2/algo-orders` | Trade |
+| `CancelAlgoOrders` | `POST /v2/algo-orders/cancellation` | Trade |
+| `OpenAlgoOrders` | `GET /v2/algo-orders/opening` | Read |
+| `AlgoOrderHistory` | `GET /v2/algo-orders/history` | Read |
+| `AlgoOrder` | `GET /v2/algo-orders/specific` | Read |
+
+### 계정·이체
+
+| 메서드 | API | 권한 |
+|---|---|---|
+| `AccountValuation` | `GET /v2/account/valuation` | Read |
+| `AssetValuation` | `GET /v2/account/asset-valuation` | Read |
+| `AccountHistory` | `GET /v1/account/history` (조회 창 최대 1시간) | Read |
+| `AccountLedger` | `GET /v2/account/ledger` (조회 창 최대 10일) | Read |
+| `AccountTransfer` | `POST /v1/account/transfer` | Transfer |
+| `FuturesTransfer` | `POST /v1/futures/transfer` | Transfer |
+| `PointAccount` | `GET /v2/point/account` | Read |
+| `PointTransfer` | `POST /v2/point/transfer` | Transfer |
+| `UID` | `GET /v2/user/uid` | Read |
+| `APIKeys` | `GET /v2/user/api-key` | Read |
+
 ## 구현 순서
 
 1. 공개 REST, 오류 정규화, 요청 제한과 mock 테스트 완료
@@ -251,4 +299,3 @@ sequence gap, WebSocket 연결 세대 변경 또는 refresh 정렬 실패가 발
 - SDK의 여러 공인 송신 IP 경로는 제한 우회가 아니라 키 허용 목록 분리와 가용성 목적으로만 사용한다.
 - 지역 제한을 우회하는 endpoint나 프록시 기능은 제공하지 않는다.
 - AWS 호스트 사용 여부는 endpoint 설정으로 명시하며, 서명에는 실제 요청 호스트를 사용한다.
-- 입출금 실행은 프로젝트 비목표이므로 구현하지 않는다.
