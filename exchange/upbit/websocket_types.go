@@ -16,12 +16,17 @@ const (
 )
 
 // StreamDataType은 구독할 데이터 종류와 마켓 목록이다.
+// Categories와 IncludeBody는 announcement, Timeframe과 Indicators는 indicator와 indicator_signal에서만 쓴다.
 type StreamDataType struct {
-	Type         string   `json:"type"`
-	Codes        []string `json:"codes,omitempty"`
-	Level        Decimal  `json:"level,omitempty"`
-	OnlySnapshot bool     `json:"is_only_snapshot,omitempty"`
-	OnlyRealtime bool     `json:"is_only_realtime,omitempty"`
+	Type         string                 `json:"type"`
+	Codes        []string               `json:"codes,omitempty"`
+	Level        Decimal                `json:"level,omitempty"`
+	Categories   []AnnouncementCategory `json:"categories,omitempty"`
+	IncludeBody  bool                   `json:"include_body,omitempty"`
+	Timeframe    IndicatorTimeframe     `json:"timeframe,omitempty"`
+	Indicators   []IndicatorSpec        `json:"indicators,omitempty"`
+	OnlySnapshot bool                   `json:"is_only_snapshot,omitempty"`
+	OnlyRealtime bool                   `json:"is_only_realtime,omitempty"`
 }
 
 // MarshalJSON은 호가 모아보기 level을 정밀도 손실 없는 JSON 숫자로 변환한다.
@@ -31,13 +36,19 @@ func (dataType StreamDataType) MarshalJSON() ([]byte, error) {
 		level = json.RawMessage(dataType.Level)
 	}
 	return json.Marshal(struct {
-		Type         string          `json:"type"`
-		Codes        []string        `json:"codes,omitempty"`
-		Level        json.RawMessage `json:"level,omitempty"`
-		OnlySnapshot bool            `json:"is_only_snapshot,omitempty"`
-		OnlyRealtime bool            `json:"is_only_realtime,omitempty"`
+		Type         string                 `json:"type"`
+		Codes        []string               `json:"codes,omitempty"`
+		Level        json.RawMessage        `json:"level,omitempty"`
+		Categories   []AnnouncementCategory `json:"categories,omitempty"`
+		IncludeBody  bool                   `json:"include_body,omitempty"`
+		Timeframe    IndicatorTimeframe     `json:"timeframe,omitempty"`
+		Indicators   []IndicatorSpec        `json:"indicators,omitempty"`
+		OnlySnapshot bool                   `json:"is_only_snapshot,omitempty"`
+		OnlyRealtime bool                   `json:"is_only_realtime,omitempty"`
 	}{
 		Type: dataType.Type, Codes: dataType.Codes, Level: level,
+		Categories: dataType.Categories, IncludeBody: dataType.IncludeBody,
+		Timeframe: dataType.Timeframe, Indicators: dataType.Indicators,
 		OnlySnapshot: dataType.OnlySnapshot, OnlyRealtime: dataType.OnlyRealtime,
 	})
 }
@@ -55,9 +66,11 @@ type StreamError struct {
 	Message string `json:"message"`
 }
 
-// StreamMessage는 public/private 이벤트, 상태 또는 오류 한 건이다.
+// StreamMessage는 public/private/info 이벤트, LIST_SUBSCRIPTIONS 응답, 상태 또는 오류 한 건이다.
+// Method는 LIST_SUBSCRIPTIONS 같은 요청 응답에만 채워지며 이때 Type은 비어 있다.
 type StreamMessage struct {
 	Type       string
+	Method     string
 	Code       string
 	StreamType string
 	Timestamp  int64

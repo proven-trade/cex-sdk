@@ -253,8 +253,8 @@ func (request PlaceOrderRequest) validate() error {
 	if request.SMPType != "" && !request.SMPType.valid() {
 		return validationError("unsupported SMP type %q", request.SMPType)
 	}
-	if request.TimeInForce == TimeInForcePostOnly && request.SMPType != "" {
-		return validationError("post_only cannot be combined with SMP")
+	if request.TimeInForce == TimeInForcePostOnly && request.SMPType != "" && request.SMPType != SMPTypeNone {
+		return validationError("post_only can only be combined with smp_type none")
 	}
 	if strings.TrimSpace(request.Identifier) != request.Identifier {
 		return validationError("identifier cannot have surrounding whitespace")
@@ -464,7 +464,7 @@ func (value TimeInForce) valid() bool {
 }
 
 func (value SMPType) valid() bool {
-	return value == SMPTypeCancelMaker || value == SMPTypeCancelTaker || value == SMPTypeReduce
+	return value == SMPTypeCancelMaker || value == SMPTypeCancelTaker || value == SMPTypeReduce || value == SMPTypeNone
 }
 
 func validationError(format string, values ...any) error {

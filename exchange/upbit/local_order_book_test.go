@@ -206,7 +206,7 @@ func TestUpbitCurrentOrderBookSubscriptionOptions(t *testing.T) {
 			Type: "orderbook", Codes: []string{"krw-btc.5"}, Level: "10000",
 		}},
 		Format: StreamFormatSimpleList,
-	}, false)
+	}, streamKindPublic)
 	if err != nil {
 		t.Fatalf("validateStreamRequest() error = %v", err)
 	}
@@ -217,12 +217,12 @@ func TestUpbitCurrentOrderBookSubscriptionOptions(t *testing.T) {
 	}
 	if _, err := validateStreamRequest(StreamRequest{
 		Types: []StreamDataType{{Type: "orderbook", Codes: []string{"KRW-BTC.3"}}},
-	}, false); err == nil {
+	}, streamKindPublic); err == nil {
 		t.Fatal("unsupported order book unit error = nil")
 	}
 	if _, err := validateStreamRequest(StreamRequest{
 		Types: []StreamDataType{{Type: "ticker", Codes: []string{"KRW-BTC"}, Level: "10000"}},
-	}, false); err == nil {
+	}, streamKindPublic); err == nil {
 		t.Fatal("ticker level error = nil")
 	}
 	if _, err := NewLocalOrderBook(LocalOrderBookConfig{Market: "KRW-BTC"}); !errors.Is(err, trade.ErrMissingEgressRoute) {

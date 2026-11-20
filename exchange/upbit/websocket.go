@@ -22,12 +22,14 @@ import (
 const (
 	DefaultPublicWebSocketURL  = "wss://api.upbit.com/websocket/v1"
 	DefaultPrivateWebSocketURL = "wss://api.upbit.com/websocket/v1/private"
+	DefaultInfoWebSocketURL    = "wss://api.upbit.com/websocket/v1/info"
 	defaultStreamPingInterval  = 30 * time.Second
 	defaultStreamPingTimeout   = 10 * time.Second
 	maxStreamDataTypes         = 1000
 )
 
-// StreamClientConfig는 업비트 public/private WebSocket 설정이다.
+// StreamClientConfig는 업비트 public/private/info WebSocket 설정이다.
+// InfoWebSocketURL은 기술적 지표(indicator, indicator_signal) 연결 주소이며 비우면 DefaultInfoWebSocketURL을 쓴다.
 type StreamClientConfig struct {
 	Connector              corestream.Connector
 	Credentials            *credential.Descriptor
@@ -35,6 +37,7 @@ type StreamClientConfig struct {
 	DefaultEgressRouteID   transport.EgressRouteID
 	PublicWebSocketURL     string
 	PrivateWebSocketURL    string
+	InfoWebSocketURL       string
 	AllowInsecureWebSocket bool
 	NonceSource            NonceSource
 	TicketSource           NonceSource
@@ -48,7 +51,7 @@ type StreamClientConfig struct {
 	PingTimeout  time.Duration
 }
 
-// StreamClient는 업비트 public/private WebSocket 세션을 생성한다.
+// StreamClient는 업비트 public/private/info WebSocket 세션을 생성한다.
 type StreamClient struct {
 	connector            corestream.Connector
 	credentials          *credential.Descriptor
@@ -56,6 +59,7 @@ type StreamClient struct {
 	defaultRouteID       transport.EgressRouteID
 	publicURL            string
 	privateURL           string
+	infoURL              string
 	nonceSource          NonceSource
 	ticketSource         NonceSource
 	observer             corestream.StateObserver
@@ -82,6 +86,9 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 	if config.PrivateWebSocketURL == "" {
 		config.PrivateWebSocketURL = DefaultPrivateWebSocketURL
 	}
+	if config.InfoWebSocketURL == "" {
+		config.InfoWebSocketURL = DefaultInfoWebSocketURL
+	}
 	publicURL, err := validateWebSocketURL(config.PublicWebSocketURL, config.AllowInsecureWebSocket)
 	if err != nil {
 		return nil, fmt.Errorf("invalid Upbit public WebSocket URL: %w", err)
@@ -89,6 +96,10 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 	privateURL, err := validateWebSocketURL(config.PrivateWebSocketURL, config.AllowInsecureWebSocket)
 	if err != nil {
 		return nil, fmt.Errorf("invalid Upbit private WebSocket URL: %w", err)
+	}
+	infoURL, err := validateWebSocketURL(config.InfoWebSocketURL, config.AllowInsecureWebSocket)
+	if err != nil {
+		return nil, fmt.Errorf("invalid Upbit info WebSocket URL: %w", err)
 	}
 	if config.NonceSource == nil {
 		config.NonceSource = randomNonce
@@ -133,6 +144,7 @@ func NewStreamClient(config StreamClientConfig) (*StreamClient, error) {
 		defaultRouteID:       defaultRouteID,
 		publicURL:            publicURL,
 		privateURL:           privateURL,
+		infoURL:              infoURL,
 		nonceSource:          config.NonceSource,
 		ticketSource:         config.TicketSource,
 		observer:             config.Observer,
@@ -150,12 +162,21 @@ type managedStream struct {
 	ticketSource NonceSource
 }
 
+// streamKind는 연결 종류로, 구독할 수 있는 데이터 종류를 정한다.
+type streamKind int
+
+const (
+	streamKindPublic streamKind = iota
+	streamKindPrivate
+	streamKindInfo
+)
+
 // PublicStream은 업비트 시세 WebSocket 연결을 관리한다.
 type PublicStream struct{ managed *managedStream }
 
 // PublicStream은 선택한 송신 경로에 고정된 public 시세 세션을 생성한다.
 func (client *StreamClient) PublicStream(request StreamRequest, options ...trade.RequestOption) (*PublicStream, error) {
-	validated, err := validateStreamRequest(request, false)
+	validated, err := validateStreamRequest(request, streamKindPublic)
 	if err != nil {
 		return nil, err
 	}
@@ -203,12 +224,79 @@ func (public *PublicStream) hasOrderBookSubscription(market string) bool {
 	return false
 }
 
-// PrivateStream은 업비트 내 주문·자산 WebSocket 연결을 관리한다.
+// ListSubscriptions는 현재 public 연결에서 구독 중인 스트림 목록을 요청하고 요청 ticket을 반환한다.
+// 응답은 Run handler에 Method가 LIST_SUBSCRIPTIONS인 StreamMessage로 전달되며 StreamSubscriptions로 decode한다.
+// 연결 중이 아니면 오류를 반환한다. 요청 수 제한(연결당 초당 5회, 분당 100회)은 호출자가 지킨다.
+func (public *PublicStream) ListSubscriptions(ctx context.Context) (string, error) {
+	return public.managed.listSubscriptions(ctx)
+}
+
+// PrivateStream은 업비트 내 주문·자산·공지사항 WebSocket 연결을 관리한다.
 type PrivateStream struct{ managed *managedStream }
 
-// PrivateStream은 JWT handshake 후 private 이벤트를 구독하는 세션을 생성한다.
+// PrivateStream은 JWT handshake 후 private 이벤트(myOrder, myAsset, announcement)를 구독하는 세션을 생성한다.
 func (client *StreamClient) PrivateStream(request StreamRequest, options ...trade.RequestOption) (*PrivateStream, error) {
-	validated, err := validateStreamRequest(request, true)
+	managed, err := client.newAuthenticatedStream(request, streamKindPrivate, client.privateDialRequest, options...)
+	if err != nil {
+		return nil, err
+	}
+	return &PrivateStream{managed: managed}, nil
+}
+
+// Run은 private 주문·자산·공지사항 이벤트를 순서대로 decode해 handler에 전달한다.
+func (private *PrivateStream) Run(ctx context.Context, handler func(context.Context, StreamMessage) error) error {
+	return private.managed.run(ctx, handler)
+}
+
+// Close는 private stream 세션을 종료한다.
+func (private *PrivateStream) Close() error { return private.managed.session.Close() }
+
+// Generation은 성공한 private 연결 세대 번호를 반환한다.
+func (private *PrivateStream) Generation() uint64 { return private.managed.session.Generation() }
+
+// ListSubscriptions는 현재 private 연결에서 구독 중인 스트림 목록을 요청하고 요청 ticket을 반환한다.
+func (private *PrivateStream) ListSubscriptions(ctx context.Context) (string, error) {
+	return private.managed.listSubscriptions(ctx)
+}
+
+// InfoStream은 업비트 기술적 지표(indicator, indicator_signal) WebSocket 연결을 관리한다.
+type InfoStream struct{ managed *managedStream }
+
+// InfoStream은 JWT handshake 후 지표 값과 지표 조건 이벤트를 구독하는 세션을 생성한다.
+// 기술적 지표 WebSocket은 KR 문서(docs.upbit.com/kr)에만 있고 API Key에 별도 권한(scope)이 필요하지 않다.
+func (client *StreamClient) InfoStream(request StreamRequest, options ...trade.RequestOption) (*InfoStream, error) {
+	managed, err := client.newAuthenticatedStream(request, streamKindInfo, client.infoDialRequest, options...)
+	if err != nil {
+		return nil, err
+	}
+	return &InfoStream{managed: managed}, nil
+}
+
+// Run은 지표 값과 지표 조건 이벤트를 순서대로 decode해 handler에 전달한다.
+func (info *InfoStream) Run(ctx context.Context, handler func(context.Context, StreamMessage) error) error {
+	return info.managed.run(ctx, handler)
+}
+
+// Close는 info stream 세션을 종료한다.
+func (info *InfoStream) Close() error { return info.managed.session.Close() }
+
+// Generation은 성공한 info 연결 세대 번호를 반환한다.
+func (info *InfoStream) Generation() uint64 { return info.managed.session.Generation() }
+
+// ListSubscriptions는 현재 info 연결에서 구독 중인 스트림 목록을 요청하고 요청 ticket을 반환한다.
+func (info *InfoStream) ListSubscriptions(ctx context.Context) (string, error) {
+	return info.managed.listSubscriptions(ctx)
+}
+
+// newAuthenticatedStream은 JWT로 인증하는 private/info 세션을 만든다. 세션 생성 전에 송신 경로와 권한을 검사해
+// 허용되지 않은 경로에서는 Secret을 조회하지 않는다.
+func (client *StreamClient) newAuthenticatedStream(
+	request StreamRequest,
+	kind streamKind,
+	requestSource corestream.DialRequestSource,
+	options ...trade.RequestOption,
+) (*managedStream, error) {
+	validated, err := validateStreamRequest(request, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -226,24 +314,13 @@ func (client *StreamClient) PrivateStream(request StreamRequest, options ...trad
 		return nil, client.authorizationError(err)
 	}
 	managed := &managedStream{request: validated, ticketSource: client.ticketSource}
-	session, err := client.newSession(routeID, corestream.DialRequest{}, client.privateDialRequest, managed.subscribe)
+	session, err := client.newSession(routeID, corestream.DialRequest{}, requestSource, managed.subscribe)
 	if err != nil {
 		return nil, err
 	}
 	managed.session = session
-	return &PrivateStream{managed: managed}, nil
+	return managed, nil
 }
-
-// Run은 private 주문·자산 이벤트를 순서대로 decode해 handler에 전달한다.
-func (private *PrivateStream) Run(ctx context.Context, handler func(context.Context, StreamMessage) error) error {
-	return private.managed.run(ctx, handler)
-}
-
-// Close는 private stream 세션을 종료한다.
-func (private *PrivateStream) Close() error { return private.managed.session.Close() }
-
-// Generation은 성공한 private 연결 세대 번호를 반환한다.
-func (private *PrivateStream) Generation() uint64 { return private.managed.session.Generation() }
 
 func (client *StreamClient) newSession(
 	routeID transport.EgressRouteID,
@@ -326,6 +403,15 @@ func encodeSubscription(ticket string, types []StreamDataType, format StreamForm
 }
 
 func (client *StreamClient) privateDialRequest(ctx context.Context) (corestream.DialRequest, error) {
+	return client.authenticatedDialRequest(ctx, client.privateURL)
+}
+
+func (client *StreamClient) infoDialRequest(ctx context.Context) (corestream.DialRequest, error) {
+	return client.authenticatedDialRequest(ctx, client.infoURL)
+}
+
+// authenticatedDialRequest는 연결마다 새 nonce로 서명한 JWT를 Authorization 헤더에 담는다.
+func (client *StreamClient) authenticatedDialRequest(ctx context.Context, endpoint string) (corestream.DialRequest, error) {
 	material, err := client.credentialProvider.Resolve(ctx, client.credentials.SecretRef)
 	defer material.Destroy()
 	if err != nil {
@@ -343,7 +429,7 @@ func (client *StreamClient) privateDialRequest(ctx context.Context) (corestream.
 		return corestream.DialRequest{}, client.authenticationError(err)
 	}
 	return corestream.DialRequest{
-		Endpoint: client.privateURL,
+		Endpoint: endpoint,
 		Header:   http.Header{"Authorization": {"Bearer " + token}},
 	}, nil
 }
@@ -375,7 +461,7 @@ func (client *StreamClient) authorizationError(cause error) error {
 	return &trade.APIError{Category: trade.ErrorAuthorization, Exchange: model.ExchangeUpbit, AccountID: accountID, Cause: cause}
 }
 
-func validateStreamRequest(request StreamRequest, private bool) (StreamRequest, error) {
+func validateStreamRequest(request StreamRequest, kind streamKind) (StreamRequest, error) {
 	if request.Format == "" {
 		request.Format = StreamFormatDefault
 	}
@@ -395,20 +481,36 @@ func validateStreamRequest(request StreamRequest, private bool) (StreamRequest, 
 		if dataType.Type == "" || strings.TrimSpace(dataType.Type) != dataType.Type || dataType.OnlySnapshot && dataType.OnlyRealtime {
 			return StreamRequest{}, validationError("invalid WebSocket data type")
 		}
-		if private {
-			if dataType.Type != "myOrder" && dataType.Type != "myAsset" {
+		switch kind {
+		case streamKindPrivate:
+			if dataType.Type != "myOrder" && dataType.Type != "myAsset" && dataType.Type != StreamTypeAnnouncement {
 				return StreamRequest{}, validationError("unsupported private WebSocket type %q", dataType.Type)
 			}
-			if dataType.Type == "myAsset" && len(dataType.Codes) > 0 {
-				return StreamRequest{}, validationError("myAsset does not accept market codes")
+			if dataType.Type != "myOrder" && len(dataType.Codes) > 0 {
+				return StreamRequest{}, validationError("%s does not accept market codes", dataType.Type)
 			}
-		} else if dataType.Type != "ticker" && dataType.Type != "trade" && dataType.Type != "orderbook" && !strings.HasPrefix(dataType.Type, "candle.") {
-			return StreamRequest{}, validationError("unsupported public WebSocket type %q", dataType.Type)
-		} else if len(dataType.Codes) == 0 {
-			return StreamRequest{}, validationError("public WebSocket type requires market codes")
+		case streamKindInfo:
+			if dataType.Type != StreamTypeIndicator && dataType.Type != StreamTypeIndicatorSignal {
+				return StreamRequest{}, validationError("unsupported info WebSocket type %q", dataType.Type)
+			}
+			if len(dataType.Codes) == 0 {
+				return StreamRequest{}, validationError("info WebSocket type requires market codes")
+			}
+		default:
+			if dataType.Type != "ticker" && dataType.Type != "trade" && dataType.Type != "orderbook" && !strings.HasPrefix(dataType.Type, "candle.") {
+				return StreamRequest{}, validationError("unsupported public WebSocket type %q", dataType.Type)
+			}
+			if len(dataType.Codes) == 0 {
+				return StreamRequest{}, validationError("public WebSocket type requires market codes")
+			}
 		}
+		extended, err := validateStreamExtensionFields(dataType)
+		if err != nil {
+			return StreamRequest{}, err
+		}
+		dataType = extended
 		if dataType.Level != "" {
-			if private || dataType.Type != "orderbook" {
+			if kind != streamKindPublic || dataType.Type != "orderbook" {
 				return StreamRequest{}, validationError("only public orderbook accepts level")
 			}
 			if _, err := nonnegativeStreamDecimal("orderbook level", dataType.Level); err != nil {
@@ -442,6 +544,9 @@ func validateStreamRequest(request StreamRequest, private bool) (StreamRequest, 
 		}
 		seen[key] = struct{}{}
 		types = append(types, dataType)
+	}
+	if err := validateIndicatorCombinations(types); err != nil {
+		return StreamRequest{}, err
 	}
 	request.Types = types
 	return request, nil

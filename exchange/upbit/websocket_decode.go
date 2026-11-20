@@ -11,6 +11,8 @@ import (
 type streamWireMessage struct {
 	Type             string       `json:"type"`
 	SimpleType       string       `json:"ty"`
+	Method           string       `json:"method"`
+	SimpleMethod     string       `json:"mthd"`
 	Code             string       `json:"code"`
 	SimpleCode       string       `json:"cd"`
 	StreamType       string       `json:"stream_type"`
@@ -22,6 +24,7 @@ type streamWireMessage struct {
 }
 
 // DecodeStreamMessage는 DEFAULT, SIMPLE 또는 JSON_LIST 메시지 envelope를 분류한다.
+// type 대신 method가 있는 LIST_SUBSCRIPTIONS 응답도 이벤트 한 건으로 분류한다.
 func DecodeStreamMessage(message corestream.Message) (StreamMessage, error) {
 	trimmed := bytes.TrimSpace(message.Data)
 	if !json.Valid(trimmed) {
@@ -46,6 +49,10 @@ func DecodeStreamMessage(message corestream.Message) (StreamMessage, error) {
 	if typeValue == "" {
 		typeValue = wire.SimpleType
 	}
+	method := wire.Method
+	if method == "" {
+		method = wire.SimpleMethod
+	}
 	code := wire.Code
 	if code == "" {
 		code = wire.SimpleCode
@@ -58,11 +65,12 @@ func DecodeStreamMessage(message corestream.Message) (StreamMessage, error) {
 	if timestamp == 0 {
 		timestamp = wire.SimpleTimestamp
 	}
-	if typeValue == "" && wire.Status == "" && wire.Error == nil {
-		return StreamMessage{}, fmt.Errorf("Upbit stream message has no type, status, or error")
+	if typeValue == "" && method == "" && wire.Status == "" && wire.Error == nil {
+		return StreamMessage{}, fmt.Errorf("Upbit stream message has no type, method, status, or error")
 	}
 	return StreamMessage{
 		Type:       typeValue,
+		Method:     method,
 		Code:       code,
 		StreamType: streamType,
 		Timestamp:  timestamp,

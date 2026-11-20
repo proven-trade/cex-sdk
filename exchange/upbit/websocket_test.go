@@ -386,6 +386,7 @@ func newTestUpbitStreamClient(
 		DefaultEgressRouteID:   "route-a",
 		PublicWebSocketURL:     "ws://public.example.test/websocket/v1",
 		PrivateWebSocketURL:    "ws://private.example.test/websocket/v1/private",
+		InfoWebSocketURL:       "ws://info.example.test/websocket/v1/info",
 		AllowInsecureWebSocket: true,
 		NonceSource:            nonceSource,
 		TicketSource:           ticketSource,

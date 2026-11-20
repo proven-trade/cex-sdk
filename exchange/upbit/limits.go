@@ -17,6 +17,8 @@ type rateGroup struct {
 	name      string
 	perSecond int
 	account   bool
+	// window는 perSecond를 적용하는 구간이다. 0이면 1초이며, 2초당 1회인 order-cancel-all만 지정한다.
+	window time.Duration
 }
 
 var (
@@ -27,7 +29,17 @@ var (
 	candleRate    = rateGroup{name: "candle", perSecond: 10}
 	defaultRate   = rateGroup{name: "default", perSecond: 30, account: true}
 	orderRate     = rateGroup{name: "order", perSecond: 12, account: true}
+	orderTestRate = rateGroup{name: "order-test", perSecond: 8, account: true}
+	cancelAllRate = rateGroup{name: "order-cancel-all", perSecond: 1, account: true, window: 2 * time.Second}
 )
+
+// rateWindow는 그룹 한도를 적용하는 구간을 반환한다.
+func (group rateGroup) rateWindow() time.Duration {
+	if group.window <= 0 {
+		return time.Second
+	}
+	return group.window
+}
 
 func rateLimitCharges(
 	limiter *ratelimit.Limiter,
@@ -43,9 +55,9 @@ func rateLimitCharges(
 	if strings.TrimSpace(scopeID) == "" {
 		return nil, "", fmt.Errorf("Upbit rate group %q requires %s scope ID", group.name, scope)
 	}
-	key := rateLimitKey(scope, scopeID, group.name)
+	key := rateLimitKey(scope, scopeID, group)
 	if err := limiter.SetRule(ratelimit.Rule{
-		Key: key, Limit: limit, Window: time.Second,
+		Key: key, Limit: limit, Window: group.rateWindow(),
 	}); err != nil {
 		return nil, "", err
 	}
@@ -87,6 +99,10 @@ func parseRemainingRequest(value string) (string, int, bool) {
 	return group, remaining, group != "" && remaining >= 0
 }
 
-func rateLimitKey(scope, scopeID, group string) string {
-	return fmt.Sprintf("upbit:%s:%s:%s:1second", scope, scopeID, group)
+func rateLimitKey(scope, scopeID string, group rateGroup) string {
+	suffix := "1second"
+	if window := group.rateWindow(); window != time.Second {
+		suffix = strconv.FormatFloat(window.Seconds(), 'f', -1, 64) + "seconds"
+	}
+	return fmt.Sprintf("upbit:%s:%s:%s:%s", scope, scopeID, group.name, suffix)
 }

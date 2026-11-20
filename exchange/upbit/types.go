@@ -171,6 +171,8 @@ const (
 	SMPTypeCancelMaker SMPType = "cancel_maker"
 	SMPTypeCancelTaker SMPType = "cancel_taker"
 	SMPTypeReduce      SMPType = "reduce"
+	// SMPTypeNone은 자전거래 방지를 적용하지 않는다. post_only 주문은 이 값과만 함께 쓸 수 있다.
+	SMPTypeNone SMPType = "none"
 )
 
 // OrderState는 주문 처리 상태다.
