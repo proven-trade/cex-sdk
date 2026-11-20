@@ -54,6 +54,93 @@ ticker, err := client.Ticker(ctx, "BTC_USDT", trade.WithEgressRoute("seoul-b"))
 
 가격, 수량, 금액, 수수료는 `float64`로 변환하지 않고 문자열로 보존합니다. 객체와 배열 항목의 `Raw`에는 해당 원본 JSON을 보존합니다. 캔들은 `timestamp, quote volume, close, high, low, open, base volume, closed` 순서로 해석하며, 구형 7개 필드 응답은 `BaseVolume`을 빈 문자열로 둡니다.
 
+## 추가 REST API
+
+아래 메서드는 모두 `*Client`에 있고 가격·수량·수수료를 문자열로 보존하며 항목마다 `Raw` 원본 JSON을 담습니다. 변경 API(주문·이체·출금·서브계정 관리)는 자동 재시도하지 않습니다. 전송 결과가 불명확하면 `UNKNOWN_EXECUTION_STATE`로 반환하므로 조회 API로 최종 상태를 확인해야 합니다. `credential.Descriptor`에 해당 권한이 없으면 요청 전에 거부됩니다.
+
+### 주문 (`orders_ext.go`)
+
+| 메서드 | API | 권한 |
+|---|---|---|
+| `FinishedOrders` | `GET /spot/orders?status=finished` (거래쌍·방향·기간·페이지) | Read |
+| `PlaceBatchOrders` | `POST /spot/batch_orders` (최대 4거래쌍, 거래쌍당 10건) | Trade |
+| `AmendOrder` | `PATCH /spot/orders/{order_id}` (수량 또는 가격) | Trade |
+| `AmendBatchOrders` | `POST /spot/amend_batch_orders` (최대 5건) | Trade |
+| `CancelAllOrders` | `DELETE /spot/orders` (거래쌍·방향 선택) | Trade |
+| `CancelBatchOrders` | `POST /spot/cancel_batch_orders` (최대 20건) | Trade |
+| `CountdownCancelAll` | `POST /spot/countdown_cancel_all` (5초 이상, 0은 해제) | Trade |
+| `PriceOrders` | `GET /spot/price_orders` | Read |
+| `PlacePriceOrder` | `POST /spot/price_orders` | Trade |
+| `CancelAllPriceOrders` | `DELETE /spot/price_orders` | Trade |
+| `PriceOrder` | `GET /spot/price_orders/{order_id}` | Read |
+| `CancelPriceOrder` | `DELETE /spot/price_orders/{order_id}` | Trade |
+
+일괄 주문·정정·취소는 HTTP 200이어도 항목별로 실패할 수 있으므로 `BatchOrder.Succeeded`, `CancelOrderResult.Succeeded`와 `Label`, `Message`를 확인해야 합니다. 시장가 가격 트리거 주문은 Gate.io 스키마상 `put.price`가 필수여서 `"0"`을 전송합니다.
+
+### 계정·수수료·통화 (`account_ext.go`)
+
+| 메서드 | API | 권한 |
+|---|---|---|
+| `Currencies` | `GET /spot/currencies` | 공개 |
+| `CurrencyInfo` | `GET /spot/currencies/{currency}` | 공개 |
+| `CurrencyChains` | `GET /wallet/currency_chains` | 공개 |
+| `SpotFee` | `GET /spot/fee` | Read |
+| `BatchSpotFee` | `GET /spot/batch_fee` (최대 50거래쌍) | Read |
+| `AccountBook` | `GET /spot/account_book` (30일 이내 구간) | Read |
+| `WalletTradeFee` | `GET /wallet/fee` | Read |
+| `TotalBalance` | `GET /wallet/total_balance` | Read |
+| `SmallBalances` | `GET /wallet/small_balance` | Read |
+| `SmallBalanceHistory` | `GET /wallet/small_balance_history` | Read |
+| `ConvertSmallBalance` | `POST /wallet/small_balance` | Transfer |
+
+### 입출금 (`wallet_ext.go`)
+
+| 메서드 | API | 권한 |
+|---|---|---|
+| `DepositAddress` | `GET /wallet/deposit_address` | Read |
+| `Deposits` | `GET /wallet/deposits` | Read |
+| `Withdrawals` | `GET /wallet/withdrawals` | Read |
+| `WithdrawStatuses` | `GET /wallet/withdraw_status` | Read |
+| `SavedAddresses` | `GET /wallet/saved_address` | Read |
+| `UIDPushOrders` | `GET /wallet/push` | Read |
+| `Withdraw` | `POST /withdrawals` | Withdraw |
+| `CancelWithdrawal` | `DELETE /withdrawals/{withdrawal_id}` | Withdraw |
+| `PushToUID` | `POST /withdrawals/push` | Withdraw |
+
+`WithdrawRequest.WithdrawOrderID`는 필수이며 중복 출금 방지 키입니다. 응답을 받지 못했다면 같은 값으로 `Withdrawals`를 조회해 처리 여부를 확인해야 합니다.
+
+### 계정 간·서브계정 이체 (`transfer_ext.go`)
+
+| 메서드 | API | 권한 |
+|---|---|---|
+| `Transfer` | `POST /wallet/transfers` | Transfer |
+| `TransferInfo` | `GET /wallet/transfers?tx_id=` | Read |
+| `TransferWithSubAccount` | `POST /wallet/sub_account_transfers` | Transfer |
+| `SubAccountToSubAccount` | `POST /wallet/sub_account_to_sub_account` | Transfer |
+| `SubAccountTransfers` | `GET /wallet/sub_account_transfers` | Read |
+| `TransferOrderStatus` | `GET /wallet/order_status` | Read |
+
+### 서브계정 (`subaccount_ext.go`)
+
+| 메서드 | API | 권한 |
+|---|---|---|
+| `SubAccounts` | `GET /sub_accounts` | Read |
+| `SubAccountInfo` | `GET /sub_accounts/{user_id}` | Read |
+| `SubAccountKeys` | `GET /sub_accounts/{user_id}/keys` | Read |
+| `SubAccountKeyInfo` | `GET /sub_accounts/{user_id}/keys/{key}` | Read |
+| `SubAccountModes` | `GET /sub_accounts/unified_mode` | Read |
+| `SubAccountBalances` | `GET /wallet/sub_account_balances` | Read |
+| `SubAccountMarginBalances` | `GET /wallet/sub_account_margin_balances` | Read |
+| `SubAccountFuturesBalances` | `GET /wallet/sub_account_futures_balances` | Read |
+| `SubAccountCrossMarginBalances` | `GET /wallet/sub_account_cross_margin_balances` | Read |
+| `CreateSubAccount` | `POST /sub_accounts` | Transfer |
+| `CreateSubAccountKey` | `POST /sub_accounts/{user_id}/keys` | Transfer |
+| `UpdateSubAccountKey` | `PUT /sub_accounts/{user_id}/keys/{key}` | Transfer |
+| `DeleteSubAccountKey` | `DELETE /sub_accounts/{user_id}/keys/{key}` | Transfer |
+| `LockSubAccount` / `UnlockSubAccount` | `POST /sub_accounts/{user_id}/lock`, `/unlock` | Transfer |
+
+`CreateSubAccountKey` 응답의 `Secret`은 생성 시점에만 확인할 수 있으므로 호출자가 즉시 보관해야 합니다. 마진·선물·교차마진 서브계정 잔고는 계정 종류별로 `available` 구조가 달라 `Available`에 원본 JSON을 그대로 둡니다.
+
 ## 과거 데이터 덤프
 
 REST 캔들은 Spot·Futures 모두 최근 10,000개보다 오래된 구간을 `Candlestick too long ago`로 거부하고, Spot 공개 체결은 30일보다 오래된 구간을 거부합니다. 그 이전 데이터는 Gate.io 공식 저장소 `https://download.gatedata.org`의 월별 gzip CSV를 `exchange/gateio/archive` 패키지로 읽습니다.

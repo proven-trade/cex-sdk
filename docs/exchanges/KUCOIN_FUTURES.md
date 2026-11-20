@@ -36,6 +36,96 @@ private API를 사용하려면 `credential.Provider`가 반환하는 `credential
 
 가격, 금액, 비율은 `float64`로 변환하지 않고 `Decimal` 문자열로 보존합니다. 객체와 배열 항목의 `Raw`에는 해당 `data` 원본 JSON을 보존합니다. 캔들은 `timestamp, open, high, low, close, volume, turnover` 순서이며, `From`과 `To`를 지정할 때 최대 500개 구간을 허용합니다.
 
+## 추가 REST API
+
+아래 메서드는 모두 `(ctx, request, ...trade.RequestOption)` 형태이며 응답 객체의 `Raw`에 `data` 원본 JSON을 보존합니다. 권한 열의 `Read`와 `Trade`는 `credential.PermissionRead`, `credential.PermissionTrade`이고, `-`는 인증이 필요 없는 public 요청입니다. 변경 요청(`Trade`)은 `OperationMutation`으로 실행하며 자동 재시도하지 않습니다. 가중치는 공식 문서 값입니다.
+
+### 시장 데이터
+
+| 메서드 | API | 권한 | 가중치 |
+|---|---|---|---|
+| `AllTickers` | `GET /api/v1/allTickers` | - | 5 |
+| `FullOrderBook` | `GET /api/v1/level2/snapshot` | - | 3 |
+| `MarkPrice` | `GET /api/v1/mark-price/{symbol}/current` | - | 3 |
+| `SpotIndexPrices` | `GET /api/v1/index/query` | - | 2 |
+| `InterestRates` | `GET /api/v1/interest/query` | - | 5 |
+| `PremiumIndexes` | `GET /api/v1/premium/query` | - | 3 |
+| `TradeStatistics` | `GET /api/v1/trade-statistics` | - | 3 |
+| `ServerTime` | `GET /api/v1/timestamp` | - | 2 |
+| `ServiceStatus` | `GET /api/v1/status` | - | 4 |
+| `CurrentFundingRate` | `GET /api/v1/funding-rate/{symbol}/current` | - | 2 |
+| `FundingRateHistory` | `GET /api/v1/contract/funding-rates` | - | 5 |
+| `RiskLimitLevels` | `GET /api/v1/contracts/risk-limit/{symbol}` | - | 5 |
+
+지수 이력(`SpotIndexPrices`, `InterestRates`, `PremiumIndexes`)은 `IndexHistoryRequest`로 `.KXBTUSDT`, `.XBTINT`, `.XBTUSDTMPI` 같은 지수 symbol과 시간 범위, `Reverse`·`Forward`, `Offset`, `MaxCount`(최대 100)를 받고 `HasMore`로 다음 페이지 여부를 반환합니다. `TradeStatistics`는 공식 문서가 Futures pool로 표기하지만 인증이 없는 요청이라 route별 Public bucket에서 차감합니다.
+
+### 주문
+
+| 메서드 | API | 권한 | 가중치 |
+|---|---|---|---|
+| `PlaceOrderTest` | `POST /api/v1/orders/test` | Trade | 2 |
+| `BatchPlaceOrders` | `POST /api/v1/orders/multi` | Trade | 20 |
+| `PlaceTakeProfitStopLossOrder` | `POST /api/v1/st-orders` | Trade | 2 |
+| `BatchCancelOrders` | `DELETE /api/v1/orders/multi-cancel` | Trade | 20 |
+| `CancelAllOrders` | `DELETE /api/v3/orders` | Trade | 10 |
+| `CancelAllStopOrders` | `DELETE /api/v1/stopOrders` | Trade | 15 |
+| `OrderByClientOrderID` | `GET /api/v1/orders/byClientOid` | Read | 5 |
+| `ClosedOrders` | `GET /api/v1/orders?status=done` | Read | 2 |
+| `StopOrders` | `GET /api/v1/stopOrders` | Read | 6 |
+| `RecentClosedOrders` | `GET /api/v1/recentDoneOrders` | Read | 5 |
+| `OpenOrderValue` | `GET /api/v1/openOrderStatistics` | Read | 10 |
+| `RecentFills` | `GET /api/v1/recentFills` | Read | 3 |
+
+- `PlaceOrderTest`는 서명과 요청 형식만 검증하며 주문은 매칭 엔진에 들어가지 않고 조회되지 않습니다.
+- `BatchPlaceOrders`는 최대 20건, `BatchCancelOrders`는 주문 ID 목록과 사용자 주문 ID 목록 중 정확히 하나로 최대 10건입니다. HTTP·envelope가 성공이어도 항목별 `Code`가 `200000`(취소는 `200`)이 아닐 수 있으므로 항목마다 확인해야 합니다.
+- `PlaceTakeProfitStopLossOrder`는 `PlaceOrderRequest`에 `TriggerStopUpPrice`(익절)·`TriggerStopDownPrice`(손절)와 `StopPriceType`(`TP`·`MP`·`IP`)을 더합니다. 둘 중 하나 이상이 필요합니다.
+- `ClosedOrders`와 `StopOrders`의 `PageSize`는 최대 1000입니다. 기존 `OpenOrders`는 여전히 `status=active`로 고정됩니다.
+- `Order`에는 스탑 주문 필드 `Stop`, `StopPriceType`, `StopTriggered`, `StopPrice`가 추가되었습니다.
+
+### 포지션과 증거금
+
+| 메서드 | API | 권한 | 가중치 |
+|---|---|---|---|
+| `PositionDetails` | `GET /api/v2/position` | Read | 2 |
+| `ClosedPositions` | `GET /api/v1/history-positions` | Read | 2 |
+| `MarginMode` | `GET /api/v2/position/getMarginMode` | Read | 2 |
+| `SwitchMarginMode` | `POST /api/v2/position/changeMarginMode` | Trade | 2 |
+| `BatchSwitchMarginMode` | `POST /api/v2/position/batchChangeMarginMode` | Trade | 2 |
+| `GetPositionMode` | `GET /api/v2/position/getPositionMode` | Read | 2 |
+| `SwitchPositionMode` | `POST /api/v2/position/switchPositionMode` | Trade | 2 |
+| `MaxOpenSize` | `GET /api/v2/getMaxOpenSize` | Read | 2 |
+| `MaxWithdrawMargin` | `GET /api/v1/margin/maxWithdrawMargin` | Read | 10 |
+| `CrossLeverage` | `GET /api/v2/getCrossUserLeverage` | Read | 2 |
+| `ChangeCrossLeverage` | `POST /api/v2/changeCrossUserLeverage` | Trade | 2 |
+| `AddIsolatedMargin` | `POST /api/v1/position/margin/deposit-margin` | Trade | 4 |
+| `RemoveIsolatedMargin` | `POST /api/v1/margin/withdrawMargin` | Trade | 10 |
+| `SetAutoDeposit` | `POST /api/v1/position/margin/auto-deposit-status` | Trade | 4 |
+| `CrossRiskLimits` | `GET /api/v2/batchGetCrossOrderLimit` | Read | 2 |
+| `CrossMarginRequirements` | `POST /api/v2/getCrossModeMarginRequirement` | Trade | 3 |
+| `ChangeRiskLimitLevel` | `POST /api/v1/position/risk-limit-level/change` | Trade | 5 |
+
+- `AddIsolatedMargin`은 중복 처리를 막는 고유 `BizNo`(36자 이하)가 필수입니다. 같은 `BizNo`로만 재전송해야 하며 SDK는 재시도하지 않습니다.
+- `SetAutoDeposit`은 거래소가 더 이상 권장하지 않는 abandoned endpoint입니다. 단방향 모드는 `Status`, 헤지 모드는 `LongStatus`·`ShortStatus`를 사용합니다.
+- `CrossMarginRequirements`는 상태를 바꾸지 않는 계산 요청이지만 공식 문서가 Futures(Trade) 권한을 요구하므로 `PermissionTrade`와 `OperationRead`로 실행합니다. 응답이 객체일 때와 배열일 때를 모두 목록으로 반환합니다.
+- `SwitchMarginMode`·`BatchSwitchMarginMode`는 열린 주문이나 포지션이 있으면 거래소가 거절하며, 일괄 전환의 계약별 실패는 결과의 `Errors`에 담깁니다.
+- `PositionMode`는 조회 응답의 정수와 전환 응답의 문자열을 같은 `"0"`(단방향)·`"1"`(헤지) 값으로 해석합니다.
+
+### 계정
+
+| 메서드 | API | 권한 | 가중치 |
+|---|---|---|---|
+| `Ledgers` | `GET /api/v1/transaction-history` | Read | 2 |
+| `ActualFee` | `GET /api/v1/trade-fees` | Read | 3 |
+| `FundingHistory` | `GET /api/v1/funding-history` | Read | 5 |
+| `SubAccountOverviews` | `GET /api/v1/account-overview-all` | Read | 6 |
+
+`Ledgers`와 `FundingHistory`는 `Offset`·`Forward`·`MaxCount` 기반 페이지를 사용하고 `HasMore`가 `true`이면 마지막 항목의 `offset`(원장) 또는 `id`(펀딩)로 이어서 조회합니다. `Ledgers`의 `Type`은 거래소 표기 그대로 `RealizedPNL`, `Deposit`, `Withdrawal`, `Transferin`, `TransferOut`을 사용합니다.
+
+### 아직 지원하지 않는 항목
+
+- Flex Transfer(`POST /api/v3/accounts/universal-transfer`)는 Management pool(가중치 4)과 `FlexTransfers` 권한을 쓰는 Spot·Futures 공용 이체 API라 이 패키지가 아닌 `exchange/kucoin`의 이체 범위로 남겨 두었습니다.
+- WebSocket 항목(`/contract/instrument`, `/contract/announcement`, `/contractMarket/snapshot`, `/contractMarket/advancedOrders`, `/contract/marginMode`, `/contract/crossLeverage`)은 이번 REST 작업에서 구현하지 않았습니다.
+
 ## 생성 예시
 
 ```go
@@ -198,7 +288,7 @@ token과 `WebSocketToken.Raw`에는 짧은 수명의 접속 자격이 포함됩�
 - `MarginMode`는 `ISOLATED` 또는 `CROSS`이며 `PositionSide`는 생략하거나 `BOTH`, `LONG`, `SHORT`를 사용합니다.
 - 레버리지는 생략하거나 1~1,000 범위에서 지정하며 실제 허용값은 계약 규칙과 계정 설정을 따라야 합니다.
 - 취소는 거래소 주문 ID와 사용자 주문 ID 중 정확히 하나를 받습니다.
-- 조건부 주문, 전체 포지션 종료, `qty`·`valueQty`, RPI 주문은 1차 범위에서 제외합니다.
+- `PlaceOrder`·`PlaceOrderTest`·`BatchPlaceOrders`는 위 규칙의 `PlaceOrderRequest`를 그대로 사용합니다. 익절·손절은 `PlaceTakeProfitStopLossOrder`로 지정하며, 단일 조건 가격 스탑 주문(`stop`·`stopPrice`), 전체 포지션 종료(`closeOrder`), `qty`·`valueQty`, RPI 주문은 요청 타입이 지원하지 않습니다.
 
 주문 생성·취소의 전송 오류, 응답 본문 읽기 실패, 성공 응답 JSON 파싱 실패, 거래소 `500000`과 처리 여부를 확정할 수 없는 일부 오류는 실제 처리 여부를 단정할 수 없습니다. SDK는 자동 재시도하지 않고 `trade.ErrUnknownExecutionState`로 반환합니다. 불명확한 주문 생성 결과는 고유한 `ClientOrderID`를 기준으로 거래소 상태를 확인한 뒤 처리해야 합니다.
 

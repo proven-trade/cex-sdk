@@ -32,6 +32,24 @@ func (value *Decimal) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// OptionalDecimal은 null 또는 빈 문자열이 올 수 있는 십진 값이며 비어 있으면 빈 문자열로 남는다.
+type OptionalDecimal string
+
+// UnmarshalJSON은 null과 빈 문자열을 빈 값으로 처리하고 나머지는 Decimal 규칙으로 검증한다.
+func (value *OptionalDecimal) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if bytes.Equal(trimmed, []byte("null")) || bytes.Equal(trimmed, []byte(`""`)) {
+		*value = ""
+		return nil
+	}
+	var decimal Decimal
+	if err := decimal.UnmarshalJSON(trimmed); err != nil {
+		return err
+	}
+	*value = OptionalDecimal(decimal)
+	return nil
+}
+
 // Contract는 Futures 계약 규칙과 현재 시장 상태다.
 type Contract struct {
 	Symbol                        string          `json:"symbol"`
@@ -279,6 +297,10 @@ type Order struct {
 	FilledValue      Decimal         `json:"filledValue"`
 	Status           string          `json:"status"`
 	ReduceOnly       bool            `json:"reduceOnly"`
+	Stop             string          `json:"stop"`
+	StopPriceType    string          `json:"stopPriceType"`
+	StopTriggered    bool            `json:"stopTriggered"`
+	StopPrice        OptionalDecimal `json:"stopPrice"`
 	Raw              json.RawMessage `json:"-"`
 }
 

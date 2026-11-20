@@ -11,7 +11,7 @@
 - UAT user WebSocket: `wss://uat-stream.3ona.co/exchange/v1/user`
 - 초기 상품: Spot
 
-공식 2026년 변경 로그가 유지되는 현행 Exchange v1만 대상으로 한다. 구형 기본 `book.{instrument_name}` 구독과 100ms full snapshot 구독은 이미 폐기됐으므로 구현하지 않는다. Margin·Derivatives와 고급 조건부 주문은 native 타입이 안정된 뒤 별도 상품 단계로 확장한다.
+공식 2026년 변경 로그가 유지되는 현행 Exchange v1만 대상으로 한다. 구형 기본 `book.{instrument_name}` 구독과 100ms full snapshot 구독은 이미 폐기됐으므로 구현하지 않는다. Margin·Derivatives 전용 상품 라인은 별도 상품 단계로 확장하며, Spot에서 쓸 수 있는 고급 조건부 주문과 입출금 REST는 아래 「추가 REST API」에 구현되어 있다.
 
 현재 `exchange/cryptocom`의 공개·private REST, 공통 Spot API, public market·private user WebSocket, 로컬 오더북과 mock 자동 테스트가 구현되어 있다. 실제 계정 검증 전이므로 live smoke 상태는 `예정`으로 유지한다.
 
@@ -223,6 +223,71 @@ err = book.Run(ctx, public, func(_ context.Context, view cryptocom.LocalOrderBoo
 })
 ```
 
+## 추가 REST API
+
+공식 REST 문서에서 확인한 추가 메서드다. 모두 `*Client` 메서드이며 요청별 `trade.RequestOption`(송신 경로)을 받는다. mutation은 자동 재시도하지 않고, 전송 결과가 불명확하면 `UNKNOWN_EXECUTION_STATE`로 반환한다. 주문·취소·정정 응답은 비동기 접수 확인일 뿐이므로 `user.order`·주문 상세로 최종 상태를 확인한다. 요청 제한은 `create-order`·`cancel-order`·`cancel-all-orders`만 15회/100ms 주문 bucket이고 나머지 private 메서드는 메서드별 3회/100ms bucket이다.
+
+### 공개 시세 (권한 불필요, IP 기준 100회/초)
+
+| 메서드 | API |
+|---|---|
+| `GetValuations` | `GET public/get-valuations` (index·mark·funding 시계열) |
+| `DepositInstruments` | `GET public/get-deposit-instruments` |
+| `GetRiskParameters` | `GET public/get-risk-parameters` |
+
+### 주문 (권한 `trade`)
+
+| 메서드 | API |
+|---|---|
+| `AmendOrder` | `POST private/amend-order` (취소 후 재생성, 수량 감소만 큐 우선순위 유지) |
+| `CancelAllOrders` | `POST private/cancel-all-orders` (`LIMIT`·`ALL`) |
+| `CreateOrderList` | `POST private/create-order-list` (`contingency_type=LIST`, 1~10건, 항목별 `code`) |
+| `CancelOrderList` | `POST private/cancel-order-list` (항목별 `code`) |
+| `CreateAdvancedOrder` | `POST private/advanced/create-order` (STOP_LOSS·STOP_LIMIT·TAKE_PROFIT·TAKE_PROFIT_LIMIT) |
+| `AmendAdvancedOrder` | `POST private/advanced/amend-order` (`new_price` `0`이면 시장가 전환) |
+| `CreateOCO` / `CancelOCO` | `POST private/advanced/create-oco` / `cancel-oco` (Spot 전용, 트리거는 `MARK_PRICE`만) |
+| `CreateOTO` / `CancelOTO` | `POST private/advanced/create-oto` / `cancel-oto` |
+| `CreateOTOCO` / `CancelOTOCO` | `POST private/advanced/create-otoco` / `cancel-otoco` |
+| `CancelAdvancedOrder` | `POST private/advanced/cancel-order` (OTO/OTOCO 개별 주문) |
+| `CancelAllAdvancedOrders` | `POST private/advanced/cancel-all-orders` |
+| `CreateAdvancedOrderList` / `CancelAdvancedOrderList` | `POST private/advanced/create-order-list` / `cancel-order-list` |
+
+생성 요청의 `AdvancedOrder`는 주문 종류별 가격·트리거 조합을 SDK에서 먼저 검증한다. OCO는 LIMIT 1건+트리거 1건, OTO는 LIMIT·MARKET 1건+트리거 1건, OTOCO는 LIMIT·MARKET 1건+손절 1건+익절 1건이어야 한다. 생성 응답은 `list_id`(OCO·OTO·OTOCO)이며 취소는 `list_id`로 한다.
+
+### 주문·수수료 조회 (권한 `read`)
+
+| 메서드 | API |
+|---|---|
+| `FeeRate` | `POST private/get-fee-rate` |
+| `InstrumentFeeRate` | `POST private/get-instrument-fee-rate` |
+| `AdvancedOpenOrders` | `POST private/advanced/get-open-orders` |
+| `AdvancedOrderInfo` | `POST private/advanced/get-order-detail` |
+| `AdvancedOrderHistory` | `POST private/advanced/get-order-history` (history 제한 1회/초가 아니라 기본 3회/100ms bucket) |
+| `AdvancedOrderListDetail` | `POST private/advanced/get-order-list-detail` |
+
+### 계정 (권한 `read`)
+
+| 메서드 | API |
+|---|---|
+| `Positions` | `POST private/get-positions` (파생 포지션, Spot 계정은 빈 목록) |
+| `Transactions` | `POST private/get-transactions` (원장 내역, `journal_type` 필터) |
+| `SubaccountBalances` | `POST private/get-subaccount-balances` (`UserBalance`와 같은 형식) |
+
+### 지갑
+
+| 메서드 | API | 권한 |
+|---|---|---|
+| `DepositAddresses` | `POST private/get-deposit-address` | `read` |
+| `DepositHistory` | `POST private/get-deposit-history` | `read` |
+| `WithdrawalHistory` | `POST private/get-withdrawal-history` | `read` |
+| `WithdrawalAddresses` | `POST private/get-withdrawal-addresses` | `read` |
+| `CurrencyNetworks` | `POST private/get-currency-networks` | `read` |
+| `CreateWithdrawal` | `POST private/create-withdrawal` | `withdraw` |
+
+입출금 이력은 `start_ts`·`end_ts`(ms)와 0부터 시작하는 `page`, 최대 200의 `page_size`를 쓴다. 출금 주소는 거래소에 미리 화이트리스트로 등록해야 하며 `CreateWithdrawal`은 `ClientWithdrawID`로 멱등 확인을 하도록 권장한다. 입금 상태 `0`~`3`, 출금 상태 `0`~`6`은 문자열 상수로 제공한다.
+
+미구현: `private/get-accounts`, `private/create-subaccount-transfer`, `private/user-balance-history`, `private/get-fee-credit-balances`, `private/get-account-settings`·`change-account-settings`, staking REST, 파생 전용 WebSocket과 WS 주문 RPC(이번 REST 범위 밖).
+
 ## 구현 순서
 
 1. 공개 REST, 오류 정규화, 요청 제한과 mock 테스트 구현 완료
@@ -241,4 +306,4 @@ err = book.Run(ctx, public, func(_ context.Context, view cryptocom.LocalOrderBoo
 - 여러 공인 송신 IP는 키 분리와 가용성을 위해 사용하며 거래소 요청 제한이나 지역 정책을 우회하지 않는다.
 - Production과 UAT endpoint·credential은 혼용하지 않는다.
 - 지역 제한 우회용 도메인이나 proxy 기능은 제공하지 않는다.
-- 입출금, 내부 이체, staking 실행은 프로젝트 비목표에 따라 구현하지 않는다.
+- 서브계정 간 이체와 staking 실행은 이 패키지에 구현하지 않는다. 출금 요청은 `withdraw` 권한을 가진 별도 credential에서만 허용된다.
