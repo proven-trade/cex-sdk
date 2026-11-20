@@ -9,7 +9,7 @@
 | `spot` | 지원 | Unified 잔고 | 해당 없음 | 지원 |
 | `linear` | 지원 | Unified 잔고 | 지원 | 지원 |
 
-공개 시세는 상품 정보, ticker, 호가, 최근 체결, 캔들을 포함합니다. 주문은 생성, 정정, 단건 조회, 취소, 전체 취소, 일괄 생성·정정·취소, 미체결 목록, 이력을 포함하며 생성 요청은 조건부 주문·TP/SL·SMP 필드를 지원합니다. Linear 포지션은 레버리지, 포지션 모드, TP/SL·트레일링 스톱, 증거금, 청산 손익, 체결 내역, 포지션 이전을 지원합니다. 새 API 목록은 [Trade·Position 확장 API](#tradeposition-확장-api)를 참고합니다. Inverse, Option, 자산 이동은 아직 범위에 포함하지 않습니다.
+공개 시세는 상품 정보, ticker, 호가, 최근 체결, 캔들을 포함합니다. 주문은 생성, 정정, 단건 조회, 취소, 전체 취소, 일괄 생성·정정·취소, 미체결 목록, 이력을 포함하며 생성 요청은 조건부 주문·TP/SL·SMP 필드를 지원합니다. Linear 포지션은 레버리지, 포지션 모드, TP/SL·트레일링 스톱, 증거금, 청산 손익, 체결 내역, 포지션 이전을 지원합니다. 새 API 목록은 [Trade·Position 확장 API](#tradeposition-확장-api)를 참고합니다. 입출금·이체·코인 전환·서브 계정 API는 [Asset·User API](#assetuser-api)를 참고합니다. Market·Account 확장 API(가격 캔들, 펀딩비·미결제약정 이력, 수수료율, 거래 로그, 담보·차입·상환 등)는 [Market·Account 확장 API](#marketaccount-확장-api)를 참고합니다. Inverse, Option은 이 패키지의 지원 범위 밖입니다.
 
 ## 클라이언트 생성
 
@@ -299,6 +299,122 @@ WebSocket 연결은 도메인별 IP당 5분에 500회보다 자주 만들면 안
 
 Linear reduceOnly·closeOnTrigger 주문은 `Quantity`를 `"0"`으로 보내 현재 심볼의 전체 포지션을 닫을 수 있습니다. Spot 주문은 `TriggerDirection`, `TriggerBy`, `TPTriggerBy`, `SLTriggerBy`, `TPSLMode`를 받지 않습니다.
 
+## Asset·User API
+
+`asset.go`·`user.go`가 제공하는 자산 이동과 서브 계정·API Key 관리 API입니다. 변경 요청은 자동 재시도하지 않으며 응답이 불명확하면 `UNKNOWN_EXECUTION_STATE`로 반환합니다. 성공 응답은 접수이므로 최종 상태는 이체·출금·전환 조회 API로 확인해야 합니다. 서브 계정·서브 입금 조회는 마스터 UID의 API Key가 필요합니다. rate bucket은 Bybit 문서의 계정별 한도이며 분당 한도는 초당 환산값으로 내려 적용합니다.
+
+### 코인 정보·잔고·이체 (Asset)
+
+| 메서드 | HTTP·경로 | 권한 | rate bucket | 설명 |
+|---|---|---|---|---|
+| `CoinInfo` | `GET /v5/asset/coin/query-info` | `credential.PermissionRead` | `5/account/초` | 코인·체인별 입출금 수수료·최소 수량·상태를 조회합니다. |
+| `TransferableCoins` | `GET /v5/asset/transfer/query-transfer-coin-list` | `credential.PermissionRead` | `1/account/초` | 두 계정 유형 사이에 이체 가능한 코인을 조회합니다. |
+| `AccountCoinBalance` | `GET /v5/asset/transfer/query-account-coin-balance` | `credential.PermissionRead` | `450/account/초` | 계정 유형의 단일 코인 잔고와 안전 이체 금액을 조회합니다. 마스터 키는 `MemberID`로 서브 UID를 조회합니다. |
+| `AccountCoinsBalance` | `GET /v5/asset/transfer/query-account-coins-balance` | `credential.PermissionRead` | `5/account/초` | 계정 유형의 여러 코인(최대 10개, `UNIFIED`는 필수) 잔고를 조회합니다. |
+| `CreateInterTransfer` | `POST /v5/asset/transfer/inter-transfer` | `credential.PermissionTransfer` | `1/account/초` | 같은 UID의 계정 유형 사이를 이체합니다. `TransferID`는 호출자가 만든 UUID입니다. |
+| `InterTransferRecords` | `GET /v5/asset/transfer/query-inter-transfer-list` | `credential.PermissionRead` | `1/account/초` | 내부 이체 내역을 cursor 기반으로 조회합니다(`Limit` 1~50). |
+| `CreateUniversalTransfer` | `POST /v5/asset/transfer/universal-transfer` | `credential.PermissionTransfer` | `5/account/초` | 마스터-서브·서브-서브 UID 사이를 이체합니다. 같은 UID 사이는 거부합니다. |
+| `UniversalTransferRecords` | `GET /v5/asset/transfer/query-universal-transfer-list` | `credential.PermissionRead` | `5/account/초` | 유니버설 이체 내역을 cursor 기반으로 조회합니다. |
+
+### 입금 (Asset)
+
+| 메서드 | HTTP·경로 | 권한 | rate bucket | 설명 |
+|---|---|---|---|---|
+| `DepositRecords` | `GET /v5/asset/deposit/query-record` | `credential.PermissionRead` | `1/account/초` | 온체인 입금 내역을 cursor 기반으로 조회합니다. |
+| `SubDepositRecords` | `GET /v5/asset/deposit/query-sub-member-record` | `credential.PermissionRead` | `5/account/초` | 서브 UID의 온체인 입금 내역을 조회합니다. |
+| `InternalDepositRecords` | `GET /v5/asset/deposit/query-internal-record` | `credential.PermissionRead` | `300/account/초` | Bybit 내부 입금 내역을 조회합니다. 시간 범위를 비우면 최근 30일입니다. |
+| `DepositAddress` | `GET /v5/asset/deposit/query-address` | `credential.PermissionRead` | `5/account/초` | 마스터 계정의 입금 주소를 조회합니다. |
+| `SubDepositAddress` | `GET /v5/asset/deposit/query-sub-member-address` | `credential.PermissionRead` | `5/account/초` | 서브 UID의 입금 주소를 조회합니다. |
+
+### 출금 (Asset)
+
+| 메서드 | HTTP·경로 | 권한 | rate bucket | 설명 |
+|---|---|---|---|---|
+| `WithdrawRecords` | `GET /v5/asset/withdraw/query-record` | `credential.PermissionRead` | `5/account/초` | 출금 내역을 cursor 기반으로 조회합니다. |
+| `WithdrawableAmount` | `GET /v5/asset/withdraw/withdrawable-amount` | `credential.PermissionRead` | `300/account/초` | 지갑(SPOT·FUND·UTA·EARN)별 출금 가능 금액을 조회합니다. |
+| `CreateWithdraw` | `POST /v5/asset/withdraw/create` | `credential.PermissionWithdraw` | `5/account/초` | 출금을 요청합니다. 주소는 Bybit 주소록에 등록되어 있어야 하며 `ForceChain`이 2가 아니면 `Chain`이 필수입니다. `Timestamp`가 0이면 시각 보정된 클라이언트 시각을 씁니다. 멱등 확인용 `RequestID`를 지정할 수 있습니다. |
+| `CancelWithdraw` | `POST /v5/asset/withdraw/cancel` | `credential.PermissionWithdraw` | `1/account/초` | 처리 전 출금을 취소합니다. `CancelWithdrawResult.Succeeded`로 성공 여부를 확인합니다. |
+
+### 코인 전환 (Asset)
+
+| 메서드 | HTTP·경로 | 권한 | rate bucket | 설명 |
+|---|---|---|---|---|
+| `ConvertCoins` | `GET /v5/asset/exchange/query-coin-list` | `credential.PermissionRead` | `30/account/초` | 전환에 쓸 수 있는 코인(`side` 0 매도·1 매수)을 조회합니다. |
+| `RequestConvertQuote` | `POST /v5/asset/exchange/quote-apply` | `credential.PermissionTransfer` | `20/account/초` | 전환 견적(약 15초 유효)을 요청합니다. `RequestCoin`을 비우면 `FromCoin`을 씁니다. |
+| `ConfirmConvertQuote` | `POST /v5/asset/exchange/convert-execute` | `credential.PermissionTransfer` | `20/account/초` | 견적을 확정해 전환을 실행합니다. 응답은 접수이며 `ConvertStatus`로 확인합니다. |
+| `ConvertStatus` | `GET /v5/asset/exchange/convert-result-query` | `credential.PermissionRead` | `50/account/초` | 견적 ID로 전환 결과를 조회합니다. |
+| `ConvertHistory` | `GET /v5/asset/exchange/query-convert-history` | `credential.PermissionRead` | `50/account/초` | 전환 기록을 page index 기반으로 조회합니다(`Limit` 최대 100). |
+
+### 서브 계정·API Key (User)
+
+| 메서드 | HTTP·경로 | 권한 | rate bucket | 설명 |
+|---|---|---|---|---|
+| `CreateSubMember` | `POST /v5/user/create-sub-member` | `credential.PermissionTransfer` | `1/account/초` | 서브 UID를 만듭니다. `Username` 6~16자, `MemberType`은 `SubMemberTypeNormal`(1)·`SubMemberTypeCustodial`(6)입니다. |
+| `CreateSubAPIKey` | `POST /v5/user/create-sub-api` | `credential.PermissionTransfer` | `1/account/초` | 서브 UID의 API Key를 만듭니다. 응답의 `Secret`은 이 호출에서만 확인할 수 있습니다. |
+| `UpdateSubAPIKey` | `POST /v5/user/update-sub-api` | `credential.PermissionTransfer` | `5/account/초` | 서브 API Key의 읽기 전용 여부·IP 묶음·권한을 수정합니다. `nil` 필드는 바꾸지 않으며 빈 `IPs`는 묶음 해제(`*`)입니다. |
+| `DeleteSubAPIKey` | `POST /v5/user/delete-sub-api` | `credential.PermissionTransfer` | `5/account/초` | 서브 API Key를 삭제합니다. 삭제한 키는 즉시 무효가 됩니다. |
+| `FreezeSubMember` | `POST /v5/user/frozen-sub-member` | `credential.PermissionTransfer` | `5/account/초` | 서브 UID를 동결·동결 해제합니다. |
+| `QuerySubMembers` | `GET /v5/user/query-sub-members` | `credential.PermissionRead` | `10/account/초` | 서브 UID 목록(최대 1만 건)을 조회합니다. |
+| `QueryAPIKey` | `GET /v5/user/query-api` | `credential.PermissionRead` | `10/account/초` | 호출에 쓴 API Key의 권한·IP·만료일 정보를 조회합니다. |
+
+아직 구현하지 않은 Asset·User endpoint: `asset-overview`, `delay-amount`, `all-balance` 계열의 일부, `set-deposit-acct`, `submit-info`, `withdraw-address`, `vasp-list`, `questionnaire`, `delivery`, `settlement`, `fund-history`, `convert-small-balance`, `fiat-convert`, `sub-uid-list`, `total-members-assets`, `portfolio-margin`, `page-subuid`, `fund-subuid-list`, `rm-subuid`, `list-sub-apikeys`, `modify-master-apikey`, `rm-master-apikey`, `wallet-type`.
+
+## Market·Account 확장 API
+
+Market 조회는 서명 없이 `credential.PermissionRead` 범위의 공개 요청으로 보내며 기본 `20/route/초` bucket을 사용합니다. Account 조회는 `credential.PermissionRead`, 부채·마진·담보 설정 변경은 `credential.PermissionTrade`이며 변경 요청은 `commonexchange.OperationMutation`으로 한 번만 전송하고 자동 재시도하지 않습니다. 모든 Market 요청은 Linear만 허용합니다.
+
+### Market (Linear)
+
+| 메서드 | HTTP·경로 | 권한 | rate bucket | 설명 |
+|---|---|---|---|---|
+| `MarkPriceCandles` | `GET /v5/market/mark-price-kline` | 공개(서명 없음) | `20/route/초` | 마크가격 캔들(`PriceCandle`, OHLC만). startTime 역순이며 `Limit` 최대 1,000입니다. |
+| `IndexPriceCandles` | `GET /v5/market/index-price-kline` | 공개(서명 없음) | `20/route/초` | 지수가격 캔들입니다. |
+| `PremiumIndexPriceCandles` | `GET /v5/market/premium-index-price-kline` | 공개(서명 없음) | `20/route/초` | 프리미엄 지수 캔들이며 값이 음수일 수 있습니다. |
+| `FundingRateHistory` | `GET /v5/market/funding/history` | 공개(서명 없음) | `20/route/초` | 펀딩비 이력(`FundingRateRecord`). `StartTime`만 지정하면 Bybit가 오류를 내므로 로컬에서 거부하며 `Limit` 최대 200입니다. |
+| `OpenInterest` | `GET /v5/market/open-interest` | 공개(서명 없음) | `20/route/초` | 미결제약정 이력(`OpenInterestPage`). `IntervalTime`은 `DataPeriod5Minutes`~`DataPeriod1Day`이며 `Limit` 최대 200입니다. |
+| `Insurance` | `GET /v5/market/insurance` | 공개(서명 없음) | `20/route/초` | 보험기금 코인별 잔고(`InsurancePool`)이며 24시간 주기로 갱신됩니다. `Coin`을 비우면 전체입니다. |
+| `RiskLimits` | `GET /v5/market/risk-limit` | 공개(서명 없음) | `20/route/초` | 심볼의 리스크 한도 티어(`RiskLimitTier`). 증거금율은 숫자·문자열 모두 `DecimalString`으로 받습니다. |
+| `DeliveryPrices` | `GET /v5/market/delivery-price` | 공개(서명 없음) | `20/route/초` | 선물 인도가격(`DeliveryPricePage`)이며 `Limit` 최대 200입니다. |
+| `AccountRatios` | `GET /v5/market/account-ratio` | 공개(서명 없음) | `20/route/초` | 순매수·순매도 사용자 비율(`AccountRatioRecord`). `Period`는 `DataPeriod*`이며 `Limit` 최대 500입니다. |
+
+서버 시간(`ServerTime`)은 이미 제공합니다. `historical-volatility`는 Option 전용이라 구현하지 않습니다.
+
+### Account 조회
+
+| 메서드 | HTTP·경로 | 권한 | rate bucket | 설명 |
+|---|---|---|---|---|
+| `AccountInfo` | `GET /v5/account/info` | `credential.PermissionRead` | `50/account/초` | 마진 모드와 계정 상태(`AccountInfo`)를 조회합니다. |
+| `FeeRates` | `GET /v5/account/fee-rate` | `credential.PermissionRead` | `5/account/초` | Spot·Linear 심볼의 maker·taker 수수료율을 조회합니다. |
+| `TransactionLog` | `GET /v5/account/transaction-log` | `credential.PermissionRead` | `25/account/초` | 거래 로그(원장)를 cursor 기반으로 조회합니다. 시간 범위를 둘 다 지정하면 7일 이하, `Limit` 최대 50입니다. |
+| `BorrowHistory` | `GET /v5/account/borrow-history` | `credential.PermissionRead` | `50/account/초` | 차입 이자 이력을 조회합니다. 시간 범위는 30일 이하, `Limit` 최대 50입니다. |
+| `CollateralInfos` | `GET /v5/account/collateral-info` | `credential.PermissionRead` | `50/account/초` | 코인별 담보·차입 한도 정보를 조회합니다. |
+| `PayInfo` | `GET /v5/account/pay-info` | `credential.PermissionRead` | `50/account/초` | 상환 전 사용 가능한 담보와 차입 현황을 조회합니다. `Coin`은 미상환 부채가 있어야 합니다. |
+| `DCPInfos` | `GET /v5/account/query-dcp-info` | `credential.PermissionRead` | `5/account/초` | 상품별 DCP 설정을 조회합니다. DCP를 신청한 계정만 값을 받습니다. |
+| `SMPGroup` | `GET /v5/account/smp-group` | `credential.PermissionRead` | `5/account/초` | 자전거래 방지(SMP) 그룹 ID를 조회합니다. |
+| `UserSettingConfig` | `GET /v5/account/user-setting-config` | `credential.PermissionRead` | `50/account/초` | 가격 제한 초과 시 동작, 델타 중립, MNT 수수료 공제 설정을 조회합니다. |
+| `SpotTradeAnalysis` | `GET /v5/account/trade-info-for-analysis` | `credential.PermissionRead` | `50/account/초` | Spot 심볼 체결 집계와 일별 내역을 조회합니다. |
+
+### Account 설정·부채 (변경)
+
+| 메서드 | HTTP·경로 | 권한 | rate bucket | 설명 |
+|---|---|---|---|---|
+| `SetMarginMode` | `POST /v5/account/set-margin-mode` | `credential.PermissionTrade` | `5/account/초` | `MarginModeIsolated`·`MarginModeRegular`·`MarginModePortfolio`로 변경합니다. 조건 미충족 사유는 Bybit 오류 응답의 `result.reasons`에 담깁니다. |
+| `SetCollateralSwitch` | `POST /v5/account/set-collateral-switch` | `credential.PermissionTrade` | `5/account/초`(문서 미표기, 일괄 설정 값 준용) | 코인 하나의 담보 사용 여부를 설정합니다. USDT·USDC는 끌 수 없어 로컬에서 거부합니다. |
+| `BatchSetCollateralSwitch` | `POST /v5/account/set-collateral-switch-batch` | `credential.PermissionTrade` | `5/account/초` | 여러 코인의 담보 사용 여부를 한 번에 설정하고 코인별 반영 상태를 반환합니다. |
+| `SetDeltaMode` | `POST /v5/account/set-delta-mode` | `credential.PermissionTrade` | `5/account/초`(문서 미표기, 보수적으로 5) | 델타 중립 모드를 켜거나 끕니다. 현재 상태는 `UserSettingConfig`의 `DeltaEnabled`로 확인합니다. |
+| `Borrow` | `POST /v5/account/borrow` | `credential.PermissionTrade` | `1/account/초` | 변동금리 수동 차입으로 부채를 만듭니다. |
+| `Repay` | `POST /v5/account/repay` | `credential.PermissionTrade` | `1/account/초` | 수동 상환입니다. 현물 잔고가 부족하면 청산 순서대로 다른 자산을 전환합니다. 코인 없이 전체를 상환하려면 `RepaymentTypeAll`이 필요합니다. |
+| `RepayWithoutConversion` | `POST /v5/account/no-convert-repay` | `credential.PermissionTrade` | `1/account/초` | 부채 코인의 현물 잔고로만 상환하며 `Coin`이 필수입니다. |
+| `RepayLiability` | `POST /v5/account/quick-repayment` | `credential.PermissionTrade` | `1/account/초` | 부채를 일괄 상환합니다. `Coin`을 비우면 모든 코인이 대상입니다. |
+
+`Repay`·`RepayWithoutConversion`의 `FIXED`·`ALL`은 비동기로 처리되므로 `RepayResult.ResultStatus`(`P` 처리 중, `SU` 성공, `FA` 실패)만으로 최종 상태를 단정하지 말고 `CollateralInfos`로 부채 잔액을 다시 확인합니다. 차입·상환은 자산 이동이 아니라 계정 내 부채 변경이므로 `credential.PermissionTransfer`가 아닌 `PermissionTrade`로 분류합니다.
+
+### 구현하지 않은 항목
+
+- `/v5/market/historical-volatility`: Option 전용이며 이 패키지는 Option을 지원하지 않습니다.
+- `/v5/market/adlAlert`, `full_orderbook`, `rpi_orderbook`, `price-limit`, `index-price-components`, `fee-group-info`, `instrument-summary`: 공식 문서 원문에서 경로·파라미터를 확인하지 못해 구현하지 않았습니다.
+- `/v5/account/withdrawal`, `/v5/account/set-limit-px-action`, `/v5/account/instruments-info`: 공식 문서 페이지에서 요청·응답 명세를 확인하지 못해 구현하지 않았습니다.
+
 ## 공식 기준 문서
 
 - [Bybit V5 Integration Guidance](https://bybit-exchange.github.io/docs/v5/guide)
@@ -311,6 +427,8 @@ Linear reduceOnly·closeOnTrigger 주문은 `Quantity`를 `"0"`으로 보내 현
 - [Bybit V5 Set Leverage](https://bybit-exchange.github.io/docs/v5/position/leverage)
 - [Bybit V5 Move Position](https://bybit-exchange.github.io/docs/v5/position/move-position)
 - [Bybit V5 Wallet Balance](https://bybit-exchange.github.io/docs/v5/account/wallet-balance)
+- [Bybit V5 Asset](https://bybit-exchange.github.io/docs/v5/asset/coin-info)
+- [Bybit V5 User](https://bybit-exchange.github.io/docs/v5/user/create-subuid)
 - [Bybit V5 WebSocket Connect](https://bybit-exchange.github.io/docs/v5/ws/connect)
 - [Bybit V5 Public Orderbook](https://bybit-exchange.github.io/docs/v5/websocket/public/orderbook)
 - [Bybit V5 Private Order](https://bybit-exchange.github.io/docs/v5/websocket/private/order)

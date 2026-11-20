@@ -37,6 +37,111 @@ private API를 사용하려면 `credential.Provider`가 반환하는 `credential
 
 2025년 3월 폐기된 `/api/v1/hf/orders/active`를 사용하지 않습니다. `OpenOrders`는 현재 페이지 API인 `/api/v1/hf/orders/active/page`와 `pageNum`, `pageSize`를 사용합니다.
 
+## 추가 REST API
+
+아래 메서드는 모두 `func (client *Client) Name(ctx, request, options ...trade.RequestOption)` 형태이며 가격·수량·수수료는 문자열로 보존하고 응답 `Raw`에 원본 JSON을 담습니다. 변경 요청은 자동 재시도하지 않으며 전송 결과가 불명확하면 `UNKNOWN_EXECUTION_STATE`로 반환합니다. 권한은 SDK `credential.Permission`이고, 괄호의 값은 요청 제한 풀과 weight입니다.
+
+### 시장 데이터
+
+| 메서드 | API | 권한 (풀/weight) |
+|---|---|---|
+| `Currencies` | `GET /api/v3/currencies` | 인증 없음 (public/3) |
+| `Currency` | `GET /api/v3/currencies/{currency}` (`chain` 선택) | 인증 없음 (public/3) |
+| `SymbolInfo` | `GET /api/v2/symbols/{symbol}` | 인증 없음 (public/4) |
+| `AllTickers` | `GET /api/v1/market/allTickers` | 인증 없음 (public/15) |
+| `MarketStats` | `GET /api/v1/market/stats` | 인증 없음 (public/15) |
+| `FullOrderBook` | `GET /api/v3/market/orderbook/level2` | `PermissionRead` (spot/3) |
+| `ServerTime` | `GET /api/v1/timestamp` | 인증 없음 (public/3) |
+| `ServiceStatus` | `GET /api/v1/status` | 인증 없음 (public/3) |
+
+`Currency`는 공식 스키마(배열)와 예시(객체)가 달라 두 형태를 모두 받습니다. `null`이 올 수 있는 십진수 필드는 `DecimalString`으로 받아 `null`을 빈 문자열로 둡니다.
+
+### HF 주문
+
+| 메서드 | API | 권한 (풀/weight) |
+|---|---|---|
+| `ModifyOrder` | `POST /api/v1/hf/orders/alter` | `PermissionTrade` (spot/1) |
+| `PlaceOrderSync` | `POST /api/v1/hf/orders/sync` | `PermissionTrade` (spot/1) |
+| `TestOrder` | `POST /api/v1/hf/orders/test` | `PermissionTrade` (spot/1) |
+| `BatchPlaceOrders` | `POST /api/v1/hf/orders/multi` (지정가 최대 20개) | `PermissionTrade` (spot/1) |
+| `BatchPlaceOrdersSync` | `POST /api/v1/hf/orders/multi/sync` (지정가 최대 20개) | `PermissionTrade` (spot/1) |
+| `CancelOrderSync` | `DELETE /api/v1/hf/orders/sync/{orderId}`, `/sync/client-order/{clientOid}` | `PermissionTrade` (spot/1) |
+| `CancelPartialOrder` | `DELETE /api/v1/hf/orders/cancel/{orderId}` | `PermissionTrade` (spot/2) |
+| `CancelAllOrdersBySymbol` | `DELETE /api/v1/hf/orders?symbol=` | `PermissionTrade` (spot/2) |
+| `CancelAllOrders` | `DELETE /api/v1/hf/orders/cancelAll` | `PermissionTrade` (spot/30) |
+| `DeadCancelAll` | `POST /api/v1/hf/orders/dead-cancel-all` (`timeout` -1 또는 5~86400초) | `PermissionTrade` (spot/2) |
+| `DeadCancelSettingQuery` | `GET /api/v1/hf/orders/dead-cancel-all/query` | `PermissionRead` (spot/2) |
+| `ClosedOrders` | `GET /api/v1/hf/orders/done` (`lastId`, `limit` 1~100) | `PermissionRead` (spot/2) |
+| `Fills` | `GET /api/v1/hf/fills` (`lastId`, `limit` 1~100) | `PermissionRead` (spot/2) |
+
+일괄 주문은 HTTP 성공이어도 항목별 `Success`와 `FailMessage`를 확인해야 합니다. `ModifyOrder`는 기존 주문을 취소하고 새 주문을 내므로 반환된 `NewOrderID`로 이후 상태를 추적합니다. `DeadCancelSettingQuery`는 설정이 없으면 `Configured=false`를 반환합니다.
+
+### 스탑·OCO 주문
+
+| 메서드 | API | 권한 (풀/weight) |
+|---|---|---|
+| `PlaceStopOrder` | `POST /api/v1/stop-order` | `PermissionTrade` (spot/1) |
+| `CancelStopOrder` | `DELETE /api/v1/stop-order/{orderId}`, `/stop-order/cancelOrderByClientOid` | `PermissionTrade` (spot/3, 5) |
+| `CancelStopOrders` | `DELETE /api/v1/stop-order/cancel` | `PermissionTrade` (spot/3) |
+| `StopOrders` | `GET /api/v1/stop-order` | `PermissionRead` (spot/8) |
+| `StopOrderInfo` | `GET /api/v1/stop-order/{orderId}`, `/stop-order/queryOrderByClientOid` | `PermissionRead` (spot/3) |
+| `PlaceOCOOrder` | `POST /api/v3/oco/order` | `PermissionTrade` (spot/2) |
+| `CancelOCOOrder` | `DELETE /api/v3/oco/order/{orderId}`, `/api/v3/oco/client-order/{clientOid}` | `PermissionTrade` (spot/3) |
+| `CancelOCOOrders` | `DELETE /api/v3/oco/orders` | `PermissionTrade` (spot/3) |
+| `OCOOrderInfo` | `GET /api/v3/oco/order/{orderId}`, `/api/v3/oco/client-order/{clientOid}` | `PermissionRead` (spot/2) |
+| `OCOOrderDetail` | `GET /api/v3/oco/order/details/{orderId}` | `PermissionRead` (spot/2) |
+| `OCOOrders` | `GET /api/v3/oco/orders` | `PermissionRead` (spot/2) |
+
+스탑·OCO 요청은 Spot(`TRADE`)으로 고정하고 `tradeType`을 전송하지 않습니다.
+
+### 계정·수수료
+
+| 메서드 | API | 권한 (풀/weight) |
+|---|---|---|
+| `AccountSummary`, `AccountSummaryV2` | `GET /api/v3/user-info`, `/api/v2/user-info` | `PermissionRead` (management/20) |
+| `APIKeyInfo` | `GET /api/v1/user/api-key` | `PermissionRead` (management/20) |
+| `HFAccountOpened` | `GET /api/v1/hf/accounts/opened` | `PermissionRead` (spot/30) |
+| `AccountDetail` | `GET /api/v1/accounts/{accountId}` | `PermissionRead` (management/5) |
+| `Ledgers` | `GET /api/v1/accounts/ledgers` | `PermissionRead` (management/2) |
+| `HFLedgers` | `GET /api/v1/hf/accounts/ledgers` | `PermissionRead` (spot/2) |
+| `BaseFee` | `GET /api/v1/base-fee` | `PermissionRead` (spot/3) |
+| `TradeFees` | `GET /api/v1/trade-fees` (최대 10개 거래쌍) | `PermissionRead` (spot/3) |
+
+### 입출금·이체
+
+| 메서드 | API | 권한 (풀/weight) |
+|---|---|---|
+| `DepositAddresses` | `GET /api/v3/deposit-addresses` | `PermissionRead` (management/5) |
+| `CreateDepositAddress` | `POST /api/v3/deposit-address/create` | `PermissionTransfer` (management/20) |
+| `Deposits` | `GET /api/v1/deposits` | `PermissionRead` (management/5) |
+| `WithdrawalQuotas` | `GET /api/v1/withdrawals/quotas` | `PermissionRead` (management/20) |
+| `Withdraw` | `POST /api/v3/withdrawals` | `PermissionWithdraw` (management/5) |
+| `CancelWithdrawal` | `DELETE /api/v1/withdrawals/{withdrawalId}` | `PermissionWithdraw` (management/20) |
+| `Withdrawals` | `GET /api/v1/withdrawals` | `PermissionRead` (management/20) |
+| `WithdrawalByID` | `GET /api/v1/withdrawals/{withdrawalId}` | `PermissionRead` (management/20) |
+| `Transferable` | `GET /api/v1/accounts/transferable` | `PermissionRead` (management/20) |
+| `FlexTransfer` | `POST /api/v3/accounts/universal-transfer` | `PermissionTransfer` (management/4) |
+
+### 서브계정
+
+| 메서드 | API | 권한 (풀/weight) |
+|---|---|---|
+| `CreateSubAccount` | `POST /api/v2/sub/user/created` | `PermissionTransfer` (management/15) |
+| `EnableSubAccountMargin`, `EnableSubAccountFutures` | `POST /api/v3/sub/user/margin/enable`, `/futures/enable` | `PermissionTransfer` (management/15) |
+| `SubAccounts` | `GET /api/v2/sub/user` | `PermissionRead` (management/20) |
+| `SubAccountBalanceDetail` | `GET /api/v1/sub-accounts/{subUserId}` | `PermissionRead` (management/15) |
+| `SubAccountSpotBalances` | `GET /api/v2/sub-accounts` | `PermissionRead` (management/20) |
+| `SubAPIKeys` | `GET /api/v1/sub/api-key` | `PermissionRead` (management/20) |
+| `CreateSubAPIKey` | `POST /api/v1/sub/api-key` | `PermissionTransfer` (management/20) |
+| `ModifySubAPIKey` | `POST /api/v1/sub/api-key/update` | `PermissionTransfer` (management/30) |
+| `DeleteSubAPIKey` | `DELETE /api/v1/sub/api-key` | `PermissionTransfer` (management/30) |
+
+`CreateSubAPIKey` 응답의 `APISecret`은 생성 응답에서만 제공되므로 호출자가 안전하게 보관해야 합니다.
+
+### 아직 구현하지 않은 항목
+
+콜옥션 호가·정보, 법정화폐 환산가, 마켓 목록, 공지사항, 클라이언트 IP, KYC 지역, 서브계정 선물 잔고(`/api/v1/account-overview-all`), WebSocket 신규 채널(`/market/ticker:all`, `/spotMarket/level1`, 콜옥션, 스냅샷, `/spotMarket/advancedOrders`)과 Classic WebSocket 주문 API는 이 구현에 포함하지 않았습니다.
+
 ## 인증과 서명
 
 private 요청은 요청 제한 대기가 끝난 뒤 자격증명을 조회하고 최종 요청을 서명합니다.

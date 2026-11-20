@@ -92,6 +92,8 @@ type PlaceOrderRequest struct {
 	ClientOrderID       string       `json:"clientOid,omitempty"`
 	ReduceOnly          string       `json:"reduceOnly,omitempty"`
 	SelfTradePrevention string       `json:"stpMode,omitempty"`
+	// StrategyPrices는 주문에 TP/SL을 함께 붙이는 선택 값이다. place-batch는 TP/SL을 지원하지 않는다.
+	StrategyPrices
 }
 
 // CancelOrderRequest는 주문 ID 또는 client order ID로 주문 취소를 요청한다.
@@ -293,7 +295,14 @@ func (request PlaceOrderRequest) validate() error {
 	if request.SelfTradePrevention != "" && !validSTP(request.SelfTradePrevention) {
 		return validationError("unsupported stpMode %q", request.SelfTradePrevention)
 	}
+	if err := request.StrategyPrices.validate(); err != nil {
+		return err
+	}
 	return nil
+}
+
+func (request PlaceOrderRequest) hasTPSL() bool {
+	return request.StrategyPrices != StrategyPrices{}
 }
 
 func (request CancelOrderRequest) validate() error {

@@ -67,6 +67,93 @@ timestamp + uppercase(method) + requestPath + optional("?" + sortedQuery) + exac
 
 Demo API Key를 사용할 때 클라이언트 설정에 `DemoTrading: true`를 지정합니다. 모든 REST 요청에 `paptrading: 1` 헤더가 추가됩니다.
 
+## 추가 REST API
+
+아래 메서드는 공식 Bitget v3 SDK(`BitgetLimited/v3-bitget-api-sdk`)와 Postman 컬렉션으로 경로를 확인했습니다. 공식 문서 페이지가 JS 렌더링이라 응답 필드와 일부 열거값(`holdMode`, `deduct`, `operation`, `accountType`, `role` 등)은 SDK 계약으로 고정하지 않았습니다. 응답은 `json.RawMessage`(`data` 필드)로 반환하고, 해당 열거값은 호출자가 Bitget 문서의 값을 문자열로 전달합니다. 모든 mutation은 자동 재시도하지 않으며, 전송 결과가 불명확하면 `UNKNOWN_EXECUTION_STATE`로 반환합니다. 권한이 없는 자격증명은 요청 전에 거부됩니다. 이 메서드들의 요청 제한은 공식 수치가 확인되지 않아 공개 시세 `20/IP/초`, private `10/UID/초`로 보수적으로 차감합니다.
+
+### 시세 (인증 없음)
+
+| 메서드 | Endpoint |
+|---|---|
+| `ServerTime` | `GET /api/v3/market/time` |
+| `RPIOrderBook` | `GET /api/v3/market/rpi-orderbook` |
+| `OpenInterest` | `GET /api/v3/market/open-interest` |
+| `CurrentFundingRate` | `GET /api/v3/market/current-fund-rate` |
+| `FundingRateHistory` | `GET /api/v3/market/history-fund-rate` |
+| `PositionTier` | `GET /api/v3/market/position-tier` |
+| `OpenInterestLimit` | `GET /api/v3/market/oi-limit` |
+| `RiskReserve`, `RiskReserveAll`, `RiskReserveHourly` | `GET /api/v3/market/risk-reserve`, `risk-reserve-all`, `risk-reserve-hour` |
+| `DiscountRate` | `GET /api/v3/market/discount-rate` |
+| `IndexComponents` | `GET /api/v3/market/index-components` |
+| `ProofOfReserves`, `ProofOfReservesSummary` | `GET /api/v3/market/proof-of-reserves`, `/por` |
+
+### 주문 (Trade 권한)
+
+| 메서드 | Endpoint |
+|---|---|
+| `PlaceBatch` | `POST /api/v3/trade/place-batch` (최대 20건, TP/SL 불가) |
+| `CancelBatch` | `POST /api/v3/trade/cancel-batch` (최대 20건, 건당 `orderId`/`clientOid` 중 하나) |
+| `ModifyOrder` | `POST /api/v3/trade/modify-order` |
+| `BatchModifyOrder` | `POST /api/v3/trade/batch-modify-order` (최대 20건, 주문 중복 불가) |
+| `CancelSymbolOrders` | `POST /api/v3/trade/cancel-symbol-order` |
+| `CountdownCancelAll` | `POST /api/v3/trade/countdown-cancel-all` (Bitget 담당자 신청 필요, 0이면 해제) |
+| `ClosePositions` | `POST /api/v3/trade/close-positions` (시장가 청산, USDT-FUTURES) |
+| `PlaceStrategyOrder`, `ModifyStrategyOrder`, `CancelStrategyOrder` | `POST /api/v3/trade/place-strategy-order`, `modify-strategy-order`, `cancel-strategy-order` |
+
+`PlaceOrderRequest`는 `StrategyPrices`(`takeProfit`, `stopLoss`, `tpTriggerBy`, `slTriggerBy`, `tpOrderType`, `slOrderType`, `tpLimitPrice`, `slLimitPrice`)로 단건 주문에 TP/SL을 붙일 수 있습니다. 일괄 endpoint는 부분 성공을 허용하므로 반환된 `data`에서 건별 결과를 확인해야 합니다.
+
+### 주문·체결 조회 (Read 권한)
+
+| 메서드 | Endpoint |
+|---|---|
+| `Fills` | `GET /api/v3/trade/fills` |
+| `UnfilledStrategyOrders` | `GET /api/v3/trade/unfilled-strategy-orders` |
+| `HistoryStrategyOrders` | `GET /api/v3/trade/history-strategy-orders` |
+| `HistoryPositions` | `GET /api/v3/position/history-position` |
+| `ADLRank` | `GET /api/v3/position/adlRank` |
+
+### 계정 (Read 권한)
+
+| 메서드 | Endpoint |
+|---|---|
+| `AccountInfo`, `AccountSettings` | `GET /api/v3/account/info`, `/settings` |
+| `FeeRate`, `AllFeeRates` | `GET /api/v3/account/fee-rate`, `/all-fee-rate` |
+| `FinancialRecords` | `GET /api/v3/account/financial-records` |
+| `MaxOpenAvailable` | `POST /api/v3/account/max-open-available` (본문을 쓰는 조회이므로 Read) |
+| `AccountOpenInterestLimit`, `DeltaInfo`, `DeductInfo`, `SwitchStatus` | `GET /api/v3/account/open-interest-limit`, `/delta-info`, `/deduct-info`, `/switch-status` |
+| `ConvertRecords`, `RepayableCoins`, `PaymentCoins` | `GET /api/v3/account/convert-records`, `/repayable-coins`, `/payment-coins` |
+
+### 계정 설정 (Trade 권한)
+
+| 메서드 | Endpoint |
+|---|---|
+| `SetLeverage` | `POST /api/v3/account/set-leverage` |
+| `SetHoldMode` | `POST /api/v3/account/set-hold-mode` |
+| `AdjustAccountMode` | `POST /api/v3/account/adjust-account-mode` |
+| `SetMargin` | `POST /api/v3/account/set-margin` |
+| `SwitchDeduct` | `POST /api/v3/account/switch-deduct` |
+| `Repay` | `POST /api/v3/account/repay` |
+
+### 자산·서브계정
+
+| 메서드 | Endpoint | 권한 |
+|---|---|---|
+| `FundingAssets`, `TransferableCoins`, `MaxTransferable`, `MaxWithdrawal` | `GET /api/v3/account/funding-assets`, `/transferable-coins`, `/max-transferable`, `/max-withdrawal` | Read |
+| `DepositAddress`, `SubDepositAddress`, `DepositRecords`, `SubDepositRecords` | `GET /api/v3/account/deposit-address`, `/sub-deposit-address`, `/deposit-records`, `/sub-deposit-records` | Read |
+| `WithdrawalRecords`, `WithdrawAddresses` | `GET /api/v3/account/withdrawal-records`, `/withdraw-address` | Read |
+| `SubUnifiedAssets`, `SubTransferRecords`, `SubAccounts`, `SubAPIKeys` | `GET /api/v3/account/sub-unified-assets`, `/sub-transfer-record`, `/api/v3/user/sub-list`, `/sub-api-list` | Read |
+| `Transfer`, `SubTransfer`, `SubMasterTransfer` | `POST /api/v3/account/transfer`, `/sub-transfer`, `/sub-master-transfer` | Transfer |
+| `SetDepositAccount`, `SwitchAccount` | `POST /api/v3/account/deposit-account`, `/switch` | Transfer |
+| `CreateSubAccount`, `ModifySubAccount`, `FreezeSubAccount` | `POST /api/v3/user/create-sub`, `/modify-sub`, `/freeze-sub` | Transfer |
+| `CreateSubAPIKey`, `UpdateSubAPIKey`, `DeleteSubAPIKey` | `POST /api/v3/user/create-sub-api`, `/update-sub-api`, `/delete-sub-api` | Transfer |
+| `Withdraw`, `CancelWithdrawal` | `POST /api/v3/account/withdrawal`, `/cancel-withdrawal` | Withdraw |
+
+`SubDepositRecords`는 공식 Go/Java SDK 기준 `GET`을 사용합니다(Postman 컬렉션은 `POST`로 표기). `Withdraw` 전송 결과가 불명확하면 `WithdrawalRecords`에 `ClientOID`를 지정해 실제 접수 여부를 확인해야 합니다.
+
+### 아직 구현하지 않은 항목
+
+`fee-group`, `score-weights`, `unfilled-orders-realtime`, `move-positions`, `move-position-history`, `agent-create`, `custom-collateral-coins`, `set-collateral-type`, `collateral-type`, `pre-set-leverage`는 응답/요청 형식을 확인하지 못해 구현하지 않았습니다. MARGIN, USDC-FUTURES, COIN-FUTURES, Copy trading, Earn, Loan, Broker, 그리고 WebSocket의 RPI depth·liquidation·fast fill·ADL·strategy order 채널과 WS 주문 API도 아직 없습니다.
+
 ## WebSocket
 
 v3 UTA WebSocket은 다음 endpoint를 사용합니다.
